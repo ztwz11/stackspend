@@ -1,0 +1,145 @@
+import { execFileSync } from "node:child_process";
+import { mkdtemp, stat } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { describe, expect, it } from "vitest";
+import {
+  initializeLocalStore,
+  recordLocalReportRun,
+  saveLocalProviderCollection,
+} from "./local-store.js";
+import { REQUIRED_TABLES } from "./schema.js";
+
+const FIXED_NOW = "2026-06-02T09:00:00.000Z";
+
+describe("local SQLite store", () => {
+  it("initializes a SQL-migration-backed local store without creating .env", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "stackspend-db-"));
+    const dbPath = join(rootDir, ".stackspend", "stackspend.sqlite");
+
+    const result = await initializeLocalStore({ dbPath });
+    const tables = querySqlite<{ name: string }>(
+      dbPath,
+      "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name;",
+    ).map((row) => row.name);
+    const migrations = querySqlite<{ id: string }>(dbPath, "SELECT id FROM schema_migrations ORDER BY id;");
+
+    expect(result.appliedMigrationIds).toEqual(["0001_init"]);
+    expect(result.skippedMigrationIds).toEqual([]);
+    expect(await fileExists(dbPath)).toBe(true);
+    expect(tables).toEqual(expect.arrayContaining(["schema_migrations", ...REQUIRED_TABLES]));
+    expect(migrations).toEqual([{ id: "0001_init" }]);
+    expect(await fileExists(join(rootDir, ".env"))).toBe(false);
+  });
+
+  it("persists normalized mock snapshots and report_runs without raw payload fields", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "stackspend-db-"));
+    const dbPath = join(rootDir, ".stackspend", "stackspend.sqlite");
+
+    await initializeLocalStore({ dbPath });
+    await saveLocalProviderCollection({
+      dbPath,
+      provider: {
+        key: "mock",
+        displayName: "Mock Provider",
+        connectorVersion: "0.1.0-alpha.0",
+      },
+      collectedAt: FIXED_NOW,
+      status: "ok",
+      snapshots: {
+        usage: [
+          {
+            provider: "mock",
+            collectedAt: FIXED_NOW,
+            service: "mock-api",
+            metric: "requests",
+            unit: "count",
+            value: 1200,
+          },
+        ],
+        billing: [],
+        serviceHealth: [],
+        costEstimates: [],
+      },
+      alerts: [],
+    });
+
+    await recordLocalReportRun({
+      dbPath,
+      createdAt: "2026-06-02T09:05:00.000Z",
+      reportDate: "2026-06-02",
+      language: "ko",
+      deliveryTarget: "stdout",
+      status: "rendered",
+    });
+
+    const providerRows = querySqlite<{ provider_key: string; display_name: string }>(
+      dbPath,
+      "SELECT provider_key, display_name FROM providers ORDER BY provider_key;",
+    );
+    const usageRows = querySqlite<{ service: string; metric: string; unit: string; value: number; metadata_json: string }>(
+      dbPath,
+      "SELECT service, metric, unit, value, metadata_json FROM usage_snapshots;",
+    );
+    const reportRuns = querySqlite<{
+      report_date: string;
+      language: string;
+      delivery_target: string;
+      status: string;
+      metadata_json: string;
+    }>(dbPath, "SELECT report_date, language, delivery_target, status, metadata_json FROM report_runs;");
+    const persistedText = dumpSqlite(dbPath);
+
+    expect(providerRows).toEqual([{ provider_key: "mock", display_name: "Mock Provider" }]);
+    expect(usageRows).toEqual([
+      {
+        service: "mock-api",
+        metric: "requests",
+        unit: "count",
+        value: 1200,
+        metadata_json: "{}",
+      },
+    ]);
+    expect(reportRuns).toEqual([
+      {
+        report_date: "2026-06-02",
+        language: "ko",
+        delivery_target: "stdout",
+        status: "rendered",
+        metadata_json: "{}",
+      },
+    ]);
+    expect(
+      querySqlite<{ count: number }>(dbPath, "SELECT count(*) AS count FROM billing_snapshots;")[0]?.count,
+    ).toBe(0);
+    expect(persistedText).not.toContain("sqlite-placeholder-v1");
+    expect(persistedText).not.toMatch(/rawPayload|rawResponse|providerPayload|billingProfile|acct_|project_|invoice_|sk-|hooks\.slack|@/i);
+  });
+});
+
+function querySqlite<T>(dbPath: string, sql: string): T[] {
+  const output = execFileSync("/usr/bin/sqlite3", ["-json", dbPath, sql], {
+    encoding: "utf8",
+  }).trim();
+
+  if (output.length === 0) {
+    return [];
+  }
+
+  return JSON.parse(output) as T[];
+}
+
+function dumpSqlite(dbPath: string): string {
+  return execFileSync("/usr/bin/sqlite3", [dbPath, ".dump"], {
+    encoding: "utf8",
+  });
+}
+
+async function fileExists(path: string): Promise<boolean> {
+  try {
+    await stat(path);
+    return true;
+  } catch {
+    return false;
+  }
+}

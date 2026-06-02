@@ -13,6 +13,6 @@ describe("maskSecret", () => {
   });
 
   it("keeps a small prefix and suffix for operator recognition", () => {
-    expect(maskSecret("sk-test-1234567890")).toBe("sk-t***7890");
+    expect(maskSecret("sk-test-fake-token-1234567890")).toBe("sk-t***7890");
   });
 });

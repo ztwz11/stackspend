@@ -18,8 +18,8 @@
   "active_plan": {
     "dossier": "PROJECT_DOSSIER.md",
     "execution_plan": "EXECUTION_PLAN.md",
-    "current_milestone": "M1",
-    "current_slice": "S1-monorepo-bootstrap"
+    "current_milestone": "M3",
+    "current_slice": "S3-cli-mock-pipeline"
   },
   "quality_gates": [
     "docs/review-gate-template.md",
@@ -36,8 +36,12 @@
     "variant": "cli-sqlite-nextjs"
   },
   "notes": [
-    "Commands are the approved post-M1 validation commands; package.json is created during M1/S1.",
-    "Do not run external provider API calls during M1/S1.",
-    "Do not create .env; use .env.example only."
+    "M1/S1-monorepo-bootstrap completed locally.",
+    "M2/S2-core-config-db-security completed locally and remains intentionally uncommitted for review.",
+    "M3/S3-cli-mock-pipeline is the current approved slice; canonical details live in docs/product/execution-plan.md.",
+    "Do not run external provider API calls during M3/S3.",
+    "Do not create .env; use env-only secrets and .env.example only.",
+    "Do not persist raw provider payloads.",
+    "Do not add telemetry."
   ]
 }

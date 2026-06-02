@@ -1,0 +1,858 @@
+import { execFileSync } from "node:child_process";
+import { createHash, randomUUID } from "node:crypto";
+import { mkdir } from "node:fs/promises";
+import { dirname } from "node:path";
+import { runMigrations, type MigrationRunResult } from "./migrate.js";
+
+const SQLITE_BIN = "/usr/bin/sqlite3";
+const EMPTY_METADATA_JSON = "{}";
+
+export interface LocalProviderRecord {
+  id: string;
+  key: string;
+  displayName: string;
+  connectorVersion: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LocalUsageSnapshotRecord {
+  id: string;
+  providerKey: string;
+  collectedAt: string;
+  service: string;
+  metric: string;
+  unit: string;
+  value: number;
+  providerAccountRef?: string;
+  metadataJson: Record<string, never>;
+}
+
+export interface LocalBillingSnapshotRecord {
+  id: string;
+  providerKey: string;
+  collectedAt: string;
+  periodStart: string;
+  periodEnd: string;
+  amountMinor: number;
+  currency: string;
+  status: string;
+  providerAccountRef?: string;
+  metadataJson: Record<string, never>;
+}
+
+export interface LocalServiceHealthSnapshotRecord {
+  id: string;
+  providerKey: string;
+  collectedAt: string;
+  service: string;
+  region?: string;
+  status: "ok" | "degraded" | "down" | "unknown";
+  message?: string;
+  metadataJson: Record<string, never>;
+}
+
+export interface LocalCostEstimateRecord {
+  id: string;
+  providerKey: string;
+  collectedAt: string;
+  periodStart: string;
+  periodEnd: string;
+  estimatedAmountMinor: number;
+  currency: string;
+  confidence: "low" | "medium" | "high";
+  providerAccountRef?: string;
+  metadataJson: Record<string, never>;
+}
+
+export interface LocalAlertRecord {
+  id: string;
+  providerKey?: string;
+  createdAt: string;
+  severity: "info" | "warning" | "critical";
+  category: string;
+  title: string;
+  message: string;
+  metadataJson: Record<string, never>;
+}
+
+export interface LocalReportRunRecord {
+  id: string;
+  createdAt: string;
+  reportDate: string;
+  language: "ko" | "en";
+  deliveryTarget: "stdout" | "local-file" | "slack";
+  status: "rendered" | "sent" | "error";
+  metadataJson: Record<string, never>;
+}
+
+export interface LocalStore {
+  appliedMigrationIds: string[];
+  providers: LocalProviderRecord[];
+  usageSnapshots: LocalUsageSnapshotRecord[];
+  billingSnapshots: LocalBillingSnapshotRecord[];
+  serviceHealthSnapshots: LocalServiceHealthSnapshotRecord[];
+  costEstimates: LocalCostEstimateRecord[];
+  alerts: LocalAlertRecord[];
+  reportRuns: LocalReportRunRecord[];
+}
+
+export interface LocalStoreOptions {
+  dbPath: string;
+}
+
+export interface LocalProviderCollectionInput {
+  dbPath: string;
+  provider: {
+    key: string;
+    displayName: string;
+    connectorVersion: string;
+  };
+  collectedAt: string;
+  status: "ok" | "partial" | "error";
+  snapshots: {
+    usage: readonly LocalUsageSnapshotInput[];
+    billing: readonly LocalBillingSnapshotInput[];
+    serviceHealth: readonly LocalServiceHealthSnapshotInput[];
+    costEstimates: readonly LocalCostEstimateInput[];
+  };
+  alerts: readonly LocalAlertInput[];
+}
+
+export interface LocalUsageSnapshotInput {
+  provider: string;
+  collectedAt: string;
+  service?: string;
+  metric: string;
+  unit: string;
+  value: number;
+  providerAccountRef?: string;
+}
+
+export interface LocalBillingSnapshotInput {
+  provider: string;
+  collectedAt: string;
+  periodStart: string;
+  periodEnd: string;
+  amountMinor: number;
+  currency: string;
+  status: string;
+  providerAccountRef?: string;
+}
+
+export interface LocalServiceHealthSnapshotInput {
+  provider: string;
+  collectedAt: string;
+  service: string;
+  region?: string;
+  status: "ok" | "degraded" | "down" | "unknown";
+  message?: string;
+}
+
+export interface LocalCostEstimateInput {
+  provider: string;
+  collectedAt: string;
+  periodStart: string;
+  periodEnd: string;
+  estimatedAmountMinor: number;
+  currency: string;
+  confidence: "low" | "medium" | "high";
+  providerAccountRef?: string;
+}
+
+export interface LocalAlertInput {
+  provider?: string;
+  createdAt: string;
+  severity: "info" | "warning" | "critical";
+  category: string;
+  title: string;
+  message: string;
+}
+
+export interface LocalReportRunInput {
+  dbPath: string;
+  createdAt: string;
+  reportDate: string;
+  language: "ko" | "en";
+  deliveryTarget: "stdout" | "local-file" | "slack";
+  status: "rendered" | "sent" | "error";
+}
+
+const FORBIDDEN_KEY_PATTERN = /^(raw|rawPayload|rawResponse|providerPayload|providerResponse|billingProfile)$/i;
+const FORBIDDEN_STRING_PATTERN = /acct_|project_|invoice_|sk-|hooks\.slack|@/i;
+
+export async function initializeLocalStore(options: LocalStoreOptions): Promise<MigrationRunResult> {
+  const dbPath = normalizeDbPath(options.dbPath);
+  await mkdir(dirname(dbPath), { recursive: true });
+
+  return runMigrations({
+    async getAppliedMigrationIds() {
+      return getAppliedMigrationIds(dbPath);
+    },
+    async execute(sql) {
+      executeSqlite(dbPath, sql);
+    },
+    async recordMigration(id) {
+      executeSqlite(
+        dbPath,
+        `INSERT INTO schema_migrations (id) VALUES (${sqlString(id)}) ON CONFLICT(id) DO NOTHING;`,
+      );
+    },
+  });
+}
+
+export async function readLocalStore(options: LocalStoreOptions): Promise<LocalStore> {
+  const dbPath = normalizeDbPath(options.dbPath);
+
+  return {
+    appliedMigrationIds: getAppliedMigrationIds(dbPath),
+    providers: readProviders(dbPath),
+    usageSnapshots: readUsageSnapshots(dbPath),
+    billingSnapshots: readBillingSnapshots(dbPath),
+    serviceHealthSnapshots: readServiceHealthSnapshots(dbPath),
+    costEstimates: readCostEstimates(dbPath),
+    alerts: readAlerts(dbPath),
+    reportRuns: readReportRuns(dbPath),
+  };
+}
+
+export async function saveLocalProviderCollection(input: LocalProviderCollectionInput): Promise<void> {
+  assertSafeForPersistence(input);
+  await initializeLocalStore({ dbPath: input.dbPath });
+
+  const dbPath = normalizeDbPath(input.dbPath);
+  const providerId = providerIdFor(input.provider.key);
+  const providerAccountRefs = collectProviderAccountRefs(input);
+  const statements: string[] = [
+    upsertProviderSql({
+      id: providerId,
+      key: input.provider.key,
+      displayName: input.provider.displayName,
+      connectorVersion: input.provider.connectorVersion,
+      timestamp: input.collectedAt,
+    }),
+  ];
+
+  for (const providerAccountRef of providerAccountRefs) {
+    statements.push(upsertProviderAccountSql(providerId, input.provider.key, providerAccountRef, input.collectedAt));
+  }
+
+  for (const snapshot of input.snapshots.usage) {
+    statements.push(insertUsageSnapshotSql(providerId, input.provider.key, snapshot));
+  }
+
+  for (const snapshot of input.snapshots.billing) {
+    statements.push(insertBillingSnapshotSql(providerId, input.provider.key, snapshot));
+  }
+
+  for (const snapshot of input.snapshots.serviceHealth) {
+    statements.push(insertServiceHealthSnapshotSql(providerId, snapshot));
+  }
+
+  for (const snapshot of input.snapshots.costEstimates) {
+    statements.push(insertCostEstimateSql(providerId, input.provider.key, snapshot));
+  }
+
+  for (const alert of input.alerts) {
+    statements.push(insertAlertSql(alert));
+  }
+
+  executeSqliteTransaction(dbPath, statements);
+}
+
+export async function recordLocalReportRun(input: LocalReportRunInput): Promise<void> {
+  assertSafeForPersistence(input);
+  await initializeLocalStore({ dbPath: input.dbPath });
+
+  executeSqliteTransaction(normalizeDbPath(input.dbPath), [
+    `
+    INSERT INTO report_runs (id, created_at, report_date, language, delivery_target, status, metadata_json)
+    VALUES (
+      ${sqlString(randomUUID())},
+      ${sqlString(input.createdAt)},
+      ${sqlString(input.reportDate)},
+      ${sqlString(input.language)},
+      ${sqlString(input.deliveryTarget)},
+      ${sqlString(input.status)},
+      ${sqlString(EMPTY_METADATA_JSON)}
+    );
+    `,
+  ]);
+}
+
+function getAppliedMigrationIds(dbPath: string): string[] {
+  const schemaMigrationTables = querySqliteRows<{ name: string }>(
+    dbPath,
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'schema_migrations';",
+  );
+
+  if (schemaMigrationTables.length === 0) {
+    return [];
+  }
+
+  return querySqliteRows<{ id: string }>(dbPath, "SELECT id FROM schema_migrations ORDER BY id;").map(
+    (row) => row.id,
+  );
+}
+
+function readProviders(dbPath: string): LocalProviderRecord[] {
+  return querySqliteRows<ProviderRow>(
+    dbPath,
+    `
+    SELECT
+      id,
+      provider_key AS key,
+      display_name AS displayName,
+      connector_version AS connectorVersion,
+      created_at AS createdAt,
+      updated_at AS updatedAt
+    FROM providers
+    ORDER BY provider_key;
+    `,
+  );
+}
+
+function readUsageSnapshots(dbPath: string): LocalUsageSnapshotRecord[] {
+  return querySqliteRows<UsageSnapshotRow>(
+    dbPath,
+    `
+    SELECT
+      usage_snapshots.id AS id,
+      providers.provider_key AS providerKey,
+      provider_accounts.account_ref AS providerAccountRef,
+      usage_snapshots.collected_at AS collectedAt,
+      usage_snapshots.service AS service,
+      usage_snapshots.metric AS metric,
+      usage_snapshots.unit AS unit,
+      usage_snapshots.value AS value,
+      usage_snapshots.metadata_json AS metadataJson
+    FROM usage_snapshots
+    JOIN providers ON providers.id = usage_snapshots.provider_id
+    LEFT JOIN provider_accounts ON provider_accounts.id = usage_snapshots.provider_account_id
+    ORDER BY usage_snapshots.collected_at, usage_snapshots.id;
+    `,
+  ).map((row) => ({
+    id: row.id,
+    providerKey: row.providerKey,
+    collectedAt: row.collectedAt,
+    service: row.service,
+    metric: row.metric,
+    unit: row.unit,
+    value: row.value,
+    metadataJson: emptyMetadata(row.metadataJson),
+    ...(row.providerAccountRef === null ? {} : { providerAccountRef: row.providerAccountRef }),
+  }));
+}
+
+function readBillingSnapshots(dbPath: string): LocalBillingSnapshotRecord[] {
+  return querySqliteRows<BillingSnapshotRow>(
+    dbPath,
+    `
+    SELECT
+      billing_snapshots.id AS id,
+      providers.provider_key AS providerKey,
+      provider_accounts.account_ref AS providerAccountRef,
+      billing_snapshots.collected_at AS collectedAt,
+      billing_snapshots.period_start AS periodStart,
+      billing_snapshots.period_end AS periodEnd,
+      billing_snapshots.amount_minor AS amountMinor,
+      billing_snapshots.currency AS currency,
+      billing_snapshots.status AS status,
+      billing_snapshots.metadata_json AS metadataJson
+    FROM billing_snapshots
+    JOIN providers ON providers.id = billing_snapshots.provider_id
+    LEFT JOIN provider_accounts ON provider_accounts.id = billing_snapshots.provider_account_id
+    ORDER BY billing_snapshots.collected_at, billing_snapshots.id;
+    `,
+  ).map((row) => ({
+    id: row.id,
+    providerKey: row.providerKey,
+    collectedAt: row.collectedAt,
+    periodStart: row.periodStart,
+    periodEnd: row.periodEnd,
+    amountMinor: row.amountMinor,
+    currency: row.currency,
+    status: row.status,
+    metadataJson: emptyMetadata(row.metadataJson),
+    ...(row.providerAccountRef === null ? {} : { providerAccountRef: row.providerAccountRef }),
+  }));
+}
+
+function readServiceHealthSnapshots(dbPath: string): LocalServiceHealthSnapshotRecord[] {
+  return querySqliteRows<ServiceHealthSnapshotRow>(
+    dbPath,
+    `
+    SELECT
+      service_health_snapshots.id AS id,
+      providers.provider_key AS providerKey,
+      service_health_snapshots.collected_at AS collectedAt,
+      service_health_snapshots.service AS service,
+      service_health_snapshots.region AS region,
+      service_health_snapshots.status AS status,
+      service_health_snapshots.message AS message,
+      service_health_snapshots.metadata_json AS metadataJson
+    FROM service_health_snapshots
+    JOIN providers ON providers.id = service_health_snapshots.provider_id
+    ORDER BY service_health_snapshots.collected_at, service_health_snapshots.id;
+    `,
+  ).map((row) => ({
+    id: row.id,
+    providerKey: row.providerKey,
+    collectedAt: row.collectedAt,
+    service: row.service,
+    status: row.status,
+    metadataJson: emptyMetadata(row.metadataJson),
+    ...(row.region === null ? {} : { region: row.region }),
+    ...(row.message === null ? {} : { message: row.message }),
+  }));
+}
+
+function readCostEstimates(dbPath: string): LocalCostEstimateRecord[] {
+  return querySqliteRows<CostEstimateRow>(
+    dbPath,
+    `
+    SELECT
+      cost_estimates.id AS id,
+      providers.provider_key AS providerKey,
+      provider_accounts.account_ref AS providerAccountRef,
+      cost_estimates.collected_at AS collectedAt,
+      cost_estimates.period_start AS periodStart,
+      cost_estimates.period_end AS periodEnd,
+      cost_estimates.estimated_amount_minor AS estimatedAmountMinor,
+      cost_estimates.currency AS currency,
+      cost_estimates.confidence AS confidence,
+      cost_estimates.metadata_json AS metadataJson
+    FROM cost_estimates
+    JOIN providers ON providers.id = cost_estimates.provider_id
+    LEFT JOIN provider_accounts ON provider_accounts.id = cost_estimates.provider_account_id
+    ORDER BY cost_estimates.collected_at, cost_estimates.id;
+    `,
+  ).map((row) => ({
+    id: row.id,
+    providerKey: row.providerKey,
+    collectedAt: row.collectedAt,
+    periodStart: row.periodStart,
+    periodEnd: row.periodEnd,
+    estimatedAmountMinor: row.estimatedAmountMinor,
+    currency: row.currency,
+    confidence: row.confidence,
+    metadataJson: emptyMetadata(row.metadataJson),
+    ...(row.providerAccountRef === null ? {} : { providerAccountRef: row.providerAccountRef }),
+  }));
+}
+
+function readAlerts(dbPath: string): LocalAlertRecord[] {
+  return querySqliteRows<AlertRow>(
+    dbPath,
+    `
+    SELECT
+      alerts.id AS id,
+      providers.provider_key AS providerKey,
+      alerts.created_at AS createdAt,
+      alerts.severity AS severity,
+      alerts.category AS category,
+      alerts.title AS title,
+      alerts.message AS message,
+      alerts.metadata_json AS metadataJson
+    FROM alerts
+    LEFT JOIN providers ON providers.id = alerts.provider_id
+    ORDER BY alerts.created_at, alerts.id;
+    `,
+  ).map((row) => ({
+    id: row.id,
+    createdAt: row.createdAt,
+    severity: row.severity,
+    category: row.category,
+    title: row.title,
+    message: row.message,
+    metadataJson: emptyMetadata(row.metadataJson),
+    ...(row.providerKey === null ? {} : { providerKey: row.providerKey }),
+  }));
+}
+
+function readReportRuns(dbPath: string): LocalReportRunRecord[] {
+  return querySqliteRows<ReportRunRow>(
+    dbPath,
+    `
+    SELECT
+      id,
+      created_at AS createdAt,
+      report_date AS reportDate,
+      language,
+      delivery_target AS deliveryTarget,
+      status,
+      metadata_json AS metadataJson
+    FROM report_runs
+    ORDER BY created_at, id;
+    `,
+  ).map((row) => ({
+    id: row.id,
+    createdAt: row.createdAt,
+    reportDate: row.reportDate,
+    language: row.language,
+    deliveryTarget: row.deliveryTarget,
+    status: row.status,
+    metadataJson: emptyMetadata(row.metadataJson),
+  }));
+}
+
+function upsertProviderSql(input: {
+  id: string;
+  key: string;
+  displayName: string;
+  connectorVersion: string;
+  timestamp: string;
+}): string {
+  return `
+  INSERT INTO providers (id, provider_key, display_name, connector_version, created_at, updated_at)
+  VALUES (
+    ${sqlString(input.id)},
+    ${sqlString(input.key)},
+    ${sqlString(input.displayName)},
+    ${sqlString(input.connectorVersion)},
+    ${sqlString(input.timestamp)},
+    ${sqlString(input.timestamp)}
+  )
+  ON CONFLICT(provider_key) DO UPDATE SET
+    display_name = excluded.display_name,
+    connector_version = excluded.connector_version,
+    updated_at = excluded.updated_at;
+  `;
+}
+
+function upsertProviderAccountSql(
+  providerId: string,
+  providerKey: string,
+  providerAccountRef: string,
+  timestamp: string,
+): string {
+  return `
+  INSERT INTO provider_accounts (id, provider_id, account_label, account_ref, created_at, updated_at)
+  VALUES (
+    ${sqlString(providerAccountIdFor(providerKey, providerAccountRef))},
+    ${sqlString(providerId)},
+    ${sqlString("redacted-provider-account")},
+    ${sqlString(providerAccountDigest(providerAccountRef))},
+    ${sqlString(timestamp)},
+    ${sqlString(timestamp)}
+  )
+  ON CONFLICT(provider_id, account_ref) DO UPDATE SET
+    updated_at = excluded.updated_at;
+  `;
+}
+
+function insertUsageSnapshotSql(providerId: string, providerKey: string, snapshot: LocalUsageSnapshotInput): string {
+  return `
+  INSERT INTO usage_snapshots (
+    id, provider_id, provider_account_id, collected_at, service, metric, unit, value, metadata_json
+  )
+  VALUES (
+    ${sqlString(randomUUID())},
+    ${sqlString(providerId)},
+    ${sqlProviderAccountId(providerKey, snapshot.providerAccountRef)},
+    ${sqlString(snapshot.collectedAt)},
+    ${sqlString(snapshot.service ?? "unknown")},
+    ${sqlString(snapshot.metric)},
+    ${sqlString(snapshot.unit)},
+    ${sqlNumber(snapshot.value)},
+    ${sqlString(EMPTY_METADATA_JSON)}
+  );
+  `;
+}
+
+function insertBillingSnapshotSql(providerId: string, providerKey: string, snapshot: LocalBillingSnapshotInput): string {
+  return `
+  INSERT INTO billing_snapshots (
+    id, provider_id, provider_account_id, collected_at, period_start, period_end, amount_minor, currency, status,
+    metadata_json
+  )
+  VALUES (
+    ${sqlString(randomUUID())},
+    ${sqlString(providerId)},
+    ${sqlProviderAccountId(providerKey, snapshot.providerAccountRef)},
+    ${sqlString(snapshot.collectedAt)},
+    ${sqlString(snapshot.periodStart)},
+    ${sqlString(snapshot.periodEnd)},
+    ${sqlInteger(snapshot.amountMinor)},
+    ${sqlString(snapshot.currency)},
+    ${sqlString(snapshot.status)},
+    ${sqlString(EMPTY_METADATA_JSON)}
+  );
+  `;
+}
+
+function insertServiceHealthSnapshotSql(providerId: string, snapshot: LocalServiceHealthSnapshotInput): string {
+  return `
+  INSERT INTO service_health_snapshots (
+    id, provider_id, collected_at, service, region, status, message, metadata_json
+  )
+  VALUES (
+    ${sqlString(randomUUID())},
+    ${sqlString(providerId)},
+    ${sqlString(snapshot.collectedAt)},
+    ${sqlString(snapshot.service)},
+    ${sqlNullableString(snapshot.region)},
+    ${sqlString(snapshot.status)},
+    ${sqlNullableString(snapshot.message)},
+    ${sqlString(EMPTY_METADATA_JSON)}
+  );
+  `;
+}
+
+function insertCostEstimateSql(providerId: string, providerKey: string, snapshot: LocalCostEstimateInput): string {
+  return `
+  INSERT INTO cost_estimates (
+    id, provider_id, provider_account_id, collected_at, period_start, period_end, estimated_amount_minor, currency,
+    confidence, metadata_json
+  )
+  VALUES (
+    ${sqlString(randomUUID())},
+    ${sqlString(providerId)},
+    ${sqlProviderAccountId(providerKey, snapshot.providerAccountRef)},
+    ${sqlString(snapshot.collectedAt)},
+    ${sqlString(snapshot.periodStart)},
+    ${sqlString(snapshot.periodEnd)},
+    ${sqlInteger(snapshot.estimatedAmountMinor)},
+    ${sqlString(snapshot.currency)},
+    ${sqlString(snapshot.confidence)},
+    ${sqlString(EMPTY_METADATA_JSON)}
+  );
+  `;
+}
+
+function insertAlertSql(alert: LocalAlertInput): string {
+  return `
+  INSERT INTO alerts (id, provider_id, created_at, severity, category, title, message, metadata_json)
+  VALUES (
+    ${sqlString(randomUUID())},
+    ${alert.provider === undefined ? "NULL" : sqlString(providerIdFor(alert.provider))},
+    ${sqlString(alert.createdAt)},
+    ${sqlString(alert.severity)},
+    ${sqlString(alert.category)},
+    ${sqlString(alert.title)},
+    ${sqlString(alert.message)},
+    ${sqlString(EMPTY_METADATA_JSON)}
+  );
+  `;
+}
+
+function collectProviderAccountRefs(input: LocalProviderCollectionInput): string[] {
+  const refs = new Set<string>();
+  const collect = (providerAccountRef: string | undefined) => {
+    if (providerAccountRef !== undefined) {
+      refs.add(providerAccountRef);
+    }
+  };
+
+  for (const snapshot of input.snapshots.usage) {
+    collect(snapshot.providerAccountRef);
+  }
+
+  for (const snapshot of input.snapshots.billing) {
+    collect(snapshot.providerAccountRef);
+  }
+
+  for (const snapshot of input.snapshots.costEstimates) {
+    collect(snapshot.providerAccountRef);
+  }
+
+  return [...refs].sort();
+}
+
+function executeSqliteTransaction(dbPath: string, statements: readonly string[]): void {
+  if (statements.length === 0) {
+    return;
+  }
+
+  executeSqlite(dbPath, ["BEGIN;", ...statements, "COMMIT;"].join("\n"));
+}
+
+function executeSqlite(dbPath: string, sql: string): void {
+  execFileSync(SQLITE_BIN, [dbPath], {
+    input: `PRAGMA foreign_keys = ON;\n${sql.trim()}\n`,
+    encoding: "utf8",
+    maxBuffer: 1024 * 1024,
+  });
+}
+
+function querySqliteRows<T>(dbPath: string, sql: string): T[] {
+  const output = execFileSync(SQLITE_BIN, ["-json", dbPath, sql], {
+    encoding: "utf8",
+    maxBuffer: 1024 * 1024,
+  }).trim();
+
+  if (output.length === 0) {
+    return [];
+  }
+
+  return JSON.parse(output) as T[];
+}
+
+function normalizeDbPath(dbPath: string): string {
+  const normalized = dbPath.trim();
+
+  if (normalized.length === 0) {
+    throw new Error("dbPath must not be blank.");
+  }
+
+  return normalized;
+}
+
+function providerIdFor(providerKey: string): string {
+  return `provider:${providerKey}`;
+}
+
+function providerAccountIdFor(providerKey: string, providerAccountRef: string): string {
+  return `provider-account:${providerKey}:${providerAccountDigest(providerAccountRef).slice(0, 32)}`;
+}
+
+function providerAccountDigest(providerAccountRef: string): string {
+  return createHash("sha256").update(providerAccountRef).digest("hex");
+}
+
+function sqlProviderAccountId(providerKey: string, providerAccountRef: string | undefined): string {
+  if (providerAccountRef === undefined) {
+    return "NULL";
+  }
+
+  return sqlString(providerAccountIdFor(providerKey, providerAccountRef));
+}
+
+function sqlString(value: string): string {
+  return `'${value.replaceAll("'", "''")}'`;
+}
+
+function sqlNullableString(value: string | undefined): string {
+  return value === undefined ? "NULL" : sqlString(value);
+}
+
+function sqlNumber(value: number): string {
+  if (!Number.isFinite(value)) {
+    throw new Error("SQLite numeric value must be finite.");
+  }
+
+  return String(value);
+}
+
+function sqlInteger(value: number): string {
+  if (!Number.isSafeInteger(value)) {
+    throw new Error("SQLite integer value must be a safe integer.");
+  }
+
+  return String(value);
+}
+
+function emptyMetadata(metadataJson: string): Record<string, never> {
+  if (metadataJson !== EMPTY_METADATA_JSON) {
+    const parsed = JSON.parse(metadataJson) as unknown;
+    assertSafeForPersistence(parsed);
+  }
+
+  return {};
+}
+
+function assertSafeForPersistence(value: unknown): void {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      assertSafeForPersistence(item);
+    }
+    return;
+  }
+
+  if (!isRecord(value)) {
+    if (typeof value === "string" && FORBIDDEN_STRING_PATTERN.test(value)) {
+      throw new Error("Sensitive provider value cannot be persisted.");
+    }
+    return;
+  }
+
+  for (const [key, nestedValue] of Object.entries(value)) {
+    if (FORBIDDEN_KEY_PATTERN.test(key)) {
+      throw new Error(`Raw provider payload field cannot be persisted: ${key}`);
+    }
+    assertSafeForPersistence(nestedValue);
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+interface ProviderRow {
+  id: string;
+  key: string;
+  displayName: string;
+  connectorVersion: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface UsageSnapshotRow {
+  id: string;
+  providerKey: string;
+  providerAccountRef: string | null;
+  collectedAt: string;
+  service: string;
+  metric: string;
+  unit: string;
+  value: number;
+  metadataJson: string;
+}
+
+interface BillingSnapshotRow {
+  id: string;
+  providerKey: string;
+  providerAccountRef: string | null;
+  collectedAt: string;
+  periodStart: string;
+  periodEnd: string;
+  amountMinor: number;
+  currency: string;
+  status: string;
+  metadataJson: string;
+}
+
+interface ServiceHealthSnapshotRow {
+  id: string;
+  providerKey: string;
+  collectedAt: string;
+  service: string;
+  region: string | null;
+  status: "ok" | "degraded" | "down" | "unknown";
+  message: string | null;
+  metadataJson: string;
+}
+
+interface CostEstimateRow {
+  id: string;
+  providerKey: string;
+  providerAccountRef: string | null;
+  collectedAt: string;
+  periodStart: string;
+  periodEnd: string;
+  estimatedAmountMinor: number;
+  currency: string;
+  confidence: "low" | "medium" | "high";
+  metadataJson: string;
+}
+
+interface AlertRow {
+  id: string;
+  providerKey: string | null;
+  createdAt: string;
+  severity: "info" | "warning" | "critical";
+  category: string;
+  title: string;
+  message: string;
+  metadataJson: string;
+}
+
+interface ReportRunRow {
+  id: string;
+  createdAt: string;
+  reportDate: string;
+  language: "ko" | "en";
+  deliveryTarget: "stdout" | "local-file" | "slack";
+  status: "rendered" | "sent" | "error";
+  metadataJson: string;
+}

@@ -6,27 +6,35 @@ The canonical detailed execution plan lives at `docs/product/execution-plan.md`.
 
 ## Current Approved Slice
 
-- Current milestone: `M1`
-- Current slice: `S1-monorepo-bootstrap`
+- Current milestone: `M3`
+- Current slice: `S3-cli-mock-pipeline`
+- Canonical source: `docs/product/execution-plan.md`, section `M3 — CLI with mock provider`
 
-## M1/S1 Summary
+## Slice History
 
-Bootstrap the StackSpend TypeScript pnpm monorepo skeleton only:
+- `M1/S1-monorepo-bootstrap` completed locally.
+- `M2/S2-core-config-db-security` completed locally and remains intentionally uncommitted for review.
+- `M3/S3-cli-mock-pipeline` is the current approved slice.
 
-- workspace package files
-- CLI package with help/version
-- web package placeholder
-- shared package placeholders
-- `maskSecret` utility with Vitest test
+## M3/S3 Summary
 
-Do not implement real provider APIs in M1/S1.
+Prove the local sync/report pipeline without external provider APIs:
+
+- CLI commands: `init`, `doctor`, `sync --provider mock`, `report daily --lang ko`
+- read-only mock connector
+- Korean daily report renderer
+- normalized local persistence only
+
+Do not persist raw provider payloads.
+Do not implement external provider API calls in M3/S3.
 Do not create `.env`.
 Do not add real credentials.
+Do not add telemetry.
 
-## Validation Commands After M1/S1
+## Validation Commands For M3/S3 Review
 
 ```bash
-pnpm install
 pnpm test
 pnpm typecheck
+git diff --check
 ```
