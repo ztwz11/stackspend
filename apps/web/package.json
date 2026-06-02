@@ -1,0 +1,18 @@
+{
+  "name": "@stackspend/web",
+  "version": "0.1.0-alpha.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "next": "^16.0.7",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  }
+}

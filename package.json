@@ -1,0 +1,21 @@
+{
+  "name": "stackspend",
+  "version": "0.1.0-alpha.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.5.0",
+  "scripts": {
+    "dev": "pnpm --filter @stackspend/web dev",
+    "build": "pnpm -r build",
+    "test": "mkdir -p .stackspend/tmp && TMPDIR=$PWD/.stackspend/tmp pnpm -r test",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "@types/react": "^19.2.7",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.14",
+    "tsx": "^4.21.0"
+  }
+}

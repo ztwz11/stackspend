@@ -4,7 +4,7 @@ Local-first cloud/SaaS usage, status, and expected billing dashboard for individ
 
 ## Status
 
-StackSpend is in initial product planning. v0.1 is intentionally CLI-first and local-first.
+StackSpend is in initial v0.1 bootstrap. The first implementation slice is a TypeScript pnpm monorepo skeleton.
 
 ## v0.1 Direction
 
@@ -17,6 +17,21 @@ StackSpend is in initial product planning. v0.1 is intentionally CLI-first and l
 - Slack webhook delivery
 - No telemetry by default
 - Env-only secrets for v0.1
+
+## Development
+
+```bash
+pnpm install
+pnpm test
+pnpm typecheck
+```
+
+CLI smoke check:
+
+```bash
+pnpm --filter @stackspend/cli dev -- --help
+pnpm --filter @stackspend/cli dev -- --version
+```
 
 ## Security Posture
 

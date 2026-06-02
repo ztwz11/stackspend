@@ -1,0 +1,44 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "outDir": "dist",
+    "baseUrl": ".",
+    "paths": {
+      "@stackspend/core": [
+        "packages/core/src/index.ts"
+      ],
+      "@stackspend/config": [
+        "packages/config/src/index.ts"
+      ],
+      "@stackspend/db": [
+        "packages/db/src/index.ts"
+      ],
+      "@stackspend/security": [
+        "packages/security/src/index.ts"
+      ],
+      "@stackspend/report": [
+        "packages/report/src/index.ts"
+      ],
+      "@stackspend/connector-mock": [
+        "packages/connectors/mock/src/index.ts"
+      ]
+    }
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "name": "@stackspend/cli",
+  "version": "0.1.0-alpha.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "stackspend": "src/index.ts"
+  },
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "tsc -p tsconfig.json --noEmit"
+  }
+}
