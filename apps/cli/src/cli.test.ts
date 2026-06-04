@@ -105,6 +105,102 @@ describe("StackSpend CLI", () => {
     expect(stdout).not.toContain("sk-fake-openai-admin-key");
   });
 
+  it("checks the default dashboard API and accepts the safe empty state", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "stackspend-cli-"));
+    const fetchRequests: string[] = [];
+    const result = await runCli(["dashboard", "check"], {
+      ...testContext(cwd),
+      fetch: async (input, init) => {
+        fetchRequests.push(String(input));
+        expect(init?.method).toBe("GET");
+        expect((init?.headers as Record<string, string> | undefined)?.Accept).toBe("application/json");
+
+        return Response.json({
+          generatedAt: FIXED_NOW,
+          source: "empty",
+          database: {
+            available: false,
+            reason: "missing",
+          },
+          summary: {
+            providerCount: 0,
+          },
+        });
+      },
+    });
+    const stdout = result.stdout.join("\n");
+
+    expect(result.exitCode).toBe(0);
+    expect(fetchRequests).toEqual(["http://localhost:3000/api/dashboard"]);
+    expect(stdout).toContain("StackSpend dashboard check");
+    expect(stdout).toContain("Dashboard URL: http://localhost:3000");
+    expect(stdout).toContain("API status: 200 OK");
+    expect(stdout).toContain("DB path: .stackspend/stackspend.sqlite");
+    expect(stdout).toContain("DB exists locally: no");
+    expect(stdout).toContain("Payload source: empty");
+    expect(stdout).toContain("Provider count: 0");
+    expect(stdout).toContain(`Generated at: ${FIXED_NOW}`);
+    expect(stdout).toContain("Dashboard state: safe empty state");
+  });
+
+  it("sanitizes dashboard URL path, query, and hash before probing or printing", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "stackspend-cli-"));
+    const fetchRequests: string[] = [];
+    const result = await runCli(["dashboard", "check", "--url", "http://localhost:3001/page?token=secret#frag"], {
+      ...testContext(cwd),
+      fetch: async (input) => {
+        fetchRequests.push(String(input));
+
+        return Response.json({
+          generatedAt: FIXED_NOW,
+          source: "sqlite",
+          database: {
+            available: true,
+            reason: "ok",
+          },
+          summary: {
+            providerCount: 2,
+          },
+        });
+      },
+    });
+    const allOutput = [...result.stdout, ...result.stderr].join("\n");
+
+    expect(result.exitCode).toBe(0);
+    expect(fetchRequests).toEqual(["http://localhost:3001/api/dashboard"]);
+    expect(allOutput).toContain("Dashboard URL: http://localhost:3001");
+    expect(allOutput).toContain("URL note: path, query, and hash were ignored for safety.");
+    expect(allOutput).not.toContain("token=secret");
+    expect(allOutput).not.toContain("frag");
+  });
+
+  it("rejects credential-bearing dashboard URLs without leaking credential text", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "stackspend-cli-"));
+    const result = await runCli(
+      ["dashboard", "check", "--url", "http://user:super-secret@localhost:3000"],
+      testContext(cwd),
+    );
+    const allOutput = [...result.stdout, ...result.stderr].join("\n");
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr.join("\n")).toContain("Dashboard URL must not include credentials.");
+    expect(allOutput).not.toContain("super-secret");
+    expect(allOutput).not.toContain("user:super-secret");
+  });
+
+  it("fails dashboard check on non-200 API responses with repo-local dev guidance", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "stackspend-cli-"));
+    const result = await runCli(["dashboard", "check"], {
+      ...testContext(cwd),
+      fetch: async () => new Response("fake unavailable", { status: 503 }),
+    });
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout.join("\n")).toContain("API status: 503");
+    expect(result.stderr.join("\n")).toContain("pnpm --filter @stackspend/web dev");
+    expect(result.stderr.join("\n")).toContain("pnpm --filter @stackspend/cli dev -- dashboard check");
+  });
+
   it("syncs the mock provider and renders a Korean daily report from persisted normalized data", async () => {
     const cwd = await mkdtemp(join(tmpdir(), "stackspend-cli-"));
 

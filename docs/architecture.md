@@ -6,7 +6,7 @@ StackSpend is a local-first TypeScript monorepo. The CLI collects normalized sna
 
 ## Components
 
-- `apps/cli`: command-line interface for init, doctor, sync, report, and serve.
+- `apps/cli`: command-line interface for init, doctor, sync, report, and local dashboard checks.
 - `apps/web`: local Next.js dashboard.
 - `packages/core`: provider contracts, collection orchestration, snapshot types, risk engine.
 - `packages/db`: SQLite client, migrations, schema helpers.
@@ -24,6 +24,8 @@ StackSpend is a local-first TypeScript monorepo. The CLI collects normalized sna
 5. Security layer redacts sensitive identifiers before persistence.
 6. DB layer writes normalized snapshots to SQLite.
 7. Reports and dashboard read normalized snapshots.
+
+`stackspend dashboard check` is a local HTTP probe for the web dashboard. It calls `/api/dashboard`, reports sanitized status and payload summary fields, and does not start or package the Next.js app.
 
 ## Storage
 

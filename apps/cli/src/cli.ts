@@ -1,3 +1,4 @@
+import { runDashboardCommand } from "./commands/dashboard.js";
 import { runDoctorCommand } from "./commands/doctor.js";
 import { runInitCommand } from "./commands/init.js";
 import { runReportCommand } from "./commands/report.js";
@@ -15,6 +16,7 @@ Usage:
   stackspend --version
   stackspend init
   stackspend doctor
+  stackspend dashboard check [--url <local-dashboard-url>]
   stackspend sync --provider <mock|aws|openai|supabase|cloudflare>
   stackspend report daily --lang ko [--send slack]
 `;
@@ -28,6 +30,7 @@ export interface CliRuntime {
   stdoutBuffer?: string[];
   stderrBuffer?: string[];
   slackTransport?: SlackReportTransport;
+  fetch?: typeof fetch;
 }
 
 export interface CliExecutionContext {
@@ -37,6 +40,7 @@ export interface CliExecutionContext {
   stdout(line: string): void;
   stderr(line: string): void;
   slackTransport?: SlackReportTransport;
+  fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response>;
 }
 
 export interface CliResult {
@@ -77,6 +81,7 @@ export async function runCli(args: readonly string[], runtime: CliRuntime = {}):
 
       runtime.stderr(line);
     },
+    fetch: runtime.fetch ?? globalThis.fetch,
   };
 
   if (runtime.slackTransport !== undefined) {
@@ -122,6 +127,10 @@ async function dispatchCommand(args: readonly string[], context: CliExecutionCon
 
   if (command === "doctor") {
     return runDoctorCommand(rest, context);
+  }
+
+  if (command === "dashboard") {
+    return runDashboardCommand(rest, context);
   }
 
   if (command === "sync") {

@@ -31,6 +31,12 @@ pnpm --filter @stackspend/web dev
 
 Open the dashboard at `http://localhost:3000`. The dashboard reads normalized local SQLite snapshots from `STACKSPEND_DB_PATH`, defaulting to `.stackspend/stackspend.sqlite`.
 
+In a second terminal, verify the local dashboard API and page URL:
+
+```bash
+pnpm --filter @stackspend/cli dev -- dashboard check
+```
+
 Run the full local validation gate with:
 
 ```bash
@@ -82,6 +88,7 @@ pnpm --filter @stackspend/cli dev -- --version
 pnpm --filter @stackspend/cli dev -- doctor
 pnpm --filter @stackspend/cli dev -- init
 pnpm --filter @stackspend/cli dev -- sync --provider mock
+pnpm --filter @stackspend/cli dev -- dashboard check
 pnpm --filter @stackspend/cli dev -- report daily --lang ko
 ```
 
@@ -115,6 +122,15 @@ pnpm --filter @stackspend/web dev
 ```
 
 The dashboard makes no provider API calls. It reads normalized SQLite data only and returns a safe empty state if the database is missing.
+
+Use the CLI check command from another terminal to probe the local dashboard API:
+
+```bash
+pnpm --filter @stackspend/cli dev -- dashboard check
+pnpm --filter @stackspend/cli dev -- dashboard check --url http://localhost:3000
+```
+
+The check command sanitizes the printed dashboard URL and ignores path, query, and hash values. It rejects URL credentials and does not start, package, or serve the Next.js app.
 
 ## Slack Report
 

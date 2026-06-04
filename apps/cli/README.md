@@ -20,6 +20,7 @@ After an alpha is published:
 npm install -g @stackspend/cli@alpha
 stackspend --version
 stackspend doctor
+stackspend dashboard check
 ```
 
 One-off execution:
@@ -27,6 +28,7 @@ One-off execution:
 ```bash
 npx --package @stackspend/cli@alpha stackspend --version
 npx --package @stackspend/cli@alpha stackspend doctor
+npx --package @stackspend/cli@alpha stackspend dashboard check
 ```
 
 ## Local Tarball Review
@@ -48,6 +50,19 @@ npm init -y
 npm install /path/to/stackspend-cli-0.1.0-alpha.0.tgz
 npm exec stackspend -- --version
 npm exec stackspend -- doctor
+npm exec stackspend -- dashboard check
 ```
 
 Do not create `.env`, paste real API keys, or write Slack webhook URLs into local project files. Fixture mode and `mock` sync are the intended no-credentials review paths.
+
+## Dashboard Check
+
+`stackspend dashboard check` probes `http://localhost:3000/api/dashboard` by default and reports the sanitized dashboard URL, API status, local DB path/existence, payload source, provider count, and generated time.
+
+Use `--url` only for a local dashboard origin:
+
+```bash
+stackspend dashboard check --url http://localhost:3000
+```
+
+Path, query, and hash values are ignored before printing or probing, and URLs with credentials are rejected. The command does not package, start, or serve the Next.js dashboard; from this repository, start it with `pnpm --filter @stackspend/web dev`.
