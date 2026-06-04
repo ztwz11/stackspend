@@ -18,16 +18,22 @@ After an alpha is published:
 
 ```bash
 npm install -g @stackspend/cli@alpha
+stackspend
 stackspend --version
+stackspend /version
 stackspend doctor
+stackspend /doctor
 stackspend dashboard check
 ```
 
 One-off execution:
 
 ```bash
+npx --package @stackspend/cli@alpha stackspend
 npx --package @stackspend/cli@alpha stackspend --version
+npx --package @stackspend/cli@alpha stackspend /version
 npx --package @stackspend/cli@alpha stackspend doctor
+npx --package @stackspend/cli@alpha stackspend /doctor
 npx --package @stackspend/cli@alpha stackspend dashboard check
 ```
 
@@ -48,12 +54,39 @@ mkdir -p /tmp/stackspend-alpha-review
 cd /tmp/stackspend-alpha-review
 npm init -y
 npm install /path/to/stackspend-cli-0.1.0-alpha.0.tgz
+npm exec stackspend
 npm exec stackspend -- --version
+npm exec stackspend -- /version
 npm exec stackspend -- doctor
+npm exec stackspend -- /doctor
 npm exec stackspend -- dashboard check
 ```
 
 Do not create `.env`, paste real API keys, or write Slack webhook URLs into local project files. Fixture mode and `mock` sync are the intended no-credentials review paths.
+
+## Slash Home
+
+Running `stackspend` without subcommands prints a readable slash-command home guide. In a TTY it may enter a minimal line-based slash prompt; in CI or non-TTY package review it prints the guide and exits `0`.
+
+Supported slash aliases:
+
+```bash
+stackspend /help
+stackspend /version
+stackspend /doctor
+stackspend /init
+stackspend /dashboard
+stackspend /dashboard check
+stackspend /sync mock
+stackspend /sync aws
+stackspend /sync openai
+stackspend /sync supabase
+stackspend /sync cloudflare
+stackspend /report ko
+stackspend /quit
+```
+
+Slash aliases are thin wrappers around the existing CLI commands. Home/help does not call provider APIs, read secret values, create `.env`, or enable telemetry. ANSI color respects `NO_COLOR`, `FORCE_COLOR`, and `TERM=dumb`.
 
 ## Dashboard Check
 

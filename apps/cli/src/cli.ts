@@ -3,28 +3,25 @@ import { runDoctorCommand } from "./commands/doctor.js";
 import { runInitCommand } from "./commands/init.js";
 import { runReportCommand } from "./commands/report.js";
 import { runSyncCommand } from "./commands/sync.js";
+import { renderHelpScreen, renderHomeScreen } from "./home.js";
+import { runSlashPrompt } from "./interactive.js";
+import { resolveSlashCommand } from "./slash.js";
+import { createTheme, type Theme } from "./theme.js";
 import type { SlackReportTransport } from "../../../packages/report/src/index.js";
 
 export const CLI_VERSION = "0.1.0-alpha.0";
 
-const HELP = `StackSpend ${CLI_VERSION}
-
-Local-first cloud/SaaS usage, status, and expected billing dashboard.
-
-Usage:
-  stackspend --help
-  stackspend --version
-  stackspend init
-  stackspend doctor
-  stackspend dashboard check [--url <local-dashboard-url>]
-  stackspend sync --provider <mock|aws|openai|supabase|cloudflare>
-  stackspend report daily --lang ko [--send slack]
-`;
+const HELP = renderHelpScreen(CLI_VERSION);
 
 export interface CliRuntime {
   cwd?: string;
   env?: Record<string, string | undefined>;
   now?: () => Date;
+  stdin?: NodeJS.ReadableStream;
+  output?: NodeJS.WritableStream;
+  stdinIsTTY?: boolean;
+  stdoutIsTTY?: boolean;
+  interactive?: boolean;
   stdout?: (line: string) => void;
   stderr?: (line: string) => void;
   stdoutBuffer?: string[];
@@ -41,6 +38,10 @@ export interface CliExecutionContext {
   stderr(line: string): void;
   slackTransport?: SlackReportTransport;
   fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response>;
+  stdin?: NodeJS.ReadableStream;
+  output?: NodeJS.WritableStream;
+  interactive: boolean;
+  theme: Theme;
 }
 
 export interface CliResult {
@@ -52,10 +53,17 @@ export interface CliResult {
 export async function runCli(args: readonly string[], runtime: CliRuntime = {}): Promise<CliResult> {
   const stdout = runtime.stdoutBuffer ?? [];
   const stderr = runtime.stderrBuffer ?? [];
+  const env = runtime.env ?? process.env;
+  const stdinIsTTY = runtime.stdinIsTTY ?? Boolean(process.stdin.isTTY);
+  const stdoutIsTTY = runtime.stdoutIsTTY ?? Boolean(process.stdout.isTTY);
+  const theme = createTheme({
+    env,
+    stdoutIsTTY,
+  });
 
   const context: CliExecutionContext = {
     cwd: runtime.cwd ?? process.cwd(),
-    env: runtime.env ?? process.env,
+    env,
     now: runtime.now ?? (() => new Date()),
     stdout(line) {
       if (runtime.stdoutBuffer === undefined && runtime.stdout !== undefined) {
@@ -82,7 +90,16 @@ export async function runCli(args: readonly string[], runtime: CliRuntime = {}):
       runtime.stderr(line);
     },
     fetch: runtime.fetch ?? globalThis.fetch,
+    interactive: runtime.interactive ?? shouldEnterInteractivePrompt({
+      env,
+      stdinIsTTY,
+      stdoutIsTTY,
+    }),
+    theme,
   };
+
+  context.stdin = runtime.stdin ?? process.stdin;
+  context.output = runtime.output ?? process.stdout;
 
   if (runtime.slackTransport !== undefined) {
     context.slackTransport = runtime.slackTransport;
@@ -111,7 +128,24 @@ function stripLeadingArgumentSeparator(args: readonly string[]): readonly string
 async function dispatchCommand(args: readonly string[], context: CliExecutionContext): Promise<number> {
   const [command, ...rest] = args;
 
-  if (command === undefined || command === "--help" || command === "-h" || command === "help") {
+  if (command === undefined) {
+    context.stdout(renderHomeScreen({
+      version: CLI_VERSION,
+      theme: context.theme,
+    }));
+
+    if (context.interactive) {
+      return runSlashPrompt(context, (promptArgs) => dispatchCommand(promptArgs, context));
+    }
+
+    return 0;
+  }
+
+  if (command.startsWith("/")) {
+    return dispatchSlashCommand(args, context);
+  }
+
+  if (command === "--help" || command === "-h" || command === "help") {
     context.stdout(HELP);
     return 0;
   }
@@ -144,4 +178,43 @@ async function dispatchCommand(args: readonly string[], context: CliExecutionCon
   context.stderr(`Unknown command: ${command}`);
   context.stderr("Run `stackspend --help` for usage.");
   return 1;
+}
+
+async function dispatchSlashCommand(args: readonly string[], context: CliExecutionContext): Promise<number> {
+  const resolved = resolveSlashCommand(args);
+
+  if (resolved.kind === "dispatch") {
+    return dispatchCommand(resolved.args, context);
+  }
+
+  if (resolved.kind === "quit") {
+    context.stdout("Bye.");
+    return 0;
+  }
+
+  context.stderr(resolved.message);
+
+  if (resolved.usage !== undefined) {
+    context.stderr(resolved.usage);
+  }
+
+  return 1;
+}
+
+function shouldEnterInteractivePrompt(input: {
+  env: Record<string, string | undefined>;
+  stdinIsTTY: boolean;
+  stdoutIsTTY: boolean;
+}): boolean {
+  return input.stdinIsTTY && input.stdoutIsTTY && !isTruthyEnvValue(input.env.CI);
+}
+
+function isTruthyEnvValue(value: string | undefined): boolean {
+  if (value === undefined) {
+    return false;
+  }
+
+  const normalized = value.trim().toLowerCase();
+
+  return normalized.length > 0 && normalized !== "0" && normalized !== "false" && normalized !== "no";
 }

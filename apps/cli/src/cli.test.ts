@@ -5,7 +5,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import type { SlackReportTransportRequest } from "../../../packages/report/src/slack.js";
-import { runCli } from "./cli.js";
+import { CLI_VERSION, runCli } from "./cli.js";
 
 const FIXED_NOW = "2026-06-02T09:00:00.000Z";
 const AWS_FIXTURE_PATH = resolve(
@@ -26,10 +26,55 @@ const CLOUDFLARE_FIXTURE_PATH = resolve(
 );
 const CLI_PACKAGE_JSON_PATH = resolve(dirname(fileURLToPath(import.meta.url)), "../package.json");
 const TEST_SLACK_WEBHOOK_URL = "fake-stackspend-slack-webhook-secret";
+const ANSI_PATTERN = /\x1B\[[0-9;]*m/;
 const FORBIDDEN_PERSISTED_PROVIDER_DATA_PATTERN =
   /rawPayload|rawResponse|providerPayload|billingProfile|acct_|project_|invoice_|sk-|hooks\.slack|@|\b\d{12}\b|FAKE_CLOUDFLARE|fake-zone\.invalid|card_|payment_/i;
 
 describe("StackSpend CLI", () => {
+  it("prints a no-arg slash home guide in CI without local side effects", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "stackspend-cli-"));
+    const result = await runCli([], testContext(cwd, {
+      CI: "1",
+    }));
+    const stdout = result.stdout.join("\n");
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toEqual([]);
+    expect(stdout).toContain(`StackSpend ${CLI_VERSION}`);
+    expect(stdout).toContain("Slash commands");
+    expect(stdout).toContain("/doctor");
+    expect(stdout).toContain("/sync mock");
+    expect(stdout).toContain("stackspend sync --provider mock");
+    expect(stdout).toContain("Home/help does not call provider APIs");
+    expect(stdout).not.toMatch(ANSI_PATTERN);
+    expect(await fileExists(join(cwd, ".env"))).toBe(false);
+    expect(await fileExists(join(cwd, ".stackspend"))).toBe(false);
+  });
+
+  it("renders home guide color when enabled and disables it for NO_COLOR or TERM=dumb", async () => {
+    const coloredCwd = await mkdtemp(join(tmpdir(), "stackspend-cli-"));
+    const noColorCwd = await mkdtemp(join(tmpdir(), "stackspend-cli-"));
+    const dumbTermCwd = await mkdtemp(join(tmpdir(), "stackspend-cli-"));
+
+    const colored = await runCli([], testContext(coloredCwd, {
+      CI: "1",
+      FORCE_COLOR: "1",
+    }));
+    const noColor = await runCli([], testContext(noColorCwd, {
+      CI: "1",
+      FORCE_COLOR: "1",
+      NO_COLOR: "1",
+    }));
+    const dumbTerm = await runCli([], testContext(dumbTermCwd, {
+      CI: "1",
+      TERM: "dumb",
+    }));
+
+    expect(colored.stdout.join("\n")).toMatch(ANSI_PATTERN);
+    expect(noColor.stdout.join("\n")).not.toMatch(ANSI_PATTERN);
+    expect(dumbTerm.stdout.join("\n")).not.toMatch(ANSI_PATTERN);
+  });
+
   it("declares a public alpha npm package with a built JavaScript bin and scoped files", async () => {
     const packageJson = JSON.parse(await readFile(CLI_PACKAGE_JSON_PATH, "utf8")) as {
       private?: boolean;
@@ -69,6 +114,82 @@ describe("StackSpend CLI", () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout.join("\n")).toContain("StackSpend doctor");
+  });
+
+  it("routes slash aliases to existing commands without exposing secret values", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "stackspend-cli-"));
+
+    const version = await runCli(["/version"], testContext(cwd));
+    expect(version.exitCode).toBe(0);
+    expect(version.stdout.join("\n").trim()).toBe(CLI_VERSION);
+
+    const doctor = await runCli(["/doctor"], testContext(cwd, {
+      OPENAI_ADMIN_KEY: "sk-fake-openai-admin-key",
+    }));
+    const doctorOutput = doctor.stdout.join("\n");
+    expect(doctor.exitCode).toBe(0);
+    expect(doctorOutput).toContain("StackSpend doctor");
+    expect(doctorOutput).toContain("openai: configured");
+    expect(doctorOutput).not.toContain("sk-fake-openai-admin-key");
+
+    const init = await runCli(["/init"], testContext(cwd));
+    expect(init.exitCode).toBe(0);
+    expect(init.stdout.join("\n")).toContain("Initialized StackSpend local storage");
+    expect(await fileExists(join(cwd, ".env"))).toBe(false);
+
+    const sync = await runCli(["/sync", "mock"], testContext(cwd));
+    expect(sync.exitCode).toBe(0);
+    expect(sync.stdout.join("\n")).toContain("Synced mock provider snapshots");
+
+    const report = await runCli(["/report", "ko"], testContext(cwd));
+    expect(report.exitCode).toBe(0);
+    expect(report.stdout.join("\n")).toContain("StackSpend 일일 리포트");
+
+    const dashboard = await runCli(["/dashboard"], {
+      ...testContext(cwd),
+      fetch: async () =>
+        Response.json({
+          generatedAt: FIXED_NOW,
+          source: "sqlite",
+          database: {
+            available: true,
+            reason: "ok",
+          },
+          summary: {
+            providerCount: 1,
+          },
+        }),
+    });
+    expect(dashboard.exitCode).toBe(0);
+    expect(dashboard.stdout.join("\n")).toContain("StackSpend dashboard check");
+
+    const dashboardCheck = await runCli(["/dashboard", "check"], {
+      ...testContext(cwd),
+      fetch: async () =>
+        Response.json({
+          generatedAt: FIXED_NOW,
+          source: "sqlite",
+          database: {
+            available: true,
+            reason: "ok",
+          },
+          summary: {
+            providerCount: 1,
+          },
+        }),
+    });
+    expect(dashboardCheck.exitCode).toBe(0);
+    expect(dashboardCheck.stdout.join("\n")).toContain("StackSpend dashboard check");
+  });
+
+  it("rejects unknown slash commands with slash usage guidance", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "stackspend-cli-"));
+    const result = await runCli(["/unknown"], testContext(cwd));
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout).toEqual([]);
+    expect(result.stderr.join("\n")).toContain("Unknown slash command: /unknown");
+    expect(result.stderr.join("\n")).toContain("stackspend /help");
   });
 
   it("initializes local storage without creating .env or credentials", async () => {

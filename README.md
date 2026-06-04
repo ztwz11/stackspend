@@ -22,6 +22,8 @@ StackSpend is preparing `v0.1.0-alpha.0` for local review. The supported alpha p
 
 ```bash
 pnpm install
+pnpm --filter @stackspend/cli dev
+pnpm --filter @stackspend/cli dev -- /doctor
 pnpm --filter @stackspend/cli dev -- doctor
 pnpm --filter @stackspend/cli dev -- init
 pnpm --filter @stackspend/cli dev -- sync --provider mock
@@ -53,8 +55,11 @@ Once an alpha is published:
 
 ```bash
 npm install -g @stackspend/cli@alpha
+stackspend
 stackspend --version
+stackspend /version
 stackspend doctor
+stackspend /doctor
 npx --package @stackspend/cli@alpha stackspend --version
 ```
 
@@ -69,8 +74,11 @@ mkdir -p /tmp/stackspend-alpha-review
 cd /tmp/stackspend-alpha-review
 npm init -y
 npm install "$TARBALL_PATH"
+npm exec stackspend
 npm exec stackspend -- --version
+npm exec stackspend -- /version
 npm exec stackspend -- doctor
+npm exec stackspend -- /doctor
 ```
 
 Alpha CLI requirements:
@@ -82,7 +90,10 @@ Alpha CLI requirements:
 
 ## CLI Commands
 
+Running `stackspend` without subcommands prints a slash-command home guide. In a local TTY it may continue into a minimal line-based slash prompt; in CI or non-TTY package review it prints the guide and exits `0`.
+
 ```bash
+pnpm --filter @stackspend/cli dev
 pnpm --filter @stackspend/cli dev -- --help
 pnpm --filter @stackspend/cli dev -- --version
 pnpm --filter @stackspend/cli dev -- doctor
@@ -91,6 +102,21 @@ pnpm --filter @stackspend/cli dev -- sync --provider mock
 pnpm --filter @stackspend/cli dev -- dashboard check
 pnpm --filter @stackspend/cli dev -- report daily --lang ko
 ```
+
+Slash aliases are thin wrappers around the same commands:
+
+```bash
+pnpm --filter @stackspend/cli dev -- /help
+pnpm --filter @stackspend/cli dev -- /version
+pnpm --filter @stackspend/cli dev -- /doctor
+pnpm --filter @stackspend/cli dev -- /init
+pnpm --filter @stackspend/cli dev -- /dashboard
+pnpm --filter @stackspend/cli dev -- /dashboard check
+pnpm --filter @stackspend/cli dev -- /sync mock
+pnpm --filter @stackspend/cli dev -- /report ko
+```
+
+Home/help never creates `.env`, prints secret values, calls provider APIs, or enables telemetry.
 
 ## Provider Fixture Mode
 
