@@ -12,6 +12,7 @@ export {
   type MigrationRunResult,
 } from "./migrate.js";
 export { INITIAL_SCHEMA_SQL, REQUIRED_TABLES, type RequiredTable } from "./schema.js";
+export { resolveSqliteBin, SQLITE_BIN_ENV_KEY } from "./sqlite-bin.js";
 export {
   initializeLocalStore,
   readLocalStore,

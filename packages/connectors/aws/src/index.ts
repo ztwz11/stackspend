@@ -18,6 +18,10 @@ export {
   type AwsGetCostAndUsageInput,
 } from "./cost-explorer.js";
 export {
+  createAwsSdkCostExplorerClient,
+  type CreateAwsSdkCostExplorerClientOptions,
+} from "./sdk-client.js";
+export {
   decimalAmountToMinorUnits,
   normalizeCostExplorerResponse,
   type AwsBillingSnapshot,

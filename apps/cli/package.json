@@ -34,8 +34,8 @@
   },
   "scripts": {
     "dev": "node --import tsx src/index.ts",
-    "build": "rm -rf dist && tsc -p tsconfig.build.json && chmod +x dist/apps/cli/src/index.js",
-    "prepack": "pnpm run build",
+    "build": "node ../../tools/scripts/build-cli.mjs",
+    "prepack": "node ../../tools/scripts/build-cli.mjs",
     "pack:dry-run": "npm pack --dry-run",
     "test": "vitest run --passWithNoTests",
     "typecheck": "tsc -p tsconfig.json --noEmit",

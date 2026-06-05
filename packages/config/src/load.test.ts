@@ -24,6 +24,7 @@ describe("loadStackSpendConfig", () => {
       OPENAI_ADMIN_KEY: "sk-fake-openai-admin-key",
       SUPABASE_ACCESS_TOKEN: "sbp_fake_supabase_token",
       CLOUDFLARE_API_TOKEN: "fake-cloudflare-token",
+      CLOUDFLARE_ACCOUNT_IDS: "fake-cloudflare-account-alpha",
       SLACK_WEBHOOK_URL: FAKE_SLACK_WEBHOOK_URL,
     });
 

@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { resolveSqliteBin } from "../../../packages/db/src/sqlite-bin.js";
 import type { SlackReportTransportRequest } from "../../../packages/report/src/slack.js";
 import { CLI_VERSION, runCli } from "./cli.js";
 
@@ -26,6 +27,7 @@ const CLOUDFLARE_FIXTURE_PATH = resolve(
 );
 const CLI_PACKAGE_JSON_PATH = resolve(dirname(fileURLToPath(import.meta.url)), "../package.json");
 const TEST_SLACK_WEBHOOK_URL = "fake-stackspend-slack-webhook-secret";
+const SQLITE_BIN = resolveSqliteBin();
 const ANSI_PATTERN = /\x1B\[[0-9;]*m/;
 const FORBIDDEN_PERSISTED_PROVIDER_DATA_PATTERN =
   /rawPayload|rawResponse|providerPayload|billingProfile|acct_|project_|invoice_|sk-|hooks\.slack|@|\b\d{12}\b|FAKE_CLOUDFLARE|fake-zone\.invalid|card_|payment_/i;
@@ -95,8 +97,8 @@ describe("StackSpend CLI", () => {
     expect(packageJson.publishConfig?.access).toBe("public");
     expect(packageJson.bin?.stackspend).toBe("dist/apps/cli/src/index.js");
     expect(packageJson.bin?.stackspend).not.toBe("src/index.ts");
-    expect(packageJson.scripts?.build).toContain("tsconfig.build.json");
-    expect(packageJson.scripts?.build).toContain("chmod +x dist/apps/cli/src/index.js");
+    expect(packageJson.scripts?.build).toBe("node ../../tools/scripts/build-cli.mjs");
+    expect(packageJson.scripts?.prepack).toBe("node ../../tools/scripts/build-cli.mjs");
     expect(files).toEqual(
       expect.arrayContaining([
         "dist/apps/cli/src/**/*.js",
@@ -492,9 +494,96 @@ describe("StackSpend CLI", () => {
 
     expect(result.exitCode).toBe(1);
     expect(result.stderr.join("\n")).toContain("CLOUDFLARE_API_TOKEN");
+    expect(result.stderr.join("\n")).toContain("CLOUDFLARE_ACCOUNT_IDS");
     expect(result.stderr.join("\n")).toContain("STACKSPEND_CLOUDFLARE_FIXTURE");
     expect(await fileExists(join(cwd, ".env"))).toBe(false);
     expect(await fileExists(join(cwd, ".stackspend", "stackspend.sqlite"))).toBe(false);
+  });
+
+  it("syncs live read-only client paths without fixture env or persisted credentials", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "stackspend-cli-"));
+    const awsFixture = JSON.parse(await readFile(AWS_FIXTURE_PATH, "utf8"));
+    const openAiFixture = JSON.parse(await readFile(OPENAI_FIXTURE_PATH, "utf8"));
+    const supabaseFixture = JSON.parse(await readFile(SUPABASE_FIXTURE_PATH, "utf8"));
+    const cloudflareFixture = JSON.parse(await readFile(CLOUDFLARE_FIXTURE_PATH, "utf8"));
+    const awsCommands: string[] = [];
+
+    const aws = await runCli(["sync", "--provider", "aws"], {
+      ...testContext(cwd, {
+        AWS_PROFILE: "fake-stackspend-live-profile",
+      }),
+      liveClients: {
+        awsCostExplorer: {
+          async send(command) {
+            awsCommands.push(command.name);
+            return awsFixture;
+          },
+        },
+      },
+    });
+    const openai = await runCli(["sync", "--provider", "openai"], {
+      ...testContext(cwd, {
+        OPENAI_ADMIN_KEY: "sk-fake-openai-admin-key",
+      }),
+      liveClients: {
+        openaiUsageCosts: {
+          async fetchUsageCosts() {
+            return openAiFixture;
+          },
+        },
+      },
+    });
+    const supabase = await runCli(["sync", "--provider", "supabase"], {
+      ...testContext(cwd, {
+        SUPABASE_ACCESS_TOKEN: "sbp_fake_supabase_token",
+      }),
+      liveClients: {
+        supabaseUsageHealth: {
+          async fetchUsageHealth() {
+            return supabaseFixture;
+          },
+        },
+      },
+    });
+    const cloudflare = await runCli(["sync", "--provider", "cloudflare"], {
+      ...testContext(cwd, {
+        CLOUDFLARE_API_TOKEN: "fake-cloudflare-token",
+        CLOUDFLARE_ACCOUNT_IDS: "fake-cloudflare-account-alpha",
+      }),
+      liveClients: {
+        cloudflareBillingUsage: {
+          async fetchBillingUsage() {
+            return cloudflareFixture;
+          },
+        },
+      },
+    });
+
+    expect(aws.exitCode).toBe(0);
+    expect(openai.exitCode).toBe(0);
+    expect(supabase.exitCode).toBe(0);
+    expect(cloudflare.exitCode).toBe(0);
+    expect(awsCommands).toEqual(["GetCostAndUsage"]);
+
+    const dbPath = join(cwd, ".stackspend", "stackspend.sqlite");
+    const providers = querySqlite<{ provider_key: string }>(
+      dbPath,
+      "SELECT provider_key FROM providers ORDER BY provider_key;",
+    );
+    const persistedProviderDataText = dumpPersistedProviderDataText(dbPath);
+
+    expect(providers.map((provider) => provider.provider_key)).toEqual([
+      "aws",
+      "cloudflare",
+      "openai",
+      "supabase",
+    ]);
+    expect(persistedProviderDataText).not.toContain("fake-stackspend-live-profile");
+    expect(persistedProviderDataText).not.toContain("sk-fake-openai-admin-key");
+    expect(persistedProviderDataText).not.toContain("sbp_fake_supabase_token");
+    expect(persistedProviderDataText).not.toContain("fake-cloudflare-token");
+    expect(persistedProviderDataText).not.toContain("fake-cloudflare-account-alpha");
+    expect(persistedProviderDataText).not.toMatch(FORBIDDEN_PERSISTED_PROVIDER_DATA_PATTERN);
   });
 
   it("syncs AWS Cost Explorer from fixture mode without credentials or raw AWS persistence", async () => {
@@ -921,7 +1010,7 @@ describe("StackSpend CLI", () => {
 type SqliteValueRow = Record<string, string | number | null>;
 
 function querySqlite<T>(dbPath: string, sql: string): T[] {
-  const output = execFileSync("/usr/bin/sqlite3", ["-json", dbPath, sql], {
+  const output = execFileSync(SQLITE_BIN, ["-json", dbPath, sql], {
     encoding: "utf8",
   }).trim();
 
@@ -974,7 +1063,7 @@ function dumpPersistedProviderDataText(dbPath: string): string {
 }
 
 function dumpSqlite(dbPath: string): string {
-  return execFileSync("/usr/bin/sqlite3", [dbPath, ".dump"], {
+  return execFileSync(SQLITE_BIN, [dbPath, ".dump"], {
     encoding: "utf8",
   });
 }

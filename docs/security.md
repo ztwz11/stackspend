@@ -17,6 +17,7 @@ StackSpend v0.1 reads secrets from environment variables:
 - `OPENAI_ADMIN_KEY`
 - `SUPABASE_ACCESS_TOKEN`
 - `CLOUDFLARE_API_TOKEN`
+- `CLOUDFLARE_ACCOUNT_IDS`
 - `SLACK_WEBHOOK_URL`
 
 Secrets must not be written to SQLite, logs, reports, dashboard API responses, or screenshots.
@@ -57,7 +58,7 @@ Docker support is for local self-host/dev review only. It is not a hosted SaaS d
 - `Dockerfile` builds the workspace without ARG or ENV secrets.
 - `.dockerignore` excludes `.env`, `.env.*`, local SQLite data, logs, dependencies, and build output from the Docker context.
 - `compose.yaml` sets only non-secret defaults and fake fixture paths.
-- real provider credentials, if used in a later approved review, must be exported in the operator shell for one run and must not be written into `compose.yaml`, `.env`, Docker build args, images, or committed docs.
+- real provider credentials or identifiers used for live review must be exported in the operator shell for one run and must not be written into `compose.yaml`, `.env`, Docker build args, images, or committed docs.
 - `NEXT_TELEMETRY_DISABLED=1` is set for Docker and Compose.
 
 ## Logs

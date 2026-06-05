@@ -4,7 +4,7 @@
 
 Collect Supabase project usage and project health/status signals where available through the Management API.
 
-M6 CLI sync is fixture-only. The connector exposes an injectable read-only Management API client path, but the CLI must not make live Supabase calls in this slice.
+The CLI supports fake fixture mode for local review and a read-only live Management API path when `SUPABASE_ACCESS_TOKEN` is configured in the invoking environment.
 
 ## Credentials
 
@@ -17,7 +17,7 @@ SUPABASE_ACCESS_TOKEN=sbp_fake_supabase_access_token_for_docs
 
 ## Fixture Mode
 
-CLI fixture mode uses fake local JSON payloads and does not require credentials.
+CLI fixture mode uses fake local JSON payloads and does not require credentials. When `STACKSPEND_SUPABASE_FIXTURE` is set, it takes precedence over live sync.
 
 ```text
 # FAKE EXAMPLE ONLY. Local test fixture path only.
@@ -56,4 +56,4 @@ Persist normalized StackSpend snapshots only. Do not persist `SUPABASE_ACCESS_TO
 - Some billing/usage surfaces may be limited or plan-dependent.
 - API responses can include project identifiers and metadata.
 - Usage may not map directly to final invoices.
-- Live Management API behavior remains disabled in the M6 CLI path until a later reviewed slice enables it.
+- Management API rate limits may affect live sync, especially project analytics endpoints.

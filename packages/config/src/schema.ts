@@ -4,7 +4,7 @@ export const PROVIDER_ENV_KEYS = {
   aws: ["AWS_PROFILE"],
   openai: ["OPENAI_ADMIN_KEY"],
   supabase: ["SUPABASE_ACCESS_TOKEN"],
-  cloudflare: ["CLOUDFLARE_API_TOKEN"],
+  cloudflare: ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_IDS"],
 } as const;
 
 export type ConfiguredProvider = keyof typeof PROVIDER_ENV_KEYS;

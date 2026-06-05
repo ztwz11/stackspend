@@ -9,10 +9,16 @@ import {
   saveLocalProviderCollection,
 } from "./local-store.js";
 import { REQUIRED_TABLES } from "./schema.js";
+import { resolveSqliteBin, SQLITE_BIN_ENV_KEY } from "./sqlite-bin.js";
 
 const FIXED_NOW = "2026-06-02T09:00:00.000Z";
+const SQLITE_BIN = resolveSqliteBin();
 
 describe("local SQLite store", () => {
+  it("resolves a configurable SQLite CLI path for Windows installs", () => {
+    expect(resolveSqliteBin({ [SQLITE_BIN_ENV_KEY]: "  C:\\tools\\sqlite3.exe  " })).toBe("C:\\tools\\sqlite3.exe");
+  });
+
   it("initializes a SQL-migration-backed local store without creating .env", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "stackspend-db-"));
     const dbPath = join(rootDir, ".stackspend", "stackspend.sqlite");
@@ -118,7 +124,7 @@ describe("local SQLite store", () => {
 });
 
 function querySqlite<T>(dbPath: string, sql: string): T[] {
-  const output = execFileSync("/usr/bin/sqlite3", ["-json", dbPath, sql], {
+  const output = execFileSync(SQLITE_BIN, ["-json", dbPath, sql], {
     encoding: "utf8",
   }).trim();
 
@@ -130,7 +136,7 @@ function querySqlite<T>(dbPath: string, sql: string): T[] {
 }
 
 function dumpSqlite(dbPath: string): string {
-  return execFileSync("/usr/bin/sqlite3", [dbPath, ".dump"], {
+  return execFileSync(SQLITE_BIN, [dbPath, ".dump"], {
     encoding: "utf8",
   });
 }

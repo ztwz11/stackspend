@@ -5,11 +5,11 @@
   "type": "module",
   "packageManager": "pnpm@11.5.0",
   "scripts": {
-    "dev": "pnpm --filter @stackspend/web dev",
-    "build": "pnpm -r build",
-    "test": "mkdir -p .stackspend/tmp && TMPDIR=$PWD/.stackspend/tmp pnpm -r test",
-    "typecheck": "pnpm -r typecheck",
-    "lint": "pnpm -r lint"
+    "dev": "node tools/scripts/run-pnpm.mjs --filter @stackspend/web dev",
+    "build": "node tools/scripts/run-pnpm.mjs --workspace-script build",
+    "test": "node tools/scripts/run-pnpm.mjs --workspace-script test",
+    "typecheck": "node tools/scripts/run-pnpm.mjs --workspace-script typecheck",
+    "lint": "node tools/scripts/run-pnpm.mjs --workspace-script lint"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",

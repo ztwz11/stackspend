@@ -4,11 +4,11 @@
 
 Collect normalized OpenAI usage and cost snapshots for the local StackSpend dashboard.
 
-M5 CLI sync is fixture-only. The connector exposes an injectable read-only client path, but the CLI must not make live OpenAI calls in this slice.
+The CLI supports fake fixture mode for local review and a read-only live Usage/Costs path when `OPENAI_ADMIN_KEY` is configured in the invoking environment.
 
 ## Verification
 
-- `verified_at`: 2026-06-02
+- `verified_at`: 2026-06-05
 - Official API reference checked:
   - `https://platform.openai.com/docs/api-reference/usage`
   - `https://platform.openai.com/docs/api-reference/administration`
@@ -38,7 +38,7 @@ Do not store the key in StackSpend. v0.1 uses env-only secrets.
 
 ## Fixture Mode
 
-CLI fixture mode uses fake local JSON payloads and does not require credentials.
+CLI fixture mode uses fake local JSON payloads and does not require credentials. When fixture env vars are set, they take precedence over live sync.
 
 ```text
 # FAKE EXAMPLE ONLY. Local test fixture paths only.
@@ -60,7 +60,7 @@ Do not persist raw OpenAI payloads, API keys, account IDs, project IDs, user IDs
 
 ## Known Limitations
 
-- M5 CLI sync is fixture-only; live sync remains disabled until a later reviewed slice.
+- Live Usage/Costs access depends on organization/admin key permissions and current OpenAI API availability.
 - Usage and costs may not reconcile exactly because they are separate provider surfaces.
 - Costs are treated as estimated snapshots in v0.1.
 - Additional OpenAI usage surfaces beyond completions are out of scope for this minimal M5 slice.

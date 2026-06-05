@@ -4,7 +4,7 @@
 
 Experimental connector for Cloudflare usage and billing-related data where available.
 
-Verified against Cloudflare public docs on 2026-06-02:
+Verified against Cloudflare public docs on 2026-06-05:
 
 - Cloudflare API reference: billing usage includes `GET /accounts/{account_id}/paygo-usage` and restricted alpha `GET /accounts/{account_id}/billable/usage`.
 - Cloudflare billing permissions: billing API endpoints require Account > Billing > Read, or Billing Edit for write operations. StackSpend only needs read.
@@ -14,11 +14,12 @@ Verified against Cloudflare public docs on 2026-06-02:
 
 ```text
 CLOUDFLARE_API_TOKEN=FAKE_CLOUDFLARE_API_TOKEN_DO_NOT_USE
+CLOUDFLARE_ACCOUNT_IDS=fake-cloudflare-account-alpha
 ```
 
-Do not store the token in StackSpend.
+Do not store the token or real account IDs in StackSpend.
 
-The M7 CLI implementation is fixture-only for local review. It fails gracefully if neither `CLOUDFLARE_API_TOKEN` nor fixture mode is configured, and it does not make live Cloudflare API calls.
+The CLI supports fake fixture mode for local review and a read-only live Cloudflare billing/usage path when `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_IDS` are configured in the invoking environment.
 
 Fixture mode:
 
@@ -44,9 +45,10 @@ Fake shell example:
 
 ```bash
 export CLOUDFLARE_API_TOKEN=FAKE_CLOUDFLARE_API_TOKEN_DO_NOT_USE
+export CLOUDFLARE_ACCOUNT_IDS=fake-cloudflare-account-alpha
 ```
 
-Do not add this token to `.env`; StackSpend v0.1 uses env-only secrets and does not create `.env` files.
+Do not add this token or real account IDs to `.env`; StackSpend v0.1 uses env-only secrets and does not create `.env` files.
 
 ## Experimental Status
 
@@ -54,8 +56,8 @@ Cloudflare billing/usage APIs may be alpha, restricted, or account-dependent. Th
 
 StackSpend treats Cloudflare as experimental and default-off:
 
-- live Cloudflare sync is not enabled in the M7 CLI path
-- fixture mode is enabled with `STACKSPEND_CLOUDFLARE_FIXTURE`
+- live Cloudflare sync requires both `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_IDS`
+- fixture mode is enabled with `STACKSPEND_CLOUDFLARE_FIXTURE` and takes precedence over live sync
 - restricted billing usage APIs produce warning alerts and degraded health snapshots
 - available billable usage records are normalized into local SQLite snapshots
 

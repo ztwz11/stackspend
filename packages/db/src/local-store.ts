@@ -3,8 +3,8 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
 import { runMigrations, type MigrationRunResult } from "./migrate.js";
+import { resolveSqliteBin } from "./sqlite-bin.js";
 
-const SQLITE_BIN = "/usr/bin/sqlite3";
 const EMPTY_METADATA_JSON = "{}";
 
 export interface LocalProviderRecord {
@@ -668,7 +668,7 @@ function executeSqliteTransaction(dbPath: string, statements: readonly string[])
 }
 
 function executeSqlite(dbPath: string, sql: string): void {
-  execFileSync(SQLITE_BIN, [dbPath], {
+  execFileSync(resolveSqliteBin(), [dbPath], {
     input: `PRAGMA foreign_keys = ON;\n${sql.trim()}\n`,
     encoding: "utf8",
     maxBuffer: 1024 * 1024,
@@ -676,7 +676,7 @@ function executeSqlite(dbPath: string, sql: string): void {
 }
 
 function querySqliteRows<T>(dbPath: string, sql: string): T[] {
-  const output = execFileSync(SQLITE_BIN, ["-json", dbPath, sql], {
+  const output = execFileSync(resolveSqliteBin(), ["-json", dbPath, sql], {
     encoding: "utf8",
     maxBuffer: 1024 * 1024,
   }).trim();

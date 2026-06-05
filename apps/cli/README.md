@@ -7,7 +7,8 @@ StackSpend is local-first. The CLI reads configuration and secrets from the proc
 ## Requirements
 
 - Node.js 20.11 or newer.
-- `sqlite3` CLI available at `/usr/bin/sqlite3` for the current alpha runtime path.
+- `sqlite3` CLI on `PATH`; Linux/Docker defaults to `/usr/bin/sqlite3`, and Windows can use `sqlite3.exe`.
+- `STACKSPEND_SQLITE_BIN` can point to a local SQLite CLI path when it is not on `PATH`.
 - No live provider credentials are required for `stackspend --version`, `stackspend doctor`, or `stackspend sync --provider mock`.
 
 ## Published Alpha Usage
@@ -62,7 +63,21 @@ npm exec stackspend -- /doctor
 npm exec stackspend -- dashboard check
 ```
 
+PowerShell equivalent for the temporary project:
+
+```powershell
+New-Item -ItemType Directory -Force -Path $env:TEMP\stackspend-alpha-review
+Set-Location $env:TEMP\stackspend-alpha-review
+npm init -y
+npm install C:\path\to\stackspend-cli-0.1.0-alpha.0.tgz
+npm exec stackspend
+npm exec stackspend -- --version
+npm exec stackspend -- /doctor
+```
+
 Do not create `.env`, paste real API keys, or write Slack webhook URLs into local project files. Fixture mode and `mock` sync are the intended no-credentials review paths.
+
+Live provider sync is read-only and env-only. Use fixture mode for no-credentials review; export live credentials only in the shell for one run.
 
 ## Slash Home
 

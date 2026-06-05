@@ -84,7 +84,8 @@ npm exec stackspend -- /doctor
 Alpha CLI requirements:
 
 - Node.js 20.11 or newer.
-- `sqlite3` CLI at `/usr/bin/sqlite3` for the current local SQLite runtime path.
+- `sqlite3` CLI on `PATH`; Linux/Docker defaults to `/usr/bin/sqlite3`, and Windows can use `sqlite3.exe`.
+- `STACKSPEND_SQLITE_BIN` can point to a local SQLite CLI path when it is not on `PATH`.
 - Environment variables only for secrets; do not create `.env` or commit live credentials.
 - `stackspend --version`, `stackspend doctor`, and `stackspend sync --provider mock` do not require live provider credentials.
 
@@ -137,7 +138,7 @@ STACKSPEND_CLOUDFLARE_FIXTURE=tests/fixtures/providers/cloudflare/billing-usage.
   pnpm --filter @stackspend/cli dev -- sync --provider cloudflare
 ```
 
-Live connector paths remain fixture-first in this alpha. Do not commit `.env` or write provider credentials into repository files.
+Live connector paths are read-only and env-only in this alpha. Fixture mode remains the recommended no-credentials review path. Do not commit `.env` or write provider credentials or provider identifiers into repository files.
 
 ## Local Dashboard
 

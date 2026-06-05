@@ -12,6 +12,8 @@ Use env-only configuration. Recommended v0.1 input:
 AWS_PROFILE=stackspend-readonly-fake
 ```
 
+The live CLI path uses the AWS SDK default credential chain and Cost Explorer region `us-east-1` by default. `STACKSPEND_AWS_REGION` can override the region when needed.
+
 For fixture-only local verification, use a fake Cost Explorer response file:
 
 ```text

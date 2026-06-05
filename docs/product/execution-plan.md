@@ -239,7 +239,7 @@ Files:
 
 Completion criteria:
 
-- env-only `CLOUDFLARE_API_TOKEN`.
+- env-only `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_IDS`.
 - experimental flag/default-off documented.
 - restricted API fallback emits warning alert.
 

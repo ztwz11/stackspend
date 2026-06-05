@@ -8,6 +8,10 @@ import { runSlashPrompt } from "./interactive.js";
 import { resolveSlashCommand } from "./slash.js";
 import { createTheme, type Theme } from "./theme.js";
 import type { SlackReportTransport } from "../../../packages/report/src/index.js";
+import type { AwsCostExplorerClientAdapter } from "../../../packages/connectors/aws/src/index.js";
+import type { CloudflareBillingUsageClient } from "../../../packages/connectors/cloudflare/src/index.js";
+import type { OpenAiUsageCostsClient } from "../../../packages/connectors/openai/src/index.js";
+import type { SupabaseManagementClient } from "../../../packages/connectors/supabase/src/index.js";
 
 export const CLI_VERSION = "0.1.0-alpha.0";
 
@@ -27,7 +31,15 @@ export interface CliRuntime {
   stdoutBuffer?: string[];
   stderrBuffer?: string[];
   slackTransport?: SlackReportTransport;
+  liveClients?: CliLiveClients;
   fetch?: typeof fetch;
+}
+
+export interface CliLiveClients {
+  awsCostExplorer?: AwsCostExplorerClientAdapter;
+  cloudflareBillingUsage?: CloudflareBillingUsageClient;
+  openaiUsageCosts?: OpenAiUsageCostsClient;
+  supabaseUsageHealth?: SupabaseManagementClient;
 }
 
 export interface CliExecutionContext {
@@ -37,6 +49,7 @@ export interface CliExecutionContext {
   stdout(line: string): void;
   stderr(line: string): void;
   slackTransport?: SlackReportTransport;
+  liveClients?: CliLiveClients;
   fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response>;
   stdin?: NodeJS.ReadableStream;
   output?: NodeJS.WritableStream;
@@ -103,6 +116,10 @@ export async function runCli(args: readonly string[], runtime: CliRuntime = {}):
 
   if (runtime.slackTransport !== undefined) {
     context.slackTransport = runtime.slackTransport;
+  }
+
+  if (runtime.liveClients !== undefined) {
+    context.liveClients = runtime.liveClients;
   }
 
   try {
