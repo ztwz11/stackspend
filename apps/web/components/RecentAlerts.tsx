@@ -1,4 +1,4 @@
-import type { DashboardAlertItem } from "../lib/dashboard-data.js";
+import type { DashboardAlertItem } from "../lib/dashboard-data";
 
 interface RecentAlertsProps {
   alerts: readonly DashboardAlertItem[];

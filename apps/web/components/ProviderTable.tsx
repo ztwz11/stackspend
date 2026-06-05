@@ -1,4 +1,4 @@
-import type { DashboardProviderRow } from "../lib/dashboard-data.js";
+import type { DashboardProviderRow } from "../lib/dashboard-data";
 
 interface ProviderTableProps {
   providers: readonly DashboardProviderRow[];

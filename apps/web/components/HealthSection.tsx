@@ -1,4 +1,4 @@
-import type { DashboardHealthItem } from "../lib/dashboard-data.js";
+import type { DashboardHealthItem } from "../lib/dashboard-data";
 
 interface HealthSectionProps {
   health: readonly DashboardHealthItem[];

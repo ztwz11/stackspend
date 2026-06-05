@@ -55,3 +55,51 @@ Decision: v0.1 includes a Korean daily report template.
 Reason: the primary operator wants readable Korean Slack reports.
 
 Status: accepted.
+
+## D008 - Separate canonical history from live today overlays
+
+Decision: dashboard canonical data is finalized through yesterday, while current-day provider data is fetched as provisional live data and excluded from canonical SQLite snapshot tables.
+
+Reason: users need current visibility without mixing incomplete current-day values into historical records.
+
+Status: accepted.
+
+## D009 - Route-based multilingual web UI
+
+Decision: the web app uses `ko`, `en`, and `ja` path locales with typed dictionaries and route-based dashboard navigation.
+
+Reason: locale-aware routes make bookmarks, refreshes, active navigation, and future docs easier to reason about.
+
+Status: accepted.
+
+## D010 - Sidebar service model
+
+Decision: provider summaries move from a dashboard Providers tab into `Services > All services`, with provider detail pages under `/[locale]/services/[provider]`.
+
+Reason: the dashboard should answer global spend questions, while service pages should support provider-specific operations.
+
+Status: accepted.
+
+## D011 - Provider catalog before broad connector expansion
+
+Decision: StackSpend shows a broad provider catalog, but only current implemented providers are connectable in this slice.
+
+Reason: connector implementation requires provider-specific auth, normalization, redaction, fixtures, tests, and docs; cataloging planned providers keeps the UI extensible without overstating support.
+
+Status: accepted.
+
+## D012 - Local credential store for convenient connections
+
+Decision: convenient connection flows use a local credential abstraction with OS keychain preferred and an encrypted passphrase vault fallback.
+
+Reason: users want OAuth-like convenience, but credentials must stay local and outside SQLite, logs, API responses, screenshots, and reports.
+
+Status: accepted.
+
+## D013 - Read-only and emergency access separation
+
+Decision: default provider connections are read-only, and future emergency actions require a separate access slot and separate locked spec before implementation.
+
+Reason: destructive provider operations such as key revocation, instance stops, and worker disablement require stronger auth, confirmation, audit, and recovery controls.
+
+Status: accepted.

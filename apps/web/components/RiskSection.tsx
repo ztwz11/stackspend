@@ -1,4 +1,4 @@
-import type { DashboardRiskItem, DashboardUsageSummary } from "../lib/dashboard-data.js";
+import type { DashboardRiskItem, DashboardUsageSummary } from "../lib/dashboard-data";
 
 interface RiskSectionProps {
   usage: DashboardUsageSummary;

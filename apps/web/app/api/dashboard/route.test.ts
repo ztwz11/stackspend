@@ -2,7 +2,7 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { GET } from "./route.js";
+import { GET } from "./route";
 
 const originalDbPath = process.env.STACKSPEND_DB_PATH;
 

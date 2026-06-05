@@ -305,3 +305,41 @@ Completion criteria:
 - installed tarball can run `stackspend --version` and `stackspend doctor` without live credentials.
 - security docs describe secrets, redaction, and local storage.
 - alpha checklist passes.
+
+## M11 - Live dashboard, i18n, service navigation, and provider catalog
+
+Goal: upgrade the local web dashboard into a route-based operational UI with live-today overlays, locale-aware strings, service detail pages, a provider catalog, and local read-only connection flows.
+
+Spec files:
+
+- `docs/product/web-ui-live-i18n-spec.md`
+- `docs/product/web-sidebar-service-detail-spec.md`
+- `docs/product/provider-catalog-spec.md`
+
+Implementation slices:
+
+1. i18n route shell, typed dictionaries, sidebar, and mobile drawer.
+2. dashboard overview, today live, forecast, and risks routes.
+3. canonical/live/freshness/forecast dashboard data contracts.
+4. provider catalog and connections UI.
+5. service summary and provider detail pages.
+6. local auth broker and credential store abstraction.
+7. verification, security review, and docs sync.
+
+Completion criteria:
+
+- web routes support `ko`, `en`, and `ja` path locales.
+- dashboard separates canonical data through yesterday from provisional today-live data.
+- provider live granularity and freshness are explicit.
+- sidebar exposes Dashboard, Services, and Settings groups.
+- service detail pages are read-only and never expose secrets or raw provider identifiers.
+- provider catalog shows available, planned, and research providers.
+- connection flows store credentials only through the approved local credential abstraction.
+- emergency actions are visible only as planned requirements and cannot execute provider writes.
+
+Review gate:
+
+```text
+SPEC_LOCKED: YES
+CODING_LOOP_ALLOWED: YES
+```

@@ -1,4 +1,4 @@
-import { readDashboardSnapshot } from "../../../lib/dashboard-data.js";
+import { readDashboardSnapshot } from "../../../lib/dashboard-data";
 
 export const dynamic = "force-dynamic";
 

@@ -2,12 +2,12 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { initializeLocalStore, saveLocalProviderCollection } from "../../../packages/db/src/index.js";
+import { initializeLocalStore, saveLocalProviderCollection } from "../../../packages/db/src/index";
 import {
   buildDashboardSnapshot,
   readDashboardSnapshot,
   type DashboardSnapshot,
-} from "./dashboard-data.js";
+} from "./dashboard-data";
 
 const FIXED_NOW = new Date("2026-06-02T09:00:00.000Z");
 const GENERATED_AT = FIXED_NOW.toISOString();

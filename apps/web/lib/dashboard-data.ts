@@ -5,7 +5,7 @@ import {
   type LocalAlertRecord,
   type LocalServiceHealthSnapshotRecord,
   type LocalStore,
-} from "../../../packages/db/src/index.js";
+} from "../../../packages/db/src/index";
 
 const DEFAULT_DASHBOARD_DB_PATH = ".stackspend/stackspend.sqlite";
 const DEFAULT_CURRENCY = "USD";
