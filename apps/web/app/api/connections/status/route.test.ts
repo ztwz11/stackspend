@@ -31,7 +31,7 @@ describe("GET /api/connections/status", () => {
     expect(payload.providers.find((provider: { providerKey: string }) => provider.providerKey === "openai"))
       .toMatchObject({
         connectionState: "env_configured",
-        readOnlyTestState: "read_only_ready",
+        readOnlyTestState: "env_configured",
       });
     expect(JSON.stringify(payload)).not.toContain("FAKE_OPENAI_ADMIN_KEY_FOR_TESTS");
     expect(payload).toMatchObject({

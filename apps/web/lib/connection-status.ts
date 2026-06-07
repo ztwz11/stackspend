@@ -80,7 +80,7 @@ export async function readConnectionsStatus(
         authMethod: catalog?.authMethods.join(" / ") ?? "Unknown",
         connectionState,
         credentialSource: credentialSourceFor(connectionState),
-        readOnlyTestState: summarizeReadOnlyTestState(connectionState),
+        readOnlyTestState: summarizeReadOnlyTestState(connectionState, readOnlyStatus),
         emergencyAccessState: "emergency_planned",
         requiredEnvKeys: providerConfig.requiredEnvKeys,
         configuredEnvKeys: redactedConfiguredEnvKeys(providerKey, env, providerConfig.configuredEnvKeys),
@@ -136,12 +136,11 @@ export function summarizeConnectionState(
   return "not_configured";
 }
 
-function summarizeReadOnlyTestState(connectionState: ConnectionState): ConnectionState {
-  if (
-    connectionState === "env_configured" ||
-    connectionState === "credential_store_configured" ||
-    connectionState === "oauth_connected"
-  ) {
+function summarizeReadOnlyTestState(
+  connectionState: ConnectionState,
+  credentialStatus: CredentialStatus,
+): ConnectionState {
+  if (credentialStatus.validatedAt !== undefined) {
     return "read_only_ready";
   }
 

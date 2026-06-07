@@ -12,6 +12,7 @@ const ORIGINAL_ENV = {
   vaultPath: process.env.STACKSPEND_CREDENTIAL_VAULT_PATH,
   openai: process.env.OPENAI_ADMIN_KEY,
 };
+const originalFetch = globalThis.fetch;
 
 beforeEach(async () => {
   clearLocalSecurityState();
@@ -20,9 +21,13 @@ beforeEach(async () => {
   process.env.STACKSPEND_CREDENTIAL_VAULT_PASSPHRASE = "fake local passphrase";
   process.env.STACKSPEND_CREDENTIAL_VAULT_PATH = join(dir, "credentials-vault.json");
   delete process.env.OPENAI_ADMIN_KEY;
+  globalThis.fetch = (async () => Response.json({
+    data: [],
+  })) as typeof fetch;
 });
 
 afterEach(() => {
+  globalThis.fetch = originalFetch;
   restoreEnv("STACKSPEND_CREDENTIAL_BACKEND", ORIGINAL_ENV.backend);
   restoreEnv("STACKSPEND_CREDENTIAL_VAULT_PASSPHRASE", ORIGINAL_ENV.passphrase);
   restoreEnv("STACKSPEND_CREDENTIAL_VAULT_PATH", ORIGINAL_ENV.vaultPath);
@@ -53,6 +58,7 @@ describe("provider credential routes", () => {
       providerKey: "openai",
       connectionState: "credential_store_configured",
       credentialSource: "credential_store",
+      readOnlyTestState: "read_only_ready",
     });
     expect(JSON.stringify(payload)).not.toContain("FAKE_OPENAI_ADMIN_KEY_FOR_TESTS");
 

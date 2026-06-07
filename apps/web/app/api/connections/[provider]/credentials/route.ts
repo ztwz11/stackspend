@@ -1,5 +1,6 @@
 import { deleteCredential, setCredential, type CredentialAuthMethod } from "../../../../../../../packages/credentials/src/index";
 import { readConnectionsStatus } from "../../../../../lib/connection-status";
+import { validateReadOnlyCredential } from "../../../../../lib/credential-validation";
 import { requireLocalSession } from "../../../../../lib/local-security";
 import { type ProviderKey, AVAILABLE_PROVIDER_KEYS } from "../../../../../lib/provider-catalog";
 
@@ -16,8 +17,18 @@ export async function POST(request: Request, context: RouteContext): Promise<Res
     requireLocalSession(request);
     const provider = await readProvider(context.params);
     const input = await readCredentialInput(request, provider);
+    const validation = await validateReadOnlyCredential(provider, {
+      secret: input.secret,
+      ...(input.metadata?.accountIds === undefined ? {} : { accountIds: input.metadata.accountIds }),
+    });
 
-    await setCredential(provider, "read-only", input);
+    await setCredential(provider, "read-only", {
+      ...input,
+      metadata: {
+        ...(input.metadata ?? {}),
+        validatedAt: validation.validatedAt,
+      },
+    });
 
     return providerStatusResponse(provider);
   } catch (error) {

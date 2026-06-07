@@ -44,6 +44,7 @@ export interface CredentialStatus {
   createdAt?: string;
   updatedAt?: string;
   expiresAt?: string;
+  validatedAt?: string;
   reason?: string;
 }
 
@@ -679,6 +680,9 @@ function statusForCredential(options: {
     createdAt: options.credential.createdAt,
     updatedAt: options.credential.updatedAt,
     ...(options.credential.expiresAt === undefined ? {} : { expiresAt: options.credential.expiresAt }),
+    ...(options.credential.metadata.validatedAt === undefined
+      ? {}
+      : { validatedAt: options.credential.metadata.validatedAt }),
   };
 }
 

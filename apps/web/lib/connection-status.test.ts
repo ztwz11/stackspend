@@ -31,12 +31,12 @@ describe("connection status", () => {
     expect(payload.providers.find((provider) => provider.providerKey === "aws")).toMatchObject({
       connectionState: "env_configured",
       credentialSource: "env",
-      readOnlyTestState: "read_only_ready",
+      readOnlyTestState: "env_configured",
     });
     expect(payload.providers.find((provider) => provider.providerKey === "openai")).toMatchObject({
       connectionState: "credential_store_configured",
       credentialSource: "credential_store",
-      readOnlyTestState: "read_only_ready",
+      readOnlyTestState: "credential_store_configured",
     });
     expect(JSON.stringify(payload)).not.toContain("FAKE_OPENAI_ADMIN_KEY_FOR_TESTS");
     expect(JSON.stringify(payload)).not.toContain("fake-profile");
