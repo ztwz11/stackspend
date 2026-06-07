@@ -33,6 +33,9 @@
       "@stackspend/security": [
         "packages/security/src/index.ts"
       ],
+      "@stackspend/credentials": [
+        "packages/credentials/src/index.ts"
+      ],
       "@stackspend/report": [
         "packages/report/src/index.ts"
       ],

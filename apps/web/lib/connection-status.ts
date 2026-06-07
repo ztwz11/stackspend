@@ -1,0 +1,222 @@
+import {
+  createDefaultCredentialStore,
+  type CredentialConnectionState,
+  type CredentialProvider,
+  type CredentialStatus,
+  type CredentialStore,
+} from "../../../packages/credentials/src/index";
+import { loadStackSpendConfig } from "../../../packages/config/src/index";
+import {
+  AVAILABLE_PROVIDER_KEYS,
+  findAvailableProvider,
+  type ProviderKey,
+} from "./provider-catalog";
+
+export type ConnectionState =
+  | "not_configured"
+  | "env_configured"
+  | "credential_store_configured"
+  | "oauth_connected"
+  | "locked"
+  | "expired"
+  | "invalid"
+  | "read_only_ready";
+export type EmergencyAccessState = "emergency_not_configured" | "emergency_planned";
+export type CredentialSource = "env" | "credential_store" | "oauth" | "locked" | "none";
+
+export interface ProviderConnectionStatus {
+  providerKey: ProviderKey;
+  displayName: string;
+  authMethod: string;
+  connectionState: ConnectionState;
+  credentialSource: CredentialSource;
+  readOnlyTestState: ConnectionState;
+  emergencyAccessState: EmergencyAccessState;
+  requiredEnvKeys: readonly string[];
+  configuredEnvKeys: readonly string[];
+  missingEnvKeys: readonly string[];
+  credentialRequirements: readonly string[];
+  credentialStore: {
+    backend: CredentialStatus["backend"];
+    storeState: CredentialStatus["storeState"];
+    readOnlyState: CredentialConnectionState;
+    emergencyState: CredentialConnectionState;
+  };
+}
+
+export interface ConnectionsStatusPayload {
+  generatedAt: string;
+  localOnly: true;
+  secretsReturned: false;
+  providerWriteActionsEnabled: false;
+  providers: readonly ProviderConnectionStatus[];
+}
+
+export interface ReadConnectionsStatusOptions {
+  env?: Record<string, string | undefined>;
+  now?: () => Date;
+  credentialStore?: CredentialStore;
+}
+
+export async function readConnectionsStatus(
+  options: ReadConnectionsStatusOptions = {},
+): Promise<ConnectionsStatusPayload> {
+  const env = options.env ?? process.env;
+  const now = options.now ?? (() => new Date());
+  const credentialStore = options.credentialStore ?? createDefaultCredentialStore({ env, now });
+  const config = loadStackSpendConfig(env);
+  const providers = await Promise.all(
+    AVAILABLE_PROVIDER_KEYS.map(async (providerKey) => {
+      const readOnlyStatus = await credentialStore.getCredentialStatus(providerKey, "read-only");
+      const emergencyStatus = await credentialStore.getCredentialStatus(providerKey, "emergency");
+      const providerConfig = config.providers[providerKey];
+      const envConfigured = isProviderEnvConfigured(providerKey, env, providerConfig.configured);
+      const connectionState = summarizeConnectionState(envConfigured, readOnlyStatus);
+      const catalog = findAvailableProvider(providerKey);
+
+      return {
+        providerKey,
+        displayName: catalog?.name ?? providerKey,
+        authMethod: catalog?.authMethods.join(" / ") ?? "Unknown",
+        connectionState,
+        credentialSource: credentialSourceFor(connectionState),
+        readOnlyTestState: summarizeReadOnlyTestState(connectionState),
+        emergencyAccessState: "emergency_planned",
+        requiredEnvKeys: providerConfig.requiredEnvKeys,
+        configuredEnvKeys: redactedConfiguredEnvKeys(providerKey, env, providerConfig.configuredEnvKeys),
+        missingEnvKeys: providerConfig.missingEnvKeys,
+        credentialRequirements: credentialRequirementsFor(providerKey),
+        credentialStore: {
+          backend: readOnlyStatus.backend,
+          storeState: readOnlyStatus.storeState,
+          readOnlyState: readOnlyStatus.state,
+          emergencyState: emergencyStatus.state,
+        },
+      } satisfies ProviderConnectionStatus;
+    }),
+  );
+
+  return {
+    generatedAt: now().toISOString(),
+    localOnly: true,
+    secretsReturned: false,
+    providerWriteActionsEnabled: false,
+    providers,
+  };
+}
+
+export function summarizeConnectionState(
+  envConfigured: boolean,
+  credentialStatus: CredentialStatus,
+): ConnectionState {
+  if (envConfigured) {
+    return "env_configured";
+  }
+
+  if (credentialStatus.state === "credential_store_configured") {
+    return "credential_store_configured";
+  }
+
+  if (credentialStatus.state === "oauth_connected") {
+    return "oauth_connected";
+  }
+
+  if (credentialStatus.state === "locked") {
+    return "locked";
+  }
+
+  if (credentialStatus.state === "expired") {
+    return "expired";
+  }
+
+  if (credentialStatus.state === "invalid") {
+    return "invalid";
+  }
+
+  return "not_configured";
+}
+
+function summarizeReadOnlyTestState(connectionState: ConnectionState): ConnectionState {
+  if (
+    connectionState === "env_configured" ||
+    connectionState === "credential_store_configured" ||
+    connectionState === "oauth_connected"
+  ) {
+    return "read_only_ready";
+  }
+
+  return connectionState;
+}
+
+function credentialSourceFor(connectionState: ConnectionState): CredentialSource {
+  if (connectionState === "env_configured") {
+    return "env";
+  }
+
+  if (connectionState === "credential_store_configured") {
+    return "credential_store";
+  }
+
+  if (connectionState === "oauth_connected") {
+    return "oauth";
+  }
+
+  if (connectionState === "locked") {
+    return "locked";
+  }
+
+  return "none";
+}
+
+function credentialRequirementsFor(providerKey: ProviderKey): readonly string[] {
+  if (providerKey === "aws") {
+    return ["AWS_PROFILE or SDK default credential chain outside StackSpend"];
+  }
+
+  if (providerKey === "openai") {
+    return ["OpenAI Admin API key"];
+  }
+
+  if (providerKey === "supabase") {
+    return ["Supabase OAuth2 connection or PAT"];
+  }
+
+  return ["Cloudflare API token", "Cloudflare account IDs"];
+}
+
+function isProviderEnvConfigured(
+  providerKey: ProviderKey,
+  env: Record<string, string | undefined>,
+  configConfigured: boolean,
+): boolean {
+  if (providerKey !== "aws") {
+    return configConfigured;
+  }
+
+  return isConfigured(env.AWS_PROFILE) ||
+    (isConfigured(env.AWS_ACCESS_KEY_ID) && isConfigured(env.AWS_SECRET_ACCESS_KEY)) ||
+    configConfigured;
+}
+
+function redactedConfiguredEnvKeys(
+  providerKey: ProviderKey,
+  env: Record<string, string | undefined>,
+  configuredEnvKeys: readonly string[],
+): readonly string[] {
+  if (providerKey !== "aws") {
+    return configuredEnvKeys;
+  }
+
+  const keys = new Set(configuredEnvKeys);
+
+  if (isConfigured(env.AWS_ACCESS_KEY_ID) && isConfigured(env.AWS_SECRET_ACCESS_KEY)) {
+    keys.add("AWS_ACCESS_KEY_ID");
+    keys.add("AWS_SECRET_ACCESS_KEY");
+  }
+
+  return [...keys].sort();
+}
+
+function isConfigured(value: string | undefined): boolean {
+  return value !== undefined && value.trim().length > 0;
+}

@@ -1,4 +1,11 @@
 import { loadStackSpendConfig } from "../../../packages/config/src/index";
+import {
+  readConnectionsStatus,
+  type ConnectionState,
+  type ConnectionsStatusPayload,
+  type EmergencyAccessState,
+  type ProviderConnectionStatus,
+} from "./connection-status";
 import type {
   DashboardAlertItem,
   DashboardHealthStatus,
@@ -14,19 +21,13 @@ import {
   type LiveGranularity,
   type ProviderKey,
 } from "./provider-catalog";
+import {
+  readLiveTodaySnapshot,
+  type LiveTodaySnapshot,
+} from "./live-today";
 
 export type CanonicalFreshness = "fresh" | "stale" | "missing";
 export type LiveFreshness = "live" | "stale" | "error" | "unavailable" | "not_configured" | "locked";
-export type ConnectionState =
-  | "not_configured"
-  | "env_configured"
-  | "credential_store_configured"
-  | "oauth_connected"
-  | "locked"
-  | "expired"
-  | "invalid"
-  | "read_only_ready";
-export type EmergencyAccessState = "emergency_not_configured" | "emergency_planned";
 
 export interface OperationsDashboard {
   generatedAt: string;
@@ -54,7 +55,11 @@ export interface OperationsProvider {
   providerKey: ProviderKey;
   displayName: string;
   connectionState: ConnectionState;
+  credentialSource: ProviderConnectionStatus["credentialSource"];
+  readOnlyTestState: ConnectionState;
   emergencyAccessState: EmergencyAccessState;
+  authMethod: string;
+  credentialRequirements: readonly string[];
   requiredEnvKeys: readonly string[];
   configuredEnvKeys: readonly string[];
   missingEnvKeys: readonly string[];
@@ -78,6 +83,8 @@ export interface OperationsProvider {
 
 export interface ReadOperationsDashboardOptions extends ReadDashboardSnapshotOptions {
   env?: Record<string, string | undefined>;
+  connections?: ConnectionsStatusPayload;
+  liveToday?: LiveTodaySnapshot;
 }
 
 export async function readOperationsDashboard(
@@ -87,9 +94,21 @@ export async function readOperationsDashboard(
   const env = options.env ?? process.env;
   const timezone = resolveDashboardTimezone(env);
   const now = options.now?.() ?? new Date();
+  const connections = options.connections ?? await readConnectionsStatus({
+    env,
+    now: () => now,
+  });
+  const liveToday = options.liveToday ?? await readLiveTodaySnapshot({
+    env,
+    connections,
+    now: () => now,
+    timezone,
+  });
 
   return buildOperationsDashboard(snapshot, {
+    connections,
     env,
+    liveToday,
     now,
     timezone,
   });
@@ -98,7 +117,9 @@ export async function readOperationsDashboard(
 export function buildOperationsDashboard(
   snapshot: DashboardSnapshot,
   options: {
+    connections?: ConnectionsStatusPayload;
     env: Record<string, string | undefined>;
+    liveToday?: LiveTodaySnapshot;
     now: Date;
     timezone: string;
   },
@@ -108,30 +129,36 @@ export function buildOperationsDashboard(
     const catalog = findAvailableProvider(providerKey);
     const row = snapshot.providers.find((provider) => provider.providerKey === providerKey);
     const providerConfig = config.providers[providerKey];
-    const connectionState = providerConfig.configured ? "env_configured" : "not_configured";
+    const connection = options.connections?.providers.find((item) => item.providerKey === providerKey);
+    const live = options.liveToday?.providers.find((item) => item.providerKey === providerKey);
+    const connectionState = connection?.connectionState ?? (providerConfig.configured ? "env_configured" : "not_configured");
     const canonicalFreshness = summarizeCanonicalFreshness(row, options.now, options.timezone);
-    const liveFreshness = summarizeLiveFreshness(providerConfig.configured, catalog?.liveGranularity ?? "unavailable");
+    const liveFreshness = live?.freshness ?? summarizeLiveFreshness(connectionState, catalog?.liveGranularity ?? "unavailable");
     const risks = snapshot.alerts.filter((alert) => alert.providerKey === providerKey);
 
     return {
       providerKey,
       displayName: row?.displayName ?? catalog?.name ?? providerKey,
       connectionState,
+      credentialSource: connection?.credentialSource ?? (connectionState === "env_configured" ? "env" : "none"),
+      readOnlyTestState: connection?.readOnlyTestState ?? connectionState,
       emergencyAccessState: "emergency_planned",
-      requiredEnvKeys: providerConfig.requiredEnvKeys,
-      configuredEnvKeys: providerConfig.configuredEnvKeys,
-      missingEnvKeys: providerConfig.missingEnvKeys,
+      authMethod: connection?.authMethod ?? catalog?.authMethods.join(" / ") ?? "Unknown",
+      credentialRequirements: connection?.credentialRequirements ?? [],
+      requiredEnvKeys: connection?.requiredEnvKeys ?? providerConfig.requiredEnvKeys,
+      configuredEnvKeys: connection?.configuredEnvKeys ?? providerConfig.configuredEnvKeys,
+      missingEnvKeys: connection?.missingEnvKeys ?? providerConfig.missingEnvKeys,
       canonicalFreshness,
       liveFreshness,
       liveGranularity: catalog?.liveGranularity ?? "unavailable",
-      liveConfidence: "none",
+      liveConfidence: live?.confidence ?? "none",
       latestCanonicalSync: row?.latestCollectedAt ?? null,
-      latestLiveCheck: null,
+      latestLiveCheck: live?.checkedAt ?? null,
       monthForecastAmountMinor: row?.estimatedAmountMinor ?? 0,
       confirmedAmountMinor: row?.billingAmountMinor ?? 0,
-      todayLiveAmountMinor: null,
-      todayLiveIncluded: false,
-      currency: row?.currency ?? snapshot.summary.currency,
+      todayLiveAmountMinor: live?.todayLiveAmountMinor ?? null,
+      todayLiveIncluded: live?.included ?? false,
+      currency: live?.currency ?? row?.currency ?? snapshot.summary.currency,
       usageSnapshotCount: row?.usageSnapshotCount ?? 0,
       healthStatus: row?.healthStatus ?? "unknown",
       riskLevel: row?.riskLevel ?? "warning",
@@ -143,6 +170,21 @@ export function buildOperationsDashboard(
     providers.map((provider) => provider.latestCanonicalSync).filter((value): value is string => value !== null),
     options.timezone,
   );
+  const includedLiveProviders = providers.filter((provider) =>
+    provider.todayLiveIncluded &&
+    provider.todayLiveAmountMinor !== null &&
+    provider.currency === snapshot.summary.currency
+  );
+  const todayLiveAmountMinor = sum(includedLiveProviders.map((provider) => provider.todayLiveAmountMinor ?? 0));
+  const remainingDays = remainingDaysInMonth(options.now, options.timezone);
+  const projectedRemainingDays = projectedRemainingAmountMinor(
+    snapshot.summary.totalBillingAmountMinor,
+    options.now,
+    options.timezone,
+    remainingDays,
+  );
+  const monthForecastAmountMinor =
+    snapshot.summary.totalBillingAmountMinor + todayLiveAmountMinor + projectedRemainingDays;
 
   return {
     generatedAt: snapshot.generatedAt,
@@ -151,14 +193,14 @@ export function buildOperationsDashboard(
     timezone: options.timezone,
     summary: {
       currency: snapshot.summary.currency,
-      monthForecastAmountMinor: snapshot.summary.totalEstimatedAmountMinor,
+      monthForecastAmountMinor,
       confirmedThroughYesterdayAmountMinor: snapshot.summary.totalBillingAmountMinor,
-      todayLiveAmountMinor: null,
-      todayLiveIncludedProviderCount: providers.filter((provider) => provider.todayLiveIncluded).length,
-      todayLiveExcludedProviderCount: providers.filter((provider) => !provider.todayLiveIncluded).length,
+      todayLiveAmountMinor: includedLiveProviders.length === 0 ? null : todayLiveAmountMinor,
+      todayLiveIncludedProviderCount: includedLiveProviders.length,
+      todayLiveExcludedProviderCount: providers.length - includedLiveProviders.length,
       providersNeedingAttention: providers.filter(providerNeedsAttention).length,
       canonicalCoverageDate,
-      remainingDaysInMonth: remainingDaysInMonth(options.now, options.timezone),
+      remainingDaysInMonth: remainingDays,
     },
     providers,
     risks: snapshot.alerts,
@@ -190,9 +232,17 @@ function summarizeCanonicalFreshness(
   return latest >= yesterday ? "fresh" : "stale";
 }
 
-function summarizeLiveFreshness(configured: boolean, liveGranularity: LiveGranularity): LiveFreshness {
-  if (!configured) {
+function summarizeLiveFreshness(connectionState: ConnectionState, liveGranularity: LiveGranularity): LiveFreshness {
+  if (connectionState === "locked") {
+    return "locked";
+  }
+
+  if (connectionState === "not_configured") {
     return "not_configured";
+  }
+
+  if (connectionState === "invalid" || connectionState === "expired") {
+    return "error";
   }
 
   if (liveGranularity === "unavailable") {
@@ -226,6 +276,25 @@ function remainingDaysInMonth(now: Date, timezone: string): number {
   const lastDay = new Date(Date.UTC(parts.year, parts.month, 0)).getUTCDate();
 
   return Math.max(lastDay - parts.day, 0);
+}
+
+function projectedRemainingAmountMinor(
+  confirmedThroughYesterdayAmountMinor: number,
+  now: Date,
+  timezone: string,
+  remainingDays: number,
+): number {
+  if (confirmedThroughYesterdayAmountMinor <= 0 || remainingDays <= 0) {
+    return 0;
+  }
+
+  const completedCanonicalDays = Math.max(datePartsInTimezone(now, timezone).day - 1, 1);
+
+  return Math.round((confirmedThroughYesterdayAmountMinor / completedCanonicalDays) * remainingDays);
+}
+
+function sum(values: readonly number[]): number {
+  return values.reduce((total, value) => total + value, 0);
 }
 
 function dateKeyInTimezone(date: Date, timezone: string): string {

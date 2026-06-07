@@ -96,6 +96,12 @@ export interface Messages {
     readOnlyTest: string;
     emergencyAccess: string;
     requiredEnv: string;
+    actions: string;
+    credentialSecret: string;
+    accountIds: string;
+    saveCredential: string;
+    removeCredential: string;
+    awsManaged: string;
     defaultLocale: string;
     dashboardTimezone: string;
     defaultStart: string;
@@ -217,6 +223,12 @@ export const messages = {
       readOnlyTest: "Read-only test",
       emergencyAccess: "Emergency access",
       requiredEnv: "Required env",
+      actions: "Actions",
+      credentialSecret: "Credential",
+      accountIds: "Account IDs",
+      saveCredential: "Save",
+      removeCredential: "Remove local",
+      awsManaged: "Use AWS profile or SSO outside StackSpend.",
       defaultLocale: "Default locale",
       dashboardTimezone: "Dashboard timezone",
       defaultStart: "Default start",
@@ -368,6 +380,12 @@ export const messages = {
       readOnlyTest: "읽기 전용 테스트",
       emergencyAccess: "긴급 권한",
       requiredEnv: "필수 env",
+      actions: "작업",
+      credentialSecret: "자격 증명",
+      accountIds: "계정 ID",
+      saveCredential: "저장",
+      removeCredential: "로컬 제거",
+      awsManaged: "AWS profile 또는 SSO를 StackSpend 밖에서 사용합니다.",
       defaultLocale: "기본 언어",
       dashboardTimezone: "대시보드 시간대",
       defaultStart: "기본 시작 화면",
@@ -519,6 +537,12 @@ export const messages = {
       readOnlyTest: "読み取り専用テスト",
       emergencyAccess: "緊急権限",
       requiredEnv: "必須 env",
+      actions: "操作",
+      credentialSecret: "認証情報",
+      accountIds: "アカウント ID",
+      saveCredential: "保存",
+      removeCredential: "ローカルから外す",
+      awsManaged: "AWS profile または SSO を StackSpend の外で使用します。",
       defaultLocale: "既定の言語",
       dashboardTimezone: "ダッシュボードタイムゾーン",
       defaultStart: "既定の開始画面",

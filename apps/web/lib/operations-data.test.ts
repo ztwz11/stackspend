@@ -55,7 +55,7 @@ describe("operations dashboard data", () => {
       timezone: "Asia/Seoul",
     });
 
-    expect(dashboard.summary.monthForecastAmountMinor).toBe(2000);
+    expect(dashboard.summary.monthForecastAmountMinor).toBe(7975);
     expect(dashboard.summary.confirmedThroughYesterdayAmountMinor).toBe(1100);
     expect(dashboard.summary.todayLiveAmountMinor).toBeNull();
     expect(dashboard.providers.find((provider) => provider.providerKey === "aws")).toMatchObject({
@@ -66,6 +66,48 @@ describe("operations dashboard data", () => {
       todayLiveIncluded: false,
     });
     expect(JSON.stringify(dashboard)).not.toContain("fake-profile");
+  });
+
+  it("includes only fresh safe live-today provider values in the overview total", () => {
+    const dashboard = buildOperationsDashboard(BASE_DASHBOARD, {
+      env: {
+        OPENAI_ADMIN_KEY: "FAKE_OPENAI_ADMIN_KEY_FOR_TESTS",
+      },
+      now: new Date("2026-06-05T03:00:00.000Z"),
+      timezone: "Asia/Seoul",
+      liveToday: {
+        generatedAt: "2026-06-05T03:00:00.000Z",
+        ttlSeconds: 60,
+        cacheState: "fresh",
+        providers: [
+          {
+            providerKey: "openai",
+            checkedAt: "2026-06-05T03:00:00.000Z",
+            expiresAt: "2026-06-05T03:01:00.000Z",
+            ttlSeconds: 60,
+            freshness: "live",
+            liveGranularity: "daily_bucket",
+            confidence: "medium",
+            provisional: true,
+            todayLiveAmountMinor: 321,
+            currency: "USD",
+            included: true,
+            status: "ok",
+          },
+        ],
+      },
+    });
+
+    expect(dashboard.summary.todayLiveAmountMinor).toBe(321);
+    expect(dashboard.summary.todayLiveIncludedProviderCount).toBe(1);
+    expect(dashboard.providers.find((provider) => provider.providerKey === "openai")).toMatchObject({
+      latestLiveCheck: "2026-06-05T03:00:00.000Z",
+      todayLiveAmountMinor: 321,
+      todayLiveIncluded: true,
+      liveFreshness: "live",
+      liveConfidence: "medium",
+    });
+    expect(JSON.stringify(dashboard)).not.toContain("FAKE_OPENAI_ADMIN_KEY_FOR_TESTS");
   });
 
   it("falls back when an invalid dashboard timezone is configured", () => {

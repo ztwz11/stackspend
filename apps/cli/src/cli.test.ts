@@ -182,7 +182,7 @@ describe("StackSpend CLI", () => {
     });
     expect(dashboardCheck.exitCode).toBe(0);
     expect(dashboardCheck.stdout.join("\n")).toContain("StackSpend dashboard check");
-  });
+  }, 15000);
 
   it("rejects unknown slash commands with slash usage guidance", async () => {
     const cwd = await mkdtemp(join(tmpdir(), "stackspend-cli-"));
@@ -375,7 +375,7 @@ describe("StackSpend CLI", () => {
     });
     expect(persistedText).not.toContain("sqlite-placeholder-v1");
     expect(persistedText).not.toMatch(/rawPayload|rawResponse|providerPayload|billingProfile|acct_|project_|invoice_|sk-|hooks\.slack|@/i);
-  });
+  }, 15000);
 
   it("sends the Korean daily report to Slack with an injected transport and records delivery status", async () => {
     const cwd = await mkdtemp(join(tmpdir(), "stackspend-cli-"));

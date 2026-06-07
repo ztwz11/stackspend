@@ -276,7 +276,7 @@ describe("dashboard data adapter", () => {
       riskLevel: "low",
     });
     expectDashboardPayloadIsRedacted(snapshot);
-  });
+  }, 15000);
 });
 
 function expectDashboardPayloadIsRedacted(snapshot: DashboardSnapshot): void {

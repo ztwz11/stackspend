@@ -11,7 +11,7 @@
 
 ## Secrets
 
-StackSpend v0.1 reads secrets from environment variables:
+StackSpend CLI sync remains env-first for v0.1:
 
 - `AWS_PROFILE`
 - `OPENAI_ADMIN_KEY`
@@ -20,7 +20,14 @@ StackSpend v0.1 reads secrets from environment variables:
 - `CLOUDFLARE_ACCOUNT_IDS`
 - `SLACK_WEBHOOK_URL`
 
-Secrets must not be written to SQLite, logs, reports, dashboard API responses, or screenshots.
+The local web dashboard also supports a convenience credential store for read-only connections:
+
+- preferred backend: OS keychain through `@napi-rs/keyring`.
+- fallback backend: passphrase-encrypted local vault.
+- vault passphrases are never stored by StackSpend and must stay in the server process memory only.
+- credentials are never written to SQLite, localStorage, sessionStorage, readable cookies, logs, reports, dashboard API responses, or screenshots.
+- local session cookies contain only an opaque session id; CSRF tokens and OAuth state/nonce/PKCE verifier are held server-side.
+
 `.env.example` must keep secret values blank and may only include fake local fixture paths. Do not create or commit `.env`.
 
 ## Data That Must Not Be Persisted Raw
@@ -50,6 +57,10 @@ SQLite may contain normalized usage, cost, health, alert, risk, and report run r
 - do not include SQLite files in screenshots, docs, fixtures, or release artifacts.
 - do not persist raw provider payloads alongside normalized rows.
 - do not store real provider account IDs, project IDs, invoice IDs, emails, billing profiles, card data, API keys, tokens, or webhook URLs.
+
+`live_today` dashboard data is stored only in a short-lived server memory cache by default. It is provisional, expires after the configured TTL, and must not be copied into canonical SQLite snapshot tables.
+
+The encrypted credential vault, when used, is separate from SQLite and is ignored by git through `.stackspend/`.
 
 ## Docker And Compose
 

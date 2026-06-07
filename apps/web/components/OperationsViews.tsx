@@ -1,6 +1,8 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import type { Messages, Locale } from "../lib/i18n";
+import { CredentialControls } from "./CredentialControls";
+import { LiveRefreshButton } from "./LiveRefreshButton";
 import type {
   OperationsDashboard,
   OperationsProvider,
@@ -98,9 +100,7 @@ export function TodayLiveView({ dashboard, locale, messages }: ViewProps) {
       <div className="panel">
         <div className="panel-header">
           <h2 className="panel-title">{messages.dashboard.todayTitle}</h2>
-          <button className="ghost-button" disabled type="button">
-            {messages.dashboard.refresh}
-          </button>
+          <LiveRefreshButton label={messages.dashboard.refresh} />
         </div>
         <div className="data-table-wrap">
           <table className="data-table">
@@ -254,13 +254,13 @@ export function ServiceDetail({
         <MetricCard
           label={messages.dashboard.monthForecast}
           value={formatMinorAmount(provider.monthForecastAmountMinor, provider.currency, locale)}
-          meta={`${messages.dashboard.todayLive}: ${messages.dashboard.noLiveValue}`}
+          meta={`${messages.dashboard.todayLive}: ${liveAmountLabel(provider, locale, messages)}`}
         />
       </section>
       <div className="two-column">
         <InfoPanel title={messages.services.cost}>
           <KeyValue label={messages.dashboard.confirmedThroughYesterday} value={formatMinorAmount(provider.confirmedAmountMinor, provider.currency, locale)} />
-          <KeyValue label={messages.dashboard.todayLive} value={messages.dashboard.noLiveValue} />
+          <KeyValue label={messages.dashboard.todayLive} value={liveAmountLabel(provider, locale, messages)} />
           <KeyValue label={messages.dashboard.monthForecast} value={formatMinorAmount(provider.monthForecastAmountMinor, provider.currency, locale)} />
         </InfoPanel>
         <InfoPanel title={messages.services.usage}>
@@ -284,7 +284,7 @@ export function ServiceDetail({
         <InfoPanel title={messages.services.securityPermissions}>
           <KeyValue label={messages.settings.requiredEnv} value={provider.requiredEnvKeys.join(", ")} />
           <KeyValue label={messages.settings.credentialSource} value={labelFor(messages, provider.connectionState)} />
-          <KeyValue label={messages.settings.readOnlyTest} value={labelFor(messages, provider.connectionState)} />
+          <KeyValue label={messages.settings.readOnlyTest} value={labelFor(messages, provider.readOnlyTestState)} />
         </InfoPanel>
         <InfoPanel title={messages.services.emergencyActions}>
           <p className="muted">{messages.services.emergencyPlanned}</p>
@@ -324,7 +324,7 @@ export function ProviderCatalogView({
           <KeyValue label={messages.catalog.auth} value={provider.authMethods.join(", ")} />
           <KeyValue label={messages.catalog.data} value={provider.dataSurfaces.join(", ")} />
           {provider.status === "available" && provider.availableProviderKey !== undefined ? (
-            <Link className="primary-button" href={`/${locale}/services/${provider.availableProviderKey}`}>
+            <Link className="primary-button" href={`/${locale}/settings/connections#${provider.availableProviderKey}`}>
               {messages.catalog.connect}
             </Link>
           ) : (
@@ -358,20 +358,33 @@ export function ConnectionsView({ dashboard, locale, messages }: ViewProps) {
                 <th>{messages.settings.readOnlyTest}</th>
                 <th>{messages.settings.emergencyAccess}</th>
                 <th>{messages.settings.requiredEnv}</th>
+                <th>{messages.settings.actions}</th>
               </tr>
             </thead>
             <tbody>
               {dashboard.providers.map((provider) => (
-                <tr key={provider.providerKey}>
+                <tr id={provider.providerKey} key={provider.providerKey}>
                   <td>
                     <strong>{provider.displayName}</strong>
                     <div className="muted">{provider.providerKey}</div>
                   </td>
-                  <td>{authMethodFor(provider.providerKey)}</td>
+                  <td>{provider.authMethod}</td>
                   <td><StatusBadge messages={messages} state={provider.connectionState} /></td>
-                  <td><StatusBadge messages={messages} state={provider.connectionState} /></td>
+                  <td><StatusBadge messages={messages} state={provider.readOnlyTestState} /></td>
                   <td><StatusBadge messages={messages} state={provider.emergencyAccessState} /></td>
                   <td>{provider.requiredEnvKeys.join(", ")}</td>
+                  <td>
+                    <CredentialControls
+                      providerKey={provider.providerKey}
+                      labels={{
+                        credentialSecret: messages.settings.credentialSecret,
+                        accountIds: messages.settings.accountIds,
+                        saveCredential: messages.settings.saveCredential,
+                        removeCredential: messages.settings.removeCredential,
+                        awsManaged: messages.settings.awsManaged,
+                      }}
+                    />
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -567,6 +580,12 @@ function formatMinorAmount(amountMinor: number, currency: string, locale: Locale
   }).format(amountMinor / 100);
 }
 
+function liveAmountLabel(provider: OperationsProvider, locale: Locale, messages: Messages): string {
+  return provider.todayLiveAmountMinor === null
+    ? messages.dashboard.noLiveValue
+    : formatMinorAmount(provider.todayLiveAmountMinor, provider.currency, locale);
+}
+
 function formatOptionalDate(value: string | null, locale: Locale, timezone: string, messages: Messages): string {
   if (value === null) {
     return labelFor(messages, "missing");
@@ -577,20 +596,4 @@ function formatOptionalDate(value: string | null, locale: Locale, timezone: stri
     timeStyle: "short",
     timeZone: timezone,
   }).format(new Date(value));
-}
-
-function authMethodFor(providerKey: string): string {
-  if (providerKey === "aws") {
-    return "AWS profile / SSO";
-  }
-
-  if (providerKey === "openai") {
-    return "Admin API key";
-  }
-
-  if (providerKey === "supabase") {
-    return "OAuth2 / PAT";
-  }
-
-  return "API token";
 }

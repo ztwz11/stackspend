@@ -22,7 +22,7 @@ Decision: v0.1 reads provider credentials from environment variables only.
 
 Reason: simpler, safer MVP with no secret persistence layer.
 
-Status: accepted.
+Status: superseded for local web convenience by D012. CLI sync remains env-first.
 
 ## D004 — Read-only provider connectors
 

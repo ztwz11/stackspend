@@ -1,0 +1,148 @@
+import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { clearLocalSecurityState } from "../../../../../lib/local-security";
+import { POST as createSession } from "../../../auth/session/route";
+import { DELETE, POST } from "./route";
+
+const ORIGINAL_ENV = {
+  backend: process.env.STACKSPEND_CREDENTIAL_BACKEND,
+  passphrase: process.env.STACKSPEND_CREDENTIAL_VAULT_PASSPHRASE,
+  vaultPath: process.env.STACKSPEND_CREDENTIAL_VAULT_PATH,
+  openai: process.env.OPENAI_ADMIN_KEY,
+};
+
+beforeEach(async () => {
+  clearLocalSecurityState();
+  const dir = await mkdtemp(join(tmpdir(), "stackspend-credential-route-"));
+  process.env.STACKSPEND_CREDENTIAL_BACKEND = "vault";
+  process.env.STACKSPEND_CREDENTIAL_VAULT_PASSPHRASE = "fake local passphrase";
+  process.env.STACKSPEND_CREDENTIAL_VAULT_PATH = join(dir, "credentials-vault.json");
+  delete process.env.OPENAI_ADMIN_KEY;
+});
+
+afterEach(() => {
+  restoreEnv("STACKSPEND_CREDENTIAL_BACKEND", ORIGINAL_ENV.backend);
+  restoreEnv("STACKSPEND_CREDENTIAL_VAULT_PASSPHRASE", ORIGINAL_ENV.passphrase);
+  restoreEnv("STACKSPEND_CREDENTIAL_VAULT_PATH", ORIGINAL_ENV.vaultPath);
+  restoreEnv("OPENAI_ADMIN_KEY", ORIGINAL_ENV.openai);
+});
+
+describe("provider credential routes", () => {
+  it("stores and deletes a read-only credential without returning the secret", async () => {
+    const session = await createLocalSessionHeaders();
+    const response = await POST(new Request("http://127.0.0.1:3000/api/connections/openai/credentials", {
+      method: "POST",
+      headers: {
+        ...session,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        secret: "FAKE_OPENAI_ADMIN_KEY_FOR_TESTS",
+      }),
+    }), {
+      params: Promise.resolve({
+        provider: "openai",
+      }),
+    });
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload.provider).toMatchObject({
+      providerKey: "openai",
+      connectionState: "credential_store_configured",
+      credentialSource: "credential_store",
+    });
+    expect(JSON.stringify(payload)).not.toContain("FAKE_OPENAI_ADMIN_KEY_FOR_TESTS");
+
+    const deleted = await DELETE(new Request("http://127.0.0.1:3000/api/connections/openai/credentials", {
+      method: "DELETE",
+      headers: session,
+    }), {
+      params: Promise.resolve({
+        provider: "openai",
+      }),
+    });
+    const deletedPayload = await deleted.json();
+
+    expect(deleted.status).toBe(200);
+    expect(deletedPayload.provider).toMatchObject({
+      providerKey: "openai",
+      connectionState: "not_configured",
+    });
+  }, 15000);
+
+  it("rejects credential mutation without CSRF", async () => {
+    const response = await POST(new Request("http://127.0.0.1:3000/api/connections/openai/credentials", {
+      method: "POST",
+      headers: {
+        host: "127.0.0.1:3000",
+        origin: "http://127.0.0.1:3000",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        secret: "FAKE_OPENAI_ADMIN_KEY_FOR_TESTS",
+      }),
+    }), {
+      params: Promise.resolve({
+        provider: "openai",
+      }),
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      error: expect.stringContaining("CSRF"),
+    });
+  });
+
+  it("does not store raw AWS access keys through StackSpend", async () => {
+    const session = await createLocalSessionHeaders();
+    const response = await POST(new Request("http://127.0.0.1:3000/api/connections/aws/credentials", {
+      method: "POST",
+      headers: {
+        ...session,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        secret: "FAKE_AWS_SECRET_FOR_TESTS",
+      }),
+    }), {
+      params: Promise.resolve({
+        provider: "aws",
+      }),
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      error: expect.stringContaining("AWS raw access keys"),
+    });
+  });
+});
+
+async function createLocalSessionHeaders(): Promise<Record<string, string>> {
+  const response = await createSession(new Request("http://127.0.0.1:3000/api/auth/session", {
+    method: "POST",
+    headers: {
+      host: "127.0.0.1:3000",
+      origin: "http://127.0.0.1:3000",
+    },
+  }));
+  const payload = await response.json();
+
+  return {
+    host: "127.0.0.1:3000",
+    origin: "http://127.0.0.1:3000",
+    cookie: response.headers.get("set-cookie") ?? "",
+    "x-stackspend-csrf": payload.csrfToken,
+  };
+}
+
+function restoreEnv(key: string, value: string | undefined): void {
+  if (value === undefined) {
+    delete process.env[key];
+    return;
+  }
+
+  process.env[key] = value;
+}
