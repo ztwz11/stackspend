@@ -63,7 +63,7 @@ describe("local dashboard security helpers", () => {
 
     expect(transaction.redirectUri).toBe("http://127.0.0.1:3000/api/auth/callback/supabase");
     expect(transaction.codeChallenge).not.toBe(transaction.codeVerifier);
-    expect(consumeOAuthTransaction("supabase", transaction.state)).toMatchObject({
+    expect(consumeOAuthTransaction("supabase", transaction.state, new Date("2026-06-08T00:01:00.000Z"))).toMatchObject({
       nonce: transaction.nonce,
       codeVerifier: transaction.codeVerifier,
     });

@@ -4,6 +4,22 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import {
+  BarChart3,
+  Bell,
+  ChevronsLeft,
+  CircleHelp,
+  Cloud,
+  FileText,
+  Home,
+  KeyRound,
+  Link2,
+  Share2,
+  Settings,
+  SlidersHorizontal,
+  WalletCards,
+  type LucideIcon,
+} from "lucide-react";
+import {
   LOCALES,
   replaceLocale,
   type Locale,
@@ -14,12 +30,19 @@ interface AppShellProps {
   children: ReactNode;
   locale: Locale;
   messages: Messages;
+  serviceNavItems: readonly ServiceNavItem[];
   timezone: string;
+}
+
+export interface ServiceNavItem {
+  providerKey: string;
+  label: string;
 }
 
 interface NavItem {
   href: string;
   label: string;
+  icon: LucideIcon;
 }
 
 interface NavGroup {
@@ -27,10 +50,11 @@ interface NavGroup {
   items: readonly NavItem[];
 }
 
-export function AppShell({ children, locale, messages, timezone }: AppShellProps) {
+export function AppShell({ children, locale, messages, serviceNavItems, timezone }: AppShellProps) {
   const pathname = usePathname();
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const navGroups = buildNavGroups(locale, messages);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const navGroups = buildNavGroups(locale, messages, serviceNavItems);
 
   return (
     <div className="app-shell" lang={locale}>
@@ -68,16 +92,25 @@ export function AppShell({ children, locale, messages, timezone }: AppShellProps
         </>
       ) : null}
 
-      <div className="layout-grid">
-        <aside className="sidebar">
+      <div className={sidebarCollapsed ? "layout-grid layout-grid-collapsed" : "layout-grid"}>
+        <aside className={sidebarCollapsed ? "sidebar sidebar-collapsed" : "sidebar"}>
           <div>
             <div className="brand">
+              <span className="brand-mark" aria-hidden="true">
+                <Share2 size={19} strokeWidth={2.5} />
+              </span>
               <p className="brand-title">{messages.app.title}</p>
-              <p className="brand-subtitle">{messages.app.subtitle}</p>
             </div>
             <Navigation groups={navGroups} pathname={pathname} />
           </div>
-          <ShellFooter locale={locale} messages={messages} pathname={pathname} timezone={timezone} />
+          <ShellFooter
+            collapsed={sidebarCollapsed}
+            locale={locale}
+            messages={messages}
+            onToggleCollapsed={() => setSidebarCollapsed((current) => !current)}
+            pathname={pathname}
+            timezone={timezone}
+          />
         </aside>
         <main className="content">{children}</main>
       </div>
@@ -98,9 +131,9 @@ function Navigation({
     <nav className="nav-groups">
       {groups.map((group) => (
         <div key={group.label}>
-          <p className="nav-group-title">{group.label}</p>
           {group.items.map((item) => {
             const active = pathname === item.href;
+            const Icon = item.icon;
 
             return (
               <Link
@@ -109,7 +142,10 @@ function Navigation({
                 key={item.href}
                 {...(onNavigate === undefined ? {} : { onClick: onNavigate })}
               >
-                <span>{item.label}</span>
+                <span className="nav-link-body">
+                  <Icon aria-hidden="true" size={16} strokeWidth={1.8} />
+                  <span className="nav-link-label">{item.label}</span>
+                </span>
               </Link>
             );
           })}
@@ -120,20 +156,25 @@ function Navigation({
 }
 
 function ShellFooter({
+  collapsed = false,
   locale,
   messages,
+  onToggleCollapsed,
   pathname,
   timezone,
 }: {
+  collapsed?: boolean;
   locale: Locale;
   messages: Messages;
+  onToggleCollapsed?: () => void;
   pathname: string;
   timezone: string;
 }) {
+  const preferencesHref = `/${locale}/settings/preferences`;
+
   return (
     <div className="sidebar-footer">
       <div>
-        <div className="muted">{messages.app.locale}</div>
         <div className="locale-switcher" aria-label={messages.app.locale}>
           {LOCALES.map((nextLocale) => (
             <Link
@@ -147,42 +188,69 @@ function ShellFooter({
         </div>
       </div>
       <div>
-        <div className="muted">{messages.app.timezone}</div>
-        <strong>{timezone}</strong>
+        <Link className="footer-link" href={preferencesHref} title={messages.nav.preferences}>
+          <Settings aria-hidden="true" size={15} />
+          <span className="footer-link-label">{messages.nav.preferences}</span>
+        </Link>
+        <Link
+          className="footer-link"
+          href={`${preferencesHref}#timezone`}
+          title={`${messages.app.timezone}: ${timezone}`}
+        >
+          <CircleHelp aria-hidden="true" size={15} />
+          <span className="footer-link-label">{messages.app.timezone}: {timezone}</span>
+        </Link>
+        {onToggleCollapsed === undefined ? null : (
+          <button
+            aria-pressed={collapsed}
+            className="footer-link footer-button"
+            onClick={onToggleCollapsed}
+            title={collapsed ? messages.app.menu : messages.app.closeMenu}
+            type="button"
+          >
+            <ChevronsLeft aria-hidden="true" className="footer-toggle-icon" size={15} />
+            <span className="footer-link-label">{collapsed ? messages.app.menu : messages.app.closeMenu}</span>
+          </button>
+        )}
       </div>
     </div>
   );
 }
 
-function buildNavGroups(locale: Locale, messages: Messages): readonly NavGroup[] {
+function buildNavGroups(
+  locale: Locale,
+  messages: Messages,
+  serviceNavItems: readonly ServiceNavItem[],
+): readonly NavGroup[] {
   const base = `/${locale}`;
 
   return [
     {
       label: messages.nav.dashboard,
       items: [
-        { href: `${base}/dashboard/overview`, label: messages.nav.overview },
-        { href: `${base}/dashboard/today`, label: messages.nav.today },
-        { href: `${base}/dashboard/forecast`, label: messages.nav.forecast },
-        { href: `${base}/dashboard/risks`, label: messages.nav.risks },
+        { href: `${base}/dashboard/overview`, label: messages.nav.overview, icon: Home },
+        { href: `${base}/dashboard/today`, label: messages.nav.today, icon: BarChart3 },
+        { href: `${base}/dashboard/forecast`, label: messages.nav.forecast, icon: WalletCards },
+        { href: `${base}/dashboard/risks`, label: messages.nav.risks, icon: Bell },
       ],
     },
     {
       label: messages.nav.services,
       items: [
-        { href: `${base}/services`, label: messages.nav.allServices },
-        { href: `${base}/services/aws`, label: "AWS" },
-        { href: `${base}/services/openai`, label: "OpenAI" },
-        { href: `${base}/services/supabase`, label: "Supabase" },
-        { href: `${base}/services/cloudflare`, label: "Cloudflare" },
+        { href: `${base}/services`, label: messages.nav.allServices, icon: FileText },
+        ...serviceNavItems.map((item) => ({
+          href: `${base}/services/${item.providerKey}`,
+          label: item.label,
+          icon: Cloud,
+        })),
       ],
     },
     {
       label: messages.nav.settings,
       items: [
-        { href: `${base}/settings/connections`, label: messages.nav.connections },
-        { href: `${base}/settings/preferences`, label: messages.nav.preferences },
-        { href: `${base}/providers`, label: messages.nav.providers },
+        { href: `${base}/settings/connections`, label: messages.nav.connections, icon: Link2 },
+        { href: `${base}/settings/preferences`, label: messages.nav.preferences, icon: SlidersHorizontal },
+        { href: `${base}/providers`, label: messages.nav.providers, icon: KeyRound },
       ],
     },
   ];

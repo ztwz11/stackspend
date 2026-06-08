@@ -1,4 +1,9 @@
-import { deleteCredential, setCredential, type CredentialAuthMethod } from "../../../../../../../packages/credentials/src/index";
+import {
+  deleteCredential,
+  setCredential,
+  testCredentialStore,
+  type CredentialAuthMethod,
+} from "../../../../../../../packages/credentials/src/index";
 import { readConnectionsStatus } from "../../../../../lib/connection-status";
 import { validateReadOnlyCredential } from "../../../../../lib/credential-validation";
 import { requireLocalSession } from "../../../../../lib/local-security";
@@ -17,12 +22,13 @@ export async function POST(request: Request, context: RouteContext): Promise<Res
     requireLocalSession(request);
     const provider = await readProvider(context.params);
     const input = await readCredentialInput(request, provider);
+    await assertCredentialStoreWritable();
     const validation = await validateReadOnlyCredential(provider, {
       secret: input.secret,
       ...(input.metadata?.accountIds === undefined ? {} : { accountIds: input.metadata.accountIds }),
     });
 
-    await setCredential(provider, "read-only", {
+    const credential = await setCredential(provider, "read-only", {
       ...input,
       metadata: {
         ...(input.metadata ?? {}),
@@ -30,9 +36,22 @@ export async function POST(request: Request, context: RouteContext): Promise<Res
       },
     });
 
-    return providerStatusResponse(provider);
+    return providerStatusResponse(provider, credential.connectionId);
   } catch (error) {
     return errorResponse(error);
+  }
+}
+
+async function assertCredentialStoreWritable(): Promise<void> {
+  const health = await testCredentialStore();
+
+  if (!health.writable) {
+    const reason = health.reason ?? "Credential store is not writable.";
+    const hint = health.backend === "encrypted_vault"
+      ? "Set STACKSPEND_CREDENTIAL_VAULT_PASSPHRASE before starting the local web server, or configure the OS keychain backend."
+      : "Check the local credential store backend configuration.";
+
+    throw new Error(`${reason} ${hint}`);
   }
 }
 
@@ -40,8 +59,9 @@ export async function DELETE(request: Request, context: RouteContext): Promise<R
   try {
     requireLocalSession(request);
     const provider = await readProvider(context.params);
+    const connectionId = readConnectionId(request);
 
-    await deleteCredential(provider, "read-only");
+    await deleteCredential(provider, "read-only", { connectionId });
 
     return providerStatusResponse(provider);
   } catch (error) {
@@ -65,6 +85,7 @@ async function readCredentialInput(
 ): Promise<{
   secret: string;
   authMethod: CredentialAuthMethod;
+  label: string;
   metadata?: Record<string, string>;
 }> {
   if (provider === "aws") {
@@ -73,10 +94,12 @@ async function readCredentialInput(
 
   const body = await request.json() as Record<string, unknown>;
   const secret = readRequiredString(body.secret, "Credential secret");
+  const label = readOptionalString(body.label, "Connection label") ?? defaultConnectionLabel(provider);
 
   if (provider === "openai") {
     return {
       secret,
+      label,
       authMethod: "api_key",
     };
   }
@@ -84,6 +107,7 @@ async function readCredentialInput(
   if (provider === "supabase") {
     return {
       secret,
+      label,
       authMethod: "pat",
     };
   }
@@ -92,11 +116,22 @@ async function readCredentialInput(
 
   return {
     secret,
+    label,
     authMethod: "api_token",
     metadata: {
       accountIds,
     },
   };
+}
+
+function readConnectionId(request: Request): string {
+  const connectionId = new URL(request.url).searchParams.get("connectionId")?.trim();
+
+  if (connectionId === undefined || connectionId.length === 0) {
+    throw new Error("Connection id is required.");
+  }
+
+  return connectionId;
 }
 
 function readRequiredString(value: unknown, label: string): string {
@@ -107,13 +142,42 @@ function readRequiredString(value: unknown, label: string): string {
   return value.trim();
 }
 
-async function providerStatusResponse(provider: ProviderKey): Promise<Response> {
+function readOptionalString(value: unknown, label: string): string | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+
+  if (typeof value !== "string" || value.trim().length === 0 || value.trim().length > 80) {
+    throw new Error(`${label} must be 1-80 characters.`);
+  }
+
+  return value.trim();
+}
+
+function defaultConnectionLabel(provider: ProviderKey): string {
+  if (provider === "openai") {
+    return "OpenAI";
+  }
+
+  if (provider === "supabase") {
+    return "Supabase";
+  }
+
+  if (provider === "cloudflare") {
+    return "Cloudflare";
+  }
+
+  return "Default";
+}
+
+async function providerStatusResponse(provider: ProviderKey, connectionId?: string): Promise<Response> {
   const status = await readConnectionsStatus();
   const providerStatus = status.providers.find((item) => item.providerKey === provider);
 
   return Response.json(
     {
       provider: providerStatus,
+      ...(connectionId === undefined ? {} : { connectionId }),
       secretsReturned: false,
       providerWriteActionsEnabled: false,
     },

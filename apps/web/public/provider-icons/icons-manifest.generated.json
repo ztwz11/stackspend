@@ -1,0 +1,173 @@
+[
+  {
+    "label": "AWS",
+    "filename": "aws.svg",
+    "slug": "amazon-web-services",
+    "title": "Amazon Web Services",
+    "variant": "default",
+    "sourceUrl": "https://thesvg.org/icons/amazon-web-services/default.svg",
+    "note": "브랜드 로고가 없으면 AWS Architecture 일반 아이콘/공식 아이콘 사이트에서 보완하세요."
+  },
+  {
+    "label": "OpenAI",
+    "filename": "openai.svg",
+    "slug": "openai",
+    "title": "OpenAI",
+    "variant": "default",
+    "sourceUrl": "https://thesvg.org/icons/openai/default.svg",
+    "note": ""
+  },
+  {
+    "label": "Supabase",
+    "filename": "supabase.svg",
+    "slug": "supabase",
+    "title": "Supabase",
+    "variant": "default",
+    "sourceUrl": "https://thesvg.org/icons/supabase/default.svg",
+    "note": ""
+  },
+  {
+    "label": "Cloudflare",
+    "filename": "cloudflare.svg",
+    "slug": "cloudflare",
+    "title": "Cloudflare",
+    "variant": "default",
+    "sourceUrl": "https://thesvg.org/icons/cloudflare/default.svg",
+    "note": ""
+  },
+  {
+    "label": "GCP",
+    "filename": "gcp.svg",
+    "slug": "google-cloud",
+    "title": "Google Cloud",
+    "variant": "default",
+    "sourceUrl": "https://thesvg.org/icons/google-cloud/default.svg",
+    "note": ""
+  },
+  {
+    "label": "Azure",
+    "filename": "azure.svg",
+    "slug": "microsoft-azure",
+    "title": "Microsoft Azure",
+    "variant": "default",
+    "sourceUrl": "https://thesvg.org/icons/microsoft-azure/default.svg",
+    "note": ""
+  },
+  {
+    "label": "Oracle Cloud",
+    "filename": "oracle-cloud.svg",
+    "slug": "oracle",
+    "title": "Oracle",
+    "variant": "default",
+    "sourceUrl": "https://thesvg.org/icons/oracle/default.svg",
+    "note": ""
+  },
+  {
+    "label": "Anthropic Claude",
+    "filename": "anthropic-claude.svg",
+    "slug": "anthropic",
+    "title": "Anthropic",
+    "variant": "default",
+    "sourceUrl": "https://thesvg.org/icons/anthropic/default.svg",
+    "note": ""
+  },
+  {
+    "label": "Google Gemini / Vertex AI",
+    "filename": "google-gemini-vertex-ai.svg",
+    "slug": "gcp-vertexai",
+    "title": "Vertexai",
+    "variant": "default",
+    "sourceUrl": "https://thesvg.org/icons/gcp-vertexai/default.svg",
+    "note": ""
+  },
+  {
+    "label": "Vercel",
+    "filename": "vercel.svg",
+    "slug": "vercel",
+    "title": "Vercel",
+    "variant": "default",
+    "sourceUrl": "https://thesvg.org/icons/vercel/default.svg",
+    "note": ""
+  },
+  {
+    "label": "GitHub Actions",
+    "filename": "github-actions.svg",
+    "slug": "github-actions",
+    "title": "GitHub Actions",
+    "variant": "default",
+    "sourceUrl": "https://thesvg.org/icons/github-actions/default.svg",
+    "note": ""
+  },
+  {
+    "label": "Railway",
+    "filename": "railway.svg",
+    "slug": "railway",
+    "title": "Railway",
+    "variant": "default",
+    "sourceUrl": "https://thesvg.org/icons/railway/default.svg",
+    "note": ""
+  },
+  {
+    "label": "Fly.io",
+    "filename": "fly-io.svg",
+    "slug": "fly",
+    "title": "Fly",
+    "variant": "default",
+    "sourceUrl": "https://thesvg.org/icons/fly/default.svg",
+    "note": ""
+  },
+  {
+    "label": "Netlify",
+    "filename": "netlify.svg",
+    "slug": "netlify",
+    "title": "Netlify",
+    "variant": "default",
+    "sourceUrl": "https://thesvg.org/icons/netlify/default.svg",
+    "note": ""
+  },
+  {
+    "label": "Render",
+    "filename": "render.svg",
+    "slug": "render",
+    "title": "Render",
+    "variant": "default",
+    "sourceUrl": "https://thesvg.org/icons/render/default.svg",
+    "note": ""
+  },
+  {
+    "label": "Neon",
+    "filename": "neon.svg",
+    "slug": "neon",
+    "title": "Neon",
+    "variant": "default",
+    "sourceUrl": "https://thesvg.org/icons/neon/default.svg",
+    "note": ""
+  },
+  {
+    "label": "MongoDB Atlas",
+    "filename": "mongodb-atlas.svg",
+    "slug": "mongodb",
+    "title": "MongoDB",
+    "variant": "default",
+    "sourceUrl": "https://thesvg.org/icons/mongodb/default.svg",
+    "note": ""
+  },
+  {
+    "label": "Datadog",
+    "filename": "datadog.svg",
+    "slug": "datadog",
+    "title": "Datadog",
+    "variant": "default",
+    "sourceUrl": "https://thesvg.org/icons/datadog/default.svg",
+    "note": ""
+  },
+  {
+    "label": "Sentry",
+    "filename": "sentry.svg",
+    "slug": "sentry",
+    "title": "Sentry",
+    "variant": "default",
+    "sourceUrl": "https://thesvg.org/icons/sentry/default.svg",
+    "note": ""
+  }
+]

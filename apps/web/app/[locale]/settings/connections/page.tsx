@@ -1,3 +1,4 @@
+import Link from "next/link";
 import {
   ConnectionsView,
   PageHeader,
@@ -20,7 +21,15 @@ export default async function ConnectionsPage({ params }: PageProps) {
 
   return (
     <>
-      <PageHeader title={messages.settings.connectionsTitle} subtitle={messages.settings.connectionsSubtitle} />
+      <PageHeader
+        title={messages.settings.connectionsTitle}
+        subtitle={messages.settings.connectionsSubtitle}
+        meta={
+          <Link className="ghost-button header-control" href={`/${locale}/providers`}>
+            {messages.catalog.addProvider}
+          </Link>
+        }
+      />
       <ConnectionsView dashboard={dashboard} locale={locale} messages={messages} />
     </>
   );

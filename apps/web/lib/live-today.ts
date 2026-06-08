@@ -13,11 +13,14 @@ import {
 } from "../../../packages/connectors/cloudflare/src/index";
 import {
   createDefaultCredentialStore,
+  type StoredCredential,
   type CredentialStore,
 } from "../../../packages/credentials/src/index";
 import {
   readConnectionsStatus,
+  type ConnectionState,
   type ConnectionsStatusPayload,
+  type ProviderCredentialConnectionStatus,
   type ProviderConnectionStatus,
 } from "./connection-status";
 import {
@@ -33,6 +36,8 @@ export type LiveTodayCollectionStatus = "ok" | "partial" | "error";
 
 export interface LiveTodayProviderSnapshot {
   providerKey: ProviderKey;
+  connectionId?: string;
+  connectionLabel?: string;
   checkedAt: string | null;
   expiresAt: string | null;
   ttlSeconds: number;
@@ -44,6 +49,7 @@ export interface LiveTodayProviderSnapshot {
   currency: string;
   included: boolean;
   status: LiveTodayCollectionStatus | "not_checked";
+  usageSummary?: LiveTodayUsageSummary;
   message?: string;
 }
 
@@ -56,13 +62,29 @@ export interface LiveTodaySnapshot {
 
 export interface LiveTodayProviderCollection {
   providerKey: ProviderKey;
+  connectionId?: string;
+  connectionLabel?: string;
   status: LiveTodayCollectionStatus;
   checkedAt: string;
   todayLiveAmountMinor: number | null;
   currency: string;
   included: boolean;
   confidence: LiveTodayConfidence;
+  usageSummary?: LiveTodayUsageSummary;
   message?: string;
+}
+
+export interface LiveTodayUsageSummary {
+  kind: "llm_subscription";
+  period: "current_month";
+  metrics: readonly LiveTodayUsageMetric[];
+  topServices: readonly string[];
+}
+
+export interface LiveTodayUsageMetric {
+  key: "input_tokens" | "output_tokens" | "model_requests";
+  value: number;
+  unit: "tokens" | "requests";
 }
 
 export type LiveTodayProviderCollector = (
@@ -72,6 +94,7 @@ export type LiveTodayProviderCollector = (
 export interface LiveTodayCollectionContext {
   providerKey: ProviderKey;
   connection: ProviderConnectionStatus;
+  credentialConnection?: ProviderCredentialConnectionStatus;
   env: Record<string, string | undefined>;
   credentialStore: CredentialStore;
   now: Date;
@@ -91,7 +114,8 @@ export interface LiveTodayOptions {
 const DEFAULT_TTL_SECONDS = 60;
 const AWS_REGION_ENV_KEY = "STACKSPEND_AWS_REGION";
 const CLOUDFLARE_ACCOUNT_IDS_ENV_KEY = "CLOUDFLARE_ACCOUNT_IDS";
-const cache = new Map<ProviderKey, CachedLiveTodayProvider>();
+const ENV_CONNECTION_ID = "env";
+const cache = new Map<string, CachedLiveTodayProvider>();
 
 interface CachedLiveTodayProvider extends LiveTodayProviderCollection {
   expiresAt: string;
@@ -99,14 +123,14 @@ interface CachedLiveTodayProvider extends LiveTodayProviderCollection {
 
 export async function readLiveTodaySnapshot(options: LiveTodayOptions = {}): Promise<LiveTodaySnapshot> {
   const context = await createLiveTodayContext(options);
-  const providers = context.connections.providers.map((connection) => {
-    const cached = cache.get(connection.providerKey);
+  const providers = liveTargetsFromConnections(context.connections).map((target) => {
+    const cached = cache.get(liveCacheKey(target));
 
     if (cached === undefined) {
-      return notCheckedSnapshot(connection, context.ttlSeconds);
+      return notCheckedSnapshot(target, context.ttlSeconds);
     }
 
-    return snapshotFromCachedProvider(connection, cached, context.now, context.ttlSeconds);
+    return snapshotFromCachedProvider(target, cached, context.now, context.ttlSeconds);
   });
 
   return {
@@ -121,14 +145,16 @@ export async function refreshLiveToday(options: LiveTodayOptions = {}): Promise<
   const context = await createLiveTodayContext(options);
 
   await Promise.all(
-    context.connections.providers.map(async (connection) => {
-      const providerKey = connection.providerKey;
+    liveTargetsFromConnections(context.connections).map(async (target) => {
+      const providerKey = target.providerKey;
       const checkedAt = context.now.toISOString();
-      const preflight = preflightProvider(connection);
+      const preflight = preflightProvider(target);
 
       if (preflight !== null) {
-        cache.set(providerKey, {
+        cache.set(liveCacheKey(target), {
           providerKey,
+          ...(target.connectionId === undefined ? {} : { connectionId: target.connectionId }),
+          ...(target.connectionLabel === undefined ? {} : { connectionLabel: target.connectionLabel }),
           status: "partial",
           checkedAt,
           expiresAt: expiresAt(context.now, context.ttlSeconds),
@@ -146,19 +172,24 @@ export async function refreshLiveToday(options: LiveTodayOptions = {}): Promise<
       try {
         const collected = await collector({
           providerKey,
-          connection,
+          connection: target.connection,
+          ...(target.credentialConnection === undefined ? {} : { credentialConnection: target.credentialConnection }),
           env: context.env,
           credentialStore: context.credentialStore,
           now: context.now,
           timezone: context.timezone,
         });
-        cache.set(providerKey, {
+        cache.set(liveCacheKey(target), {
           ...collected,
+          ...(target.connectionId === undefined ? {} : { connectionId: target.connectionId }),
+          ...(target.connectionLabel === undefined ? {} : { connectionLabel: target.connectionLabel }),
           expiresAt: expiresAt(context.now, context.ttlSeconds),
         });
       } catch (error) {
-        cache.set(providerKey, {
+        cache.set(liveCacheKey(target), {
           providerKey,
+          ...(target.connectionId === undefined ? {} : { connectionId: target.connectionId }),
+          ...(target.connectionLabel === undefined ? {} : { connectionLabel: target.connectionLabel }),
           status: "error",
           checkedAt,
           expiresAt: expiresAt(context.now, context.ttlSeconds),
@@ -219,20 +250,70 @@ interface RequiredLiveTodayContext {
   collectors: Partial<Record<ProviderKey, LiveTodayProviderCollector>>;
 }
 
-function preflightProvider(connection: ProviderConnectionStatus): string | null {
-  if (connection.connectionState === "not_configured") {
+interface LiveTodayConnectionTarget {
+  providerKey: ProviderKey;
+  connection: ProviderConnectionStatus;
+  credentialConnection?: ProviderCredentialConnectionStatus;
+  connectionId?: string;
+  connectionLabel?: string;
+  connectionState: ConnectionState;
+}
+
+function liveTargetsFromConnections(connections: ConnectionsStatusPayload): LiveTodayConnectionTarget[] {
+  return connections.providers.flatMap((connection) => {
+    const targets: LiveTodayConnectionTarget[] = [];
+
+    if (connection.connectionState === "env_configured") {
+      targets.push({
+        providerKey: connection.providerKey,
+        connection,
+        connectionId: ENV_CONNECTION_ID,
+        connectionLabel: "Environment",
+        connectionState: "env_configured",
+      });
+    }
+
+    for (const credentialConnection of connection.connections) {
+      targets.push({
+        providerKey: connection.providerKey,
+        connection,
+        credentialConnection,
+        connectionId: credentialConnection.connectionId,
+        connectionLabel: credentialConnection.label,
+        connectionState: credentialConnection.connectionState,
+      });
+    }
+
+    if (targets.length === 0) {
+      targets.push({
+        providerKey: connection.providerKey,
+        connection,
+        connectionState: connection.connectionState,
+      });
+    }
+
+    return targets;
+  });
+}
+
+function liveCacheKey(target: LiveTodayConnectionTarget): string {
+  return `${target.providerKey}:${target.connectionId ?? "provider"}`;
+}
+
+function preflightProvider(target: LiveTodayConnectionTarget): string | null {
+  if (target.connectionState === "not_configured") {
     return "Provider credentials are not configured.";
   }
 
-  if (connection.connectionState === "locked") {
+  if (target.connectionState === "locked") {
     return "Credential store is locked.";
   }
 
-  if (connection.connectionState === "expired" || connection.connectionState === "invalid") {
+  if (target.connectionState === "expired" || target.connectionState === "invalid") {
     return "Provider credentials are not valid for live checks.";
   }
 
-  if (findAvailableProvider(connection.providerKey)?.liveGranularity === "unavailable") {
+  if (findAvailableProvider(target.providerKey)?.liveGranularity === "unavailable") {
     return "Provider does not support live today checks.";
   }
 
@@ -240,17 +321,19 @@ function preflightProvider(connection: ProviderConnectionStatus): string | null 
 }
 
 function notCheckedSnapshot(
-  connection: ProviderConnectionStatus,
+  target: LiveTodayConnectionTarget,
   ttlSeconds: number,
 ): LiveTodayProviderSnapshot {
-  const granularity = findAvailableProvider(connection.providerKey)?.liveGranularity ?? "unavailable";
+  const granularity = findAvailableProvider(target.providerKey)?.liveGranularity ?? "unavailable";
 
   return {
-    providerKey: connection.providerKey,
+    providerKey: target.providerKey,
+    ...(target.connectionId === undefined ? {} : { connectionId: target.connectionId }),
+    ...(target.connectionLabel === undefined ? {} : { connectionLabel: target.connectionLabel }),
     checkedAt: null,
     expiresAt: null,
     ttlSeconds,
-    freshness: freshnessWithoutCache(connection, granularity),
+    freshness: freshnessWithoutCache(target.connectionState, granularity),
     liveGranularity: granularity,
     confidence: "none",
     provisional: true,
@@ -262,15 +345,15 @@ function notCheckedSnapshot(
 }
 
 function snapshotFromCachedProvider(
-  connection: ProviderConnectionStatus,
+  target: LiveTodayConnectionTarget,
   cached: CachedLiveTodayProvider,
   now: Date,
   ttlSeconds: number,
 ): LiveTodayProviderSnapshot {
-  const granularity = findAvailableProvider(connection.providerKey)?.liveGranularity ?? "unavailable";
+  const granularity = findAvailableProvider(target.providerKey)?.liveGranularity ?? "unavailable";
   const expired = new Date(cached.expiresAt).getTime() <= now.getTime();
   const freshness = cached.status === "partial" && cached.confidence === "none" && cached.todayLiveAmountMinor === null
-    ? freshnessWithoutCache(connection, granularity)
+    ? freshnessWithoutCache(target.connectionState, granularity)
     : cached.status === "error"
     ? "error"
     : expired
@@ -278,7 +361,9 @@ function snapshotFromCachedProvider(
       : "live";
 
   return {
-    providerKey: connection.providerKey,
+    providerKey: target.providerKey,
+    ...(target.connectionId === undefined ? {} : { connectionId: target.connectionId }),
+    ...(target.connectionLabel === undefined ? {} : { connectionLabel: target.connectionLabel }),
     checkedAt: cached.checkedAt,
     expiresAt: cached.expiresAt,
     ttlSeconds,
@@ -290,23 +375,24 @@ function snapshotFromCachedProvider(
     currency: cached.currency,
     included: !expired && cached.status !== "error" && cached.included,
     status: cached.status,
+    ...(cached.usageSummary === undefined ? {} : { usageSummary: cached.usageSummary }),
     ...(cached.message === undefined ? {} : { message: cached.message }),
   };
 }
 
 function freshnessWithoutCache(
-  connection: ProviderConnectionStatus,
+  connectionState: ConnectionState,
   granularity: LiveGranularity,
 ): LiveTodayFreshness {
-  if (connection.connectionState === "locked") {
+  if (connectionState === "locked") {
     return "locked";
   }
 
-  if (connection.connectionState === "not_configured") {
+  if (connectionState === "not_configured") {
     return "not_configured";
   }
 
-  if (connection.connectionState === "expired" || connection.connectionState === "invalid") {
+  if (connectionState === "expired" || connectionState === "invalid") {
     return "error";
   }
 
@@ -380,6 +466,7 @@ async function collectOpenAiLiveToday(context: LiveTodayCollectionContext): Prom
   const todayEstimate = summarizeAmount(
     collection.snapshots.costEstimates.filter((estimate) => estimate.periodStart === today),
   );
+  const usageSummary = summarizeOpenAiCurrentUsage(collection.snapshots.usage);
 
   return {
     providerKey: "openai",
@@ -389,6 +476,7 @@ async function collectOpenAiLiveToday(context: LiveTodayCollectionContext): Prom
     currency: todayEstimate.currency,
     included: todayEstimate.amountMinor !== null,
     confidence: todayEstimate.amountMinor === null ? "none" : "medium",
+    ...(usageSummary === undefined ? {} : { usageSummary }),
     message: "OpenAI daily cost bucket is provisional until provider finalization.",
   };
 }
@@ -446,6 +534,14 @@ async function resolveProviderSecret(
   context: LiveTodayCollectionContext,
   providerKey: Exclude<ProviderKey, "aws">,
 ): Promise<{ secret: string; metadata: Readonly<Record<string, string>> }> {
+  if (context.credentialConnection !== undefined) {
+    return credentialSecretOrThrow(await context.credentialStore.getCredential(
+      providerKey,
+      "read-only",
+      context.credentialConnection.connectionId,
+    ));
+  }
+
   if (providerKey === "openai" && isConfigured(context.env.OPENAI_ADMIN_KEY)) {
     return {
       secret: context.env.OPENAI_ADMIN_KEY.trim(),
@@ -469,6 +565,12 @@ async function resolveProviderSecret(
 
   const credential = await context.credentialStore.getCredential(providerKey, "read-only");
 
+  return credentialSecretOrThrow(credential);
+}
+
+function credentialSecretOrThrow(
+  credential: StoredCredential | null,
+): { secret: string; metadata: Readonly<Record<string, string>> } {
   if (credential === null) {
     throw new Error("Provider credential is not configured.");
   }
@@ -505,6 +607,69 @@ function summarizeAmount(
     amountMinor: estimates.reduce((total, estimate) => total + estimate.estimatedAmountMinor, 0),
     currency: [...currencies][0] ?? "USD",
   };
+}
+
+function summarizeOpenAiCurrentUsage(
+  usage: readonly {
+    service: string;
+    metric: "input_tokens" | "output_tokens" | "model_requests";
+    value: number;
+  }[],
+): LiveTodayUsageSummary | undefined {
+  if (usage.length === 0) {
+    return undefined;
+  }
+
+  const inputTokens = sumUsageMetric(usage, "input_tokens");
+  const outputTokens = sumUsageMetric(usage, "output_tokens");
+  const modelRequests = sumUsageMetric(usage, "model_requests");
+  const metricCandidates: LiveTodayUsageMetric[] = [
+    { key: "input_tokens", value: inputTokens, unit: "tokens" },
+    { key: "output_tokens", value: outputTokens, unit: "tokens" },
+    { key: "model_requests", value: modelRequests, unit: "requests" },
+  ];
+  const metrics = metricCandidates.filter((metric) => metric.value > 0);
+
+  if (metrics.length === 0) {
+    return undefined;
+  }
+
+  return {
+    kind: "llm_subscription",
+    period: "current_month",
+    metrics,
+    topServices: summarizeTopUsageServices(usage),
+  };
+}
+
+function sumUsageMetric(
+  usage: readonly {
+    metric: "input_tokens" | "output_tokens" | "model_requests";
+    value: number;
+  }[],
+  metric: "input_tokens" | "output_tokens" | "model_requests",
+): number {
+  return usage
+    .filter((item) => item.metric === metric)
+    .reduce((total, item) => total + item.value, 0);
+}
+
+function summarizeTopUsageServices(
+  usage: readonly {
+    service: string;
+    value: number;
+  }[],
+): string[] {
+  const totals = new Map<string, number>();
+
+  for (const item of usage) {
+    totals.set(item.service, (totals.get(item.service) ?? 0) + item.value);
+  }
+
+  return [...totals.entries()]
+    .sort((left, right) => right[1] - left[1])
+    .slice(0, 3)
+    .map(([service]) => service);
 }
 
 function awsSdkOptionsFromEnv(env: Record<string, string | undefined>): { region?: string } {

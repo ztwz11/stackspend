@@ -32,6 +32,7 @@ export interface ProviderConnectionStatus {
   credentialSource: CredentialSource;
   readOnlyTestState: ConnectionState;
   emergencyAccessState: EmergencyAccessState;
+  connections: readonly ProviderCredentialConnectionStatus[];
   requiredEnvKeys: readonly string[];
   configuredEnvKeys: readonly string[];
   missingEnvKeys: readonly string[];
@@ -41,6 +42,25 @@ export interface ProviderConnectionStatus {
     storeState: CredentialStatus["storeState"];
     readOnlyState: CredentialConnectionState;
     emergencyState: CredentialConnectionState;
+  };
+}
+
+export interface ProviderCredentialConnectionStatus {
+  connectionId: string;
+  label: string;
+  active: boolean;
+  connectionState: ConnectionState;
+  credentialSource: CredentialSource;
+  readOnlyTestState: ConnectionState;
+  authMethod?: CredentialStatus["authMethod"];
+  createdAt?: string;
+  updatedAt?: string;
+  expiresAt?: string;
+  validatedAt?: string;
+  credentialStore: {
+    backend: CredentialStatus["backend"];
+    storeState: CredentialStatus["storeState"];
+    readOnlyState: CredentialConnectionState;
   };
 }
 
@@ -68,10 +88,14 @@ export async function readConnectionsStatus(
   const providers = await Promise.all(
     AVAILABLE_PROVIDER_KEYS.map(async (providerKey) => {
       const readOnlyStatus = await credentialStore.getCredentialStatus(providerKey, "read-only");
+      const readOnlyStatuses = await credentialStore.listCredentialStatuses(providerKey, "read-only");
       const emergencyStatus = await credentialStore.getCredentialStatus(providerKey, "emergency");
       const providerConfig = config.providers[providerKey];
       const envConfigured = isProviderEnvConfigured(providerKey, env, providerConfig.configured);
-      const connectionState = summarizeConnectionState(envConfigured, readOnlyStatus);
+      const connections = readOnlyStatuses
+        .filter((status) => status.connectionId !== undefined && status.label !== undefined)
+        .map((status) => credentialConnectionStatusFor(status));
+      const connectionState = summarizeProviderConnectionState(envConfigured, readOnlyStatus, connections);
       const catalog = findAvailableProvider(providerKey);
 
       return {
@@ -80,8 +104,9 @@ export async function readConnectionsStatus(
         authMethod: catalog?.authMethods.join(" / ") ?? "Unknown",
         connectionState,
         credentialSource: credentialSourceFor(connectionState),
-        readOnlyTestState: summarizeReadOnlyTestState(connectionState, readOnlyStatus),
+        readOnlyTestState: summarizeProviderReadOnlyTestState(connectionState, readOnlyStatus, connections),
         emergencyAccessState: "emergency_planned",
+        connections,
         requiredEnvKeys: providerConfig.requiredEnvKeys,
         configuredEnvKeys: redactedConfiguredEnvKeys(providerKey, env, providerConfig.configuredEnvKeys),
         missingEnvKeys: providerConfig.missingEnvKeys,
@@ -103,6 +128,62 @@ export async function readConnectionsStatus(
     providerWriteActionsEnabled: false,
     providers,
   };
+}
+
+function credentialConnectionStatusFor(status: CredentialStatus): ProviderCredentialConnectionStatus {
+  const connectionState = summarizeConnectionState(false, status);
+  const readOnlyTestState = summarizeReadOnlyTestState(connectionState, status);
+
+  return {
+    connectionId: status.connectionId ?? "unknown",
+    label: status.label ?? "Default",
+    active: status.active ?? true,
+    connectionState,
+    credentialSource: credentialSourceFor(connectionState),
+    readOnlyTestState,
+    ...(status.authMethod === undefined ? {} : { authMethod: status.authMethod }),
+    ...(status.createdAt === undefined ? {} : { createdAt: status.createdAt }),
+    ...(status.updatedAt === undefined ? {} : { updatedAt: status.updatedAt }),
+    ...(status.expiresAt === undefined ? {} : { expiresAt: status.expiresAt }),
+    ...(status.validatedAt === undefined ? {} : { validatedAt: status.validatedAt }),
+    credentialStore: {
+      backend: status.backend,
+      storeState: status.storeState,
+      readOnlyState: status.state,
+    },
+  };
+}
+
+function summarizeProviderConnectionState(
+  envConfigured: boolean,
+  readOnlyStatus: CredentialStatus,
+  connections: readonly ProviderCredentialConnectionStatus[],
+): ConnectionState {
+  if (envConfigured) {
+    return "env_configured";
+  }
+
+  if (connections.some((connection) => connection.connectionState === "credential_store_configured")) {
+    return "credential_store_configured";
+  }
+
+  if (connections.some((connection) => connection.connectionState === "oauth_connected")) {
+    return "oauth_connected";
+  }
+
+  return summarizeConnectionState(false, readOnlyStatus);
+}
+
+function summarizeProviderReadOnlyTestState(
+  connectionState: ConnectionState,
+  readOnlyStatus: CredentialStatus,
+  connections: readonly ProviderCredentialConnectionStatus[],
+): ConnectionState {
+  if (connections.some((connection) => connection.readOnlyTestState === "read_only_ready")) {
+    return "read_only_ready";
+  }
+
+  return summarizeReadOnlyTestState(connectionState, readOnlyStatus);
 }
 
 export function summarizeConnectionState(

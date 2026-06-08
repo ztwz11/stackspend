@@ -30,7 +30,13 @@ StackSpend is a local-first TypeScript monorepo. The CLI collects normalized sna
 
 The route-based web dashboard separates canonical SQLite data from `live_today` overlays. `GET /api/live-today` reads the current in-memory live cache. `POST /api/live-today` performs a manual read-only live refresh and keeps the result provisional.
 
+`live_today` may include sanitized current-period usage summaries for LLM subscription providers. The OpenAI implementation aggregates tokens and request counts from the read-only organization usage response and does not persist raw provider payloads or secret values.
+
+Providers may have multiple local read-only connections, such as separate API keys or accounts for the same provider. Credential store entries are keyed by provider, scope, and connection id. The web dashboard keeps provider aggregate rows and connection rows separate: canonical SQLite history remains provider aggregate for now, while today's live overlay can be refreshed and displayed per connection.
+
 Local web connection flows use `/api/auth/session` for an opaque local session plus CSRF token, `/api/connections/[provider]/credentials` for read-only credential mutation, and `/api/auth/start|callback/[provider]` for localhost OAuth broker state/nonce/PKCE handling. Supabase OAuth can exchange a localhost callback code for a read-only token when local OAuth env is configured. Provider write operations are not implemented.
+
+The connection settings screen displays provider setup links for the values StackSpend needs, such as env variable names, profile names, read-only permission references, and provider API documentation. These links are static metadata and never include operator account IDs, tokens, keys, or secrets.
 
 ## Storage
 

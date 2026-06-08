@@ -71,6 +71,80 @@ describe("credential store abstraction", () => {
     });
   });
 
+  it("does not delete existing vault credentials while testing store writability", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "stackspend-credentials-"));
+    const vaultPath = join(dir, "credentials-vault.json");
+    const store = createEncryptedVaultCredentialStore({
+      vaultPath,
+      passphrase: "fake local passphrase",
+      now: () => FIXED_NOW,
+    });
+    const existing = await store.setCredential("openai", "read-only", {
+      connectionId: "conn_existing",
+      label: "Existing",
+      secret: "FAKE_OPENAI_EXISTING_ADMIN_KEY",
+      authMethod: "api_key",
+    });
+
+    await expect(store.testCredentialStore()).resolves.toMatchObject({
+      state: "ready",
+      writable: true,
+    });
+    await expect(store.getCredential("openai", "read-only", existing.connectionId)).resolves.toMatchObject({
+      secret: "FAKE_OPENAI_EXISTING_ADMIN_KEY",
+    });
+  });
+
+  it("stores multiple credentials per provider scope and deletes one connection at a time", async () => {
+    const store = createMemoryCredentialStore({
+      now: () => FIXED_NOW,
+    });
+    const first = await store.setCredential("openai", "read-only", {
+      connectionId: "conn_first",
+      label: "Personal",
+      secret: "FAKE_OPENAI_PERSONAL_ADMIN_KEY",
+      authMethod: "api_key",
+    });
+    const second = await store.setCredential("openai", "read-only", {
+      connectionId: "conn_second",
+      label: "Work",
+      secret: "FAKE_OPENAI_WORK_ADMIN_KEY",
+      authMethod: "api_key",
+    });
+
+    await expect(store.listCredentials("openai", "read-only")).resolves.toMatchObject([
+      {
+        connectionId: first.connectionId,
+        label: "Personal",
+      },
+      {
+        connectionId: second.connectionId,
+        label: "Work",
+      },
+    ]);
+    await expect(store.getCredential("openai", "read-only", second.connectionId)).resolves.toMatchObject({
+      secret: "FAKE_OPENAI_WORK_ADMIN_KEY",
+    });
+    await expect(store.listCredentialStatuses("openai", "read-only")).resolves.toEqual([
+      expect.objectContaining({
+        connectionId: first.connectionId,
+        label: "Personal",
+      }),
+      expect.objectContaining({
+        connectionId: second.connectionId,
+        label: "Work",
+      }),
+    ]);
+
+    await store.deleteCredential("openai", "read-only", first.connectionId);
+
+    await expect(store.listCredentials("openai", "read-only")).resolves.toEqual([
+      expect.objectContaining({
+        connectionId: second.connectionId,
+      }),
+    ]);
+  });
+
   it("reports an existing encrypted vault as locked when no passphrase is loaded", async () => {
     const dir = await mkdtemp(join(tmpdir(), "stackspend-credentials-"));
     const vaultPath = join(dir, "credentials-vault.json");

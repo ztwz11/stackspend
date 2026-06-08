@@ -37,6 +37,12 @@ describe("connection status", () => {
       connectionState: "credential_store_configured",
       credentialSource: "credential_store",
       readOnlyTestState: "credential_store_configured",
+      connections: [
+        expect.objectContaining({
+          label: "Default",
+          connectionState: "credential_store_configured",
+        }),
+      ],
     });
     expect(JSON.stringify(payload)).not.toContain("FAKE_OPENAI_ADMIN_KEY_FOR_TESTS");
     expect(JSON.stringify(payload)).not.toContain("fake-profile");

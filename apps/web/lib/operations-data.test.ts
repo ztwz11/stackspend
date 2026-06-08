@@ -58,6 +58,16 @@ describe("operations dashboard data", () => {
     expect(dashboard.summary.monthForecastAmountMinor).toBe(7975);
     expect(dashboard.summary.confirmedThroughYesterdayAmountMinor).toBe(1100);
     expect(dashboard.summary.todayLiveAmountMinor).toBeNull();
+    expect(dashboard.providers.map((provider) => provider.providerKey)).toEqual([
+      "aws",
+      "openai",
+      "supabase",
+      "cloudflare",
+    ]);
+    expect(dashboard.visibleProviders.map((provider) => provider.providerKey)).toEqual(["aws"]);
+    expect(dashboard.visibleConnections.map((connection) => `${connection.providerKey}:${connection.connectionId}`)).toEqual([
+      "aws:env",
+    ]);
     expect(dashboard.providers.find((provider) => provider.providerKey === "aws")).toMatchObject({
       connectionState: "env_configured",
       canonicalFreshness: "fresh",
@@ -82,6 +92,8 @@ describe("operations dashboard data", () => {
         providers: [
           {
             providerKey: "openai",
+            connectionId: "env",
+            connectionLabel: "Environment",
             checkedAt: "2026-06-05T03:00:00.000Z",
             expiresAt: "2026-06-05T03:01:00.000Z",
             ttlSeconds: 60,
@@ -93,6 +105,16 @@ describe("operations dashboard data", () => {
             currency: "USD",
             included: true,
             status: "ok",
+            usageSummary: {
+              kind: "llm_subscription",
+              period: "current_month",
+              metrics: [
+                { key: "input_tokens", value: 4200, unit: "tokens" },
+                { key: "output_tokens", value: 900, unit: "tokens" },
+                { key: "model_requests", value: 12, unit: "requests" },
+              ],
+              topServices: ["completions:gpt-5-mini"],
+            },
           },
         ],
       },
@@ -100,12 +122,38 @@ describe("operations dashboard data", () => {
 
     expect(dashboard.summary.todayLiveAmountMinor).toBe(321);
     expect(dashboard.summary.todayLiveIncludedProviderCount).toBe(1);
+    expect(dashboard.summary.confirmedThroughYesterdayAmountMinor).toBe(0);
+    expect(dashboard.visibleProviders.map((provider) => provider.providerKey)).toEqual(["openai"]);
+    expect(dashboard.visibleConnections.map((connection) => `${connection.providerKey}:${connection.connectionId}`)).toEqual([
+      "openai:env",
+    ]);
+    expect(dashboard.visibleConnections.find((connection) => connection.providerKey === "openai")).toMatchObject({
+      connectionLabel: "Environment",
+      todayLiveAmountMinor: 321,
+      currentUsageSummary: {
+        kind: "llm_subscription",
+      },
+    });
     expect(dashboard.providers.find((provider) => provider.providerKey === "openai")).toMatchObject({
       latestLiveCheck: "2026-06-05T03:00:00.000Z",
       todayLiveAmountMinor: 321,
       todayLiveIncluded: true,
       liveFreshness: "live",
       liveConfidence: "medium",
+      currentUsageSummary: {
+        kind: "llm_subscription",
+        metrics: [
+          { key: "input_tokens", value: 4200, unit: "tokens" },
+          { key: "output_tokens", value: 900, unit: "tokens" },
+          { key: "model_requests", value: 12, unit: "requests" },
+        ],
+      },
+      setupLinks: expect.arrayContaining([
+        expect.objectContaining({
+          href: "https://platform.openai.com/docs/api-reference/usage/cost",
+          valueHints: expect.arrayContaining(["organization usage"]),
+        }),
+      ]),
     });
     expect(JSON.stringify(dashboard)).not.toContain("FAKE_OPENAI_ADMIN_KEY_FOR_TESTS");
   });

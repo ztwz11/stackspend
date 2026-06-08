@@ -4,6 +4,7 @@ import {
   type ConnectionState,
   type ConnectionsStatusPayload,
   type EmergencyAccessState,
+  type ProviderCredentialConnectionStatus,
   type ProviderConnectionStatus,
 } from "./connection-status";
 import type {
@@ -19,11 +20,15 @@ import {
   AVAILABLE_PROVIDER_KEYS,
   findAvailableProvider,
   type LiveGranularity,
+  type ProviderSetupLink,
   type ProviderKey,
 } from "./provider-catalog";
 import {
   readLiveTodaySnapshot,
+  type LiveTodayFreshness,
+  type LiveTodayProviderSnapshot,
   type LiveTodaySnapshot,
+  type LiveTodayUsageSummary,
 } from "./live-today";
 
 export type CanonicalFreshness = "fresh" | "stale" | "missing";
@@ -36,6 +41,8 @@ export interface OperationsDashboard {
   timezone: string;
   summary: OperationsSummary;
   providers: OperationsProvider[];
+  visibleProviders: OperationsProvider[];
+  visibleConnections: OperationsProviderConnection[];
   risks: DashboardAlertItem[];
 }
 
@@ -54,6 +61,7 @@ export interface OperationsSummary {
 export interface OperationsProvider {
   providerKey: ProviderKey;
   displayName: string;
+  connections: readonly ProviderCredentialConnectionStatus[];
   connectionState: ConnectionState;
   credentialSource: ProviderConnectionStatus["credentialSource"];
   readOnlyTestState: ConnectionState;
@@ -63,10 +71,12 @@ export interface OperationsProvider {
   requiredEnvKeys: readonly string[];
   configuredEnvKeys: readonly string[];
   missingEnvKeys: readonly string[];
+  setupLinks: readonly ProviderSetupLink[];
   canonicalFreshness: CanonicalFreshness;
   liveFreshness: LiveFreshness;
   liveGranularity: LiveGranularity;
   liveConfidence: "high" | "medium" | "low" | "none";
+  currentUsageSummary: LiveTodayUsageSummary | null;
   latestCanonicalSync: string | null;
   latestLiveCheck: string | null;
   monthForecastAmountMinor: number;
@@ -78,6 +88,13 @@ export interface OperationsProvider {
   healthStatus: DashboardHealthStatus;
   riskLevel: DashboardRiskLevel;
   alertCount: number;
+  risks: DashboardAlertItem[];
+}
+
+export interface OperationsProviderConnection extends Omit<OperationsProvider, "connections" | "risks"> {
+  providerDisplayName: string;
+  connectionId: string;
+  connectionLabel: string;
   risks: DashboardAlertItem[];
 }
 
@@ -130,15 +147,21 @@ export function buildOperationsDashboard(
     const row = snapshot.providers.find((provider) => provider.providerKey === providerKey);
     const providerConfig = config.providers[providerKey];
     const connection = options.connections?.providers.find((item) => item.providerKey === providerKey);
-    const live = options.liveToday?.providers.find((item) => item.providerKey === providerKey);
+    const liveItems = options.liveToday?.providers.filter((item) => item.providerKey === providerKey) ?? [];
+    const liveSummary = summarizeProviderLive(
+      liveItems,
+      connection?.connectionState ?? (providerConfig.configured ? "env_configured" : "not_configured"),
+      catalog?.liveGranularity ?? "unavailable",
+      row?.currency ?? snapshot.summary.currency,
+    );
     const connectionState = connection?.connectionState ?? (providerConfig.configured ? "env_configured" : "not_configured");
     const canonicalFreshness = summarizeCanonicalFreshness(row, options.now, options.timezone);
-    const liveFreshness = live?.freshness ?? summarizeLiveFreshness(connectionState, catalog?.liveGranularity ?? "unavailable");
     const risks = snapshot.alerts.filter((alert) => alert.providerKey === providerKey);
 
     return {
       providerKey,
       displayName: row?.displayName ?? catalog?.name ?? providerKey,
+      connections: connection?.connections ?? [],
       connectionState,
       credentialSource: connection?.credentialSource ?? (connectionState === "env_configured" ? "env" : "none"),
       readOnlyTestState: connection?.readOnlyTestState ?? connectionState,
@@ -148,17 +171,19 @@ export function buildOperationsDashboard(
       requiredEnvKeys: connection?.requiredEnvKeys ?? providerConfig.requiredEnvKeys,
       configuredEnvKeys: connection?.configuredEnvKeys ?? providerConfig.configuredEnvKeys,
       missingEnvKeys: connection?.missingEnvKeys ?? providerConfig.missingEnvKeys,
+      setupLinks: catalog?.setupLinks ?? [],
       canonicalFreshness,
-      liveFreshness,
+      liveFreshness: liveSummary.freshness,
       liveGranularity: catalog?.liveGranularity ?? "unavailable",
-      liveConfidence: live?.confidence ?? "none",
+      liveConfidence: liveSummary.confidence,
+      currentUsageSummary: liveSummary.usageSummary,
       latestCanonicalSync: row?.latestCollectedAt ?? null,
-      latestLiveCheck: live?.checkedAt ?? null,
+      latestLiveCheck: liveSummary.checkedAt,
       monthForecastAmountMinor: row?.estimatedAmountMinor ?? 0,
       confirmedAmountMinor: row?.billingAmountMinor ?? 0,
-      todayLiveAmountMinor: live?.todayLiveAmountMinor ?? null,
-      todayLiveIncluded: live?.included ?? false,
-      currency: live?.currency ?? row?.currency ?? snapshot.summary.currency,
+      todayLiveAmountMinor: liveSummary.todayLiveAmountMinor,
+      todayLiveIncluded: liveSummary.included,
+      currency: liveSummary.currency,
       usageSnapshotCount: row?.usageSnapshotCount ?? 0,
       healthStatus: row?.healthStatus ?? "unknown",
       riskLevel: row?.riskLevel ?? "warning",
@@ -166,25 +191,35 @@ export function buildOperationsDashboard(
       risks,
     } satisfies OperationsProvider;
   });
+  const visibleProviders = providers.filter(isVisibleProvider);
+  const visibleConnections = providers.flatMap((provider) =>
+    buildProviderConnectionRows(provider, options.liveToday?.providers ?? [], snapshot.summary.currency)
+  );
   const canonicalCoverageDate = latestDateKey(
-    providers.map((provider) => provider.latestCanonicalSync).filter((value): value is string => value !== null),
+    visibleProviders.map((provider) => provider.latestCanonicalSync).filter((value): value is string => value !== null),
     options.timezone,
   );
-  const includedLiveProviders = providers.filter((provider) =>
+  const includedLiveProviders = visibleProviders.filter((provider) =>
     provider.todayLiveIncluded &&
     provider.todayLiveAmountMinor !== null &&
     provider.currency === snapshot.summary.currency
   );
   const todayLiveAmountMinor = sum(includedLiveProviders.map((provider) => provider.todayLiveAmountMinor ?? 0));
   const remainingDays = remainingDaysInMonth(options.now, options.timezone);
+  const confirmedThroughYesterdayAmountMinor = sum(
+    visibleProviders
+      .filter((provider) => provider.currency === snapshot.summary.currency)
+      .map((provider) => provider.confirmedAmountMinor),
+  );
   const projectedRemainingDays = projectedRemainingAmountMinor(
-    snapshot.summary.totalBillingAmountMinor,
+    confirmedThroughYesterdayAmountMinor,
     options.now,
     options.timezone,
     remainingDays,
   );
   const monthForecastAmountMinor =
-    snapshot.summary.totalBillingAmountMinor + todayLiveAmountMinor + projectedRemainingDays;
+    confirmedThroughYesterdayAmountMinor + todayLiveAmountMinor + projectedRemainingDays;
+  const visibleProviderKeys = new Set<string>(visibleProviders.map((provider) => provider.providerKey));
 
   return {
     generatedAt: snapshot.generatedAt,
@@ -194,16 +229,20 @@ export function buildOperationsDashboard(
     summary: {
       currency: snapshot.summary.currency,
       monthForecastAmountMinor,
-      confirmedThroughYesterdayAmountMinor: snapshot.summary.totalBillingAmountMinor,
+      confirmedThroughYesterdayAmountMinor,
       todayLiveAmountMinor: includedLiveProviders.length === 0 ? null : todayLiveAmountMinor,
       todayLiveIncludedProviderCount: includedLiveProviders.length,
-      todayLiveExcludedProviderCount: providers.length - includedLiveProviders.length,
-      providersNeedingAttention: providers.filter(providerNeedsAttention).length,
+      todayLiveExcludedProviderCount: visibleProviders.length - includedLiveProviders.length,
+      providersNeedingAttention: visibleProviders.filter(providerNeedsAttention).length,
       canonicalCoverageDate,
       remainingDaysInMonth: remainingDays,
     },
     providers,
-    risks: snapshot.alerts,
+    visibleProviders,
+    visibleConnections,
+    risks: snapshot.alerts.filter((alert) =>
+      alert.providerKey !== null && visibleProviderKeys.has(alert.providerKey)
+    ),
   };
 }
 
@@ -252,6 +291,170 @@ function summarizeLiveFreshness(connectionState: ConnectionState, liveGranularit
   return "stale";
 }
 
+function summarizeProviderLive(
+  liveItems: readonly LiveTodayProviderSnapshot[],
+  connectionState: ConnectionState,
+  liveGranularity: LiveGranularity,
+  fallbackCurrency: string,
+): {
+  freshness: LiveFreshness;
+  confidence: OperationsProvider["liveConfidence"];
+  usageSummary: LiveTodayUsageSummary | null;
+  checkedAt: string | null;
+  todayLiveAmountMinor: number | null;
+  included: boolean;
+  currency: string;
+} {
+  if (liveItems.length === 0) {
+    return {
+      freshness: summarizeLiveFreshness(connectionState, liveGranularity),
+      confidence: "none",
+      usageSummary: null,
+      checkedAt: null,
+      todayLiveAmountMinor: null,
+      included: false,
+      currency: fallbackCurrency,
+    };
+  }
+
+  const includedItems = liveItems.filter((item) => item.included && item.todayLiveAmountMinor !== null);
+  const currency = singleCurrency(includedItems.map((item) => item.currency)) ?? fallbackCurrency;
+  const canSumLive = includedItems.length > 0 && includedItems.every((item) => item.currency === currency);
+
+  return {
+    freshness: summarizeLiveItemsFreshness(liveItems, connectionState, liveGranularity),
+    confidence: highestConfidence(liveItems.map((item) => item.confidence)),
+    usageSummary: liveItems.find((item) => item.usageSummary !== undefined)?.usageSummary ?? null,
+    checkedAt: latestIso(liveItems.map((item) => item.checkedAt).filter((value): value is string => value !== null)),
+    todayLiveAmountMinor: canSumLive ? sum(includedItems.map((item) => item.todayLiveAmountMinor ?? 0)) : null,
+    included: canSumLive,
+    currency,
+  };
+}
+
+function summarizeLiveItemsFreshness(
+  liveItems: readonly LiveTodayProviderSnapshot[],
+  connectionState: ConnectionState,
+  liveGranularity: LiveGranularity,
+): LiveFreshness {
+  if (liveItems.some((item) => item.freshness === "live")) {
+    return "live";
+  }
+
+  const ordered: readonly LiveTodayFreshness[] = [
+    "error",
+    "locked",
+    "stale",
+    "unavailable",
+    "not_configured",
+  ];
+  const found = ordered.find((freshness) => liveItems.some((item) => item.freshness === freshness));
+
+  return found ?? summarizeLiveFreshness(connectionState, liveGranularity);
+}
+
+function buildProviderConnectionRows(
+  provider: OperationsProvider,
+  liveItems: readonly LiveTodayProviderSnapshot[],
+  fallbackCurrency: string,
+): OperationsProviderConnection[] {
+  const envConnection: ProviderCredentialConnectionStatus[] = provider.connectionState === "env_configured"
+    ? [{
+        connectionId: "env",
+        label: "Environment",
+        active: true,
+        connectionState: "env_configured" as const,
+        credentialSource: "env" as const,
+        readOnlyTestState: "env_configured" as const,
+        credentialStore: {
+          backend: "memory" as const,
+          storeState: "ready" as const,
+          readOnlyState: "not_configured" as const,
+        },
+      } satisfies ProviderCredentialConnectionStatus]
+    : [];
+  const connectionRows = [...envConnection, ...provider.connections].filter(
+    (connection) => connection.connectionState !== "not_configured",
+  );
+
+  return connectionRows.map((connection) => {
+    const live = liveItems.find((item) =>
+      item.providerKey === provider.providerKey && item.connectionId === connection.connectionId
+    );
+    const liveFreshness = live?.freshness ??
+      summarizeLiveFreshness(connection.connectionState, provider.liveGranularity);
+
+    return {
+      providerKey: provider.providerKey,
+      providerDisplayName: provider.displayName,
+      connectionId: connection.connectionId,
+      connectionLabel: connection.label,
+      displayName: `${provider.displayName} / ${connection.label}`,
+      connectionState: connection.connectionState,
+      credentialSource: connection.credentialSource,
+      readOnlyTestState: connection.readOnlyTestState,
+      emergencyAccessState: provider.emergencyAccessState,
+      authMethod: connection.authMethod ?? provider.authMethod,
+      credentialRequirements: provider.credentialRequirements,
+      requiredEnvKeys: provider.requiredEnvKeys,
+      configuredEnvKeys: provider.configuredEnvKeys,
+      missingEnvKeys: provider.missingEnvKeys,
+      setupLinks: provider.setupLinks,
+      canonicalFreshness: "missing",
+      liveFreshness,
+      liveGranularity: provider.liveGranularity,
+      liveConfidence: live?.confidence ?? "none",
+      currentUsageSummary: live?.usageSummary ?? null,
+      latestCanonicalSync: null,
+      latestLiveCheck: live?.checkedAt ?? null,
+      monthForecastAmountMinor: live?.todayLiveAmountMinor ?? 0,
+      confirmedAmountMinor: 0,
+      todayLiveAmountMinor: live?.todayLiveAmountMinor ?? null,
+      todayLiveIncluded: live?.included ?? false,
+      currency: live?.currency ?? fallbackCurrency,
+      usageSnapshotCount: 0,
+      healthStatus: provider.healthStatus,
+      riskLevel: provider.riskLevel,
+      alertCount: provider.alertCount,
+      risks: provider.risks,
+    } satisfies OperationsProviderConnection;
+  });
+}
+
+function highestConfidence(
+  values: readonly OperationsProvider["liveConfidence"][],
+): OperationsProvider["liveConfidence"] {
+  if (values.includes("high")) {
+    return "high";
+  }
+
+  if (values.includes("medium")) {
+    return "medium";
+  }
+
+  if (values.includes("low")) {
+    return "low";
+  }
+
+  return "none";
+}
+
+function singleCurrency(values: readonly string[]): string | null {
+  if (values.length === 0) {
+    return null;
+  }
+
+  const currencies = new Set(values);
+
+  return currencies.size === 1 ? values[0] ?? null : null;
+}
+
+function latestIso(values: readonly string[]): string | null {
+  return values.length === 0
+    ? null
+    : [...values].sort((first, second) => second.localeCompare(first))[0] ?? null;
+}
+
 function providerNeedsAttention(provider: OperationsProvider): boolean {
   return (
     provider.canonicalFreshness !== "fresh"
@@ -259,6 +462,10 @@ function providerNeedsAttention(provider: OperationsProvider): boolean {
     || provider.riskLevel !== "low"
     || provider.healthStatus !== "ok"
   );
+}
+
+function isVisibleProvider(provider: OperationsProvider): boolean {
+  return provider.connectionState !== "not_configured";
 }
 
 function latestDateKey(values: readonly string[], timezone: string): string | null {

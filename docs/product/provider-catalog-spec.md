@@ -88,12 +88,14 @@ Route:
 Connections show:
 
 - provider.
+- saved read-only connections for the provider.
 - auth method.
 - configured state.
 - credential source.
 - read-only test status.
 - emergency access state.
 - required env key names or credential requirements.
+- static setup links to provider documentation for finding or creating the required values.
 
 Connection states:
 
@@ -125,10 +127,14 @@ Create a shared credential abstraction:
 
 - package: `packages/credentials`.
 - interface:
-  - `getCredential(provider, scope)`.
-  - `setCredential(provider, scope, secret)`.
-  - `deleteCredential(provider, scope)`.
+  - `listCredentials(provider, scope)`.
+  - `getCredential(provider, scope, connectionId?)`.
+  - `setCredential(provider, scope, secretOrConnectionInput)`.
+  - `deleteCredential(provider, scope, connectionId?)`.
+  - `listCredentialStatuses(provider, scope)`.
   - `testCredentialStore()`.
+
+Credentials are stored per provider, scope, and connection id. A provider can have multiple read-only keys or accounts. Deleting from the UI removes only the selected local connection, not all credentials for the provider.
 
 Backends:
 
@@ -162,6 +168,7 @@ OpenAI:
 - support Admin API key input.
 - store in credential store.
 - validate Usage/Costs read-only access.
+- show sanitized current-period LLM usage totals when live usage data is available.
 - never redisplay the key.
 
 Supabase:

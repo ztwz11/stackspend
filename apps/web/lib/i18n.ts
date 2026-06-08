@@ -47,6 +47,9 @@ export interface Messages {
     provisional: string;
     partial: string;
     noLiveValue: string;
+    groupBy: string;
+    groupByService: string;
+    groupByConnection: string;
   };
   services: {
     title: string;
@@ -69,6 +72,13 @@ export interface Messages {
     emergencyPlanned: string;
     viewRequirements: string;
     readOnly: string;
+    currentUsage: string;
+    currentPeriod: string;
+    topServices: string;
+    inputTokens: string;
+    outputTokens: string;
+    modelRequests: string;
+    noCurrentUsage: string;
   };
   catalog: {
     title: string;
@@ -96,9 +106,17 @@ export interface Messages {
     readOnlyTest: string;
     emergencyAccess: string;
     requiredEnv: string;
+    requiredValueLinks: string;
+    setupLinks: string;
     actions: string;
+    savedConnections: string;
+    connectionLabel: string;
+    connectionId: string;
     credentialSecret: string;
     accountIds: string;
+    openAiAdminKeyHint: string;
+    credentialSaveError: string;
+    credentialDeleteError: string;
     saveCredential: string;
     removeCredential: string;
     startOAuth: string;
@@ -145,7 +163,7 @@ export const messages = {
       dashboard: "Dashboard",
       services: "Services",
       settings: "Settings",
-      overview: "Overview",
+      overview: "Dashboard",
       today: "Today Live",
       forecast: "Forecast",
       risks: "Risks",
@@ -155,7 +173,7 @@ export const messages = {
       providers: "Provider catalog",
     },
     dashboard: {
-      overviewTitle: "Overview",
+      overviewTitle: "Dashboard",
       overviewSubtitle: "Month forecast first, with today's live data kept provisional.",
       monthForecast: "Month forecast",
       confirmedThroughYesterday: "Confirmed through yesterday",
@@ -175,6 +193,9 @@ export const messages = {
       provisional: "Provisional",
       partial: "Partial",
       noLiveValue: "No live value",
+      groupBy: "Group by",
+      groupByService: "Services",
+      groupByConnection: "Connections",
     },
     services: {
       title: "All services",
@@ -197,6 +218,13 @@ export const messages = {
       emergencyPlanned: "Planned only. Write actions are not available in this build.",
       viewRequirements: "View requirements",
       readOnly: "read-only",
+      currentUsage: "Current usage",
+      currentPeriod: "Current period",
+      topServices: "Top services",
+      inputTokens: "Input tokens",
+      outputTokens: "Output tokens",
+      modelRequests: "Model requests",
+      noCurrentUsage: "No current usage",
     },
     catalog: {
       title: "Provider catalog",
@@ -224,9 +252,17 @@ export const messages = {
       readOnlyTest: "Read-only test",
       emergencyAccess: "Emergency access",
       requiredEnv: "Required env",
+      requiredValueLinks: "Required value links",
+      setupLinks: "Setup links",
       actions: "Actions",
+      savedConnections: "Saved connections",
+      connectionLabel: "Connection label",
+      connectionId: "Connection ID",
       credentialSecret: "Credential",
       accountIds: "Account IDs",
+      openAiAdminKeyHint: "Use an OpenAI Admin API key with organization usage and costs access.",
+      credentialSaveError: "Credential was not saved.",
+      credentialDeleteError: "Credential was not removed.",
       saveCredential: "Save",
       removeCredential: "Remove local",
       startOAuth: "OAuth",
@@ -284,7 +320,7 @@ export const messages = {
     },
     empty: {
       noDatabase: "Run the CLI sync pipeline to create local dashboard data. A safe empty state is shown.",
-      noProviders: "No local provider data yet.",
+      noProviders: "No saved services yet. Add one from Connections.",
       noRisks: "No risks found in local data.",
     },
   },
@@ -303,7 +339,7 @@ export const messages = {
       dashboard: "대시보드",
       services: "서비스",
       settings: "설정",
-      overview: "개요",
+      overview: "대시보드",
       today: "오늘 실시간",
       forecast: "예상",
       risks: "리스크",
@@ -313,7 +349,7 @@ export const messages = {
       providers: "프로바이더 카탈로그",
     },
     dashboard: {
-      overviewTitle: "개요",
+      overviewTitle: "대시보드",
       overviewSubtitle: "이번 달 예상 비용을 먼저 보고, 오늘 값은 임시 데이터로 분리합니다.",
       monthForecast: "이번 달 예상",
       confirmedThroughYesterday: "어제까지 확정",
@@ -333,6 +369,9 @@ export const messages = {
       provisional: "임시",
       partial: "부분",
       noLiveValue: "실시간 값 없음",
+      groupBy: "보기 기준",
+      groupByService: "서비스",
+      groupByConnection: "연결",
     },
     services: {
       title: "전체 서비스",
@@ -355,6 +394,13 @@ export const messages = {
       emergencyPlanned: "계획된 기능입니다. 이 빌드에서는 write action을 실행할 수 없습니다.",
       viewRequirements: "요구사항 보기",
       readOnly: "읽기 전용",
+      currentUsage: "현재 사용량",
+      currentPeriod: "현재 기간",
+      topServices: "상위 서비스",
+      inputTokens: "입력 토큰",
+      outputTokens: "출력 토큰",
+      modelRequests: "모델 요청",
+      noCurrentUsage: "현재 사용량 없음",
     },
     catalog: {
       title: "프로바이더 카탈로그",
@@ -382,9 +428,17 @@ export const messages = {
       readOnlyTest: "읽기 전용 테스트",
       emergencyAccess: "긴급 권한",
       requiredEnv: "필수 env",
+      requiredValueLinks: "필요 값 확인 링크",
+      setupLinks: "설정 링크",
       actions: "작업",
+      savedConnections: "저장된 연결",
+      connectionLabel: "연결 이름",
+      connectionId: "연결 ID",
       credentialSecret: "자격 증명",
       accountIds: "계정 ID",
+      openAiAdminKeyHint: "조직 사용량과 비용 조회 권한이 있는 OpenAI Admin API key가 필요합니다.",
+      credentialSaveError: "자격 증명이 저장되지 않았습니다.",
+      credentialDeleteError: "자격 증명이 삭제되지 않았습니다.",
       saveCredential: "저장",
       removeCredential: "로컬 제거",
       startOAuth: "OAuth",
@@ -442,7 +496,7 @@ export const messages = {
     },
     empty: {
       noDatabase: "CLI sync를 실행하면 로컬 대시보드 데이터가 생성됩니다. 지금은 안전한 빈 상태를 표시합니다.",
-      noProviders: "아직 로컬 서비스 데이터가 없습니다.",
+      noProviders: "아직 저장된 서비스가 없습니다. 연결 메뉴에서 서비스를 추가하세요.",
       noRisks: "로컬 데이터에서 리스크가 발견되지 않았습니다.",
     },
   },
@@ -461,7 +515,7 @@ export const messages = {
       dashboard: "ダッシュボード",
       services: "サービス",
       settings: "設定",
-      overview: "概要",
+      overview: "ダッシュボード",
       today: "今日のライブ",
       forecast: "予測",
       risks: "リスク",
@@ -471,7 +525,7 @@ export const messages = {
       providers: "プロバイダーカタログ",
     },
     dashboard: {
-      overviewTitle: "概要",
+      overviewTitle: "ダッシュボード",
       overviewSubtitle: "月次予測を中心に、今日の値は暫定データとして分離します。",
       monthForecast: "月次予測",
       confirmedThroughYesterday: "昨日まで確定",
@@ -491,6 +545,9 @@ export const messages = {
       provisional: "暫定",
       partial: "一部",
       noLiveValue: "ライブ値なし",
+      groupBy: "表示単位",
+      groupByService: "サービス",
+      groupByConnection: "接続",
     },
     services: {
       title: "全サービス",
@@ -513,6 +570,13 @@ export const messages = {
       emergencyPlanned: "計画中の機能です。このビルドでは write action は実行できません。",
       viewRequirements: "要件を見る",
       readOnly: "読み取り専用",
+      currentUsage: "現在の使用量",
+      currentPeriod: "現在の期間",
+      topServices: "上位サービス",
+      inputTokens: "入力トークン",
+      outputTokens: "出力トークン",
+      modelRequests: "モデルリクエスト",
+      noCurrentUsage: "現在の使用量なし",
     },
     catalog: {
       title: "プロバイダーカタログ",
@@ -540,9 +604,17 @@ export const messages = {
       readOnlyTest: "読み取り専用テスト",
       emergencyAccess: "緊急権限",
       requiredEnv: "必須 env",
+      requiredValueLinks: "必要な値のリンク",
+      setupLinks: "設定リンク",
       actions: "操作",
+      savedConnections: "保存済み接続",
+      connectionLabel: "接続名",
+      connectionId: "接続 ID",
       credentialSecret: "認証情報",
       accountIds: "アカウント ID",
+      openAiAdminKeyHint: "組織の使用量とコストを読める OpenAI Admin API key が必要です。",
+      credentialSaveError: "認証情報は保存されませんでした。",
+      credentialDeleteError: "認証情報は削除されませんでした。",
       saveCredential: "保存",
       removeCredential: "ローカルから外す",
       startOAuth: "OAuth",
@@ -600,7 +672,7 @@ export const messages = {
     },
     empty: {
       noDatabase: "CLI sync を実行するとローカルダッシュボードデータが作成されます。現在は安全な空状態を表示しています。",
-      noProviders: "ローカルサービスデータはまだありません。",
+      noProviders: "保存済みサービスはまだありません。接続メニューから追加してください。",
       noRisks: "ローカルデータにリスクはありません。",
     },
   },

@@ -5,10 +5,20 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
 /** @type {import("next").NextConfig} */
 const nextConfig = {
+  serverExternalPackages: ["@napi-rs/keyring"],
   turbopack: {
     root: repoRoot,
   },
-  webpack(config) {
+  webpack(config, { isServer }) {
+    if (isServer) {
+      config.externals = [
+        ...(Array.isArray(config.externals) ? config.externals : [config.externals].filter(Boolean)),
+        {
+          "@napi-rs/keyring": "commonjs @napi-rs/keyring",
+        },
+      ];
+    }
+
     config.resolve.extensionAlias = {
       ...config.resolve.extensionAlias,
       ".js": [".ts", ".tsx", ".js"],

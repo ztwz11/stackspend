@@ -35,6 +35,16 @@ describe("live today cache", () => {
       currency: "USD",
       included: true,
       confidence: "medium",
+      usageSummary: {
+        kind: "llm_subscription",
+        period: "current_month",
+        metrics: [
+          { key: "input_tokens", value: 1200, unit: "tokens" },
+          { key: "output_tokens", value: 300, unit: "tokens" },
+          { key: "model_requests", value: 7, unit: "requests" },
+        ],
+        topServices: ["completions:gpt-5-mini"],
+      },
     });
 
     const refreshed = await refreshLiveToday({
@@ -52,6 +62,14 @@ describe("live today cache", () => {
       provisional: true,
       todayLiveAmountMinor: 1234,
       included: true,
+      usageSummary: {
+        kind: "llm_subscription",
+        metrics: [
+          { key: "input_tokens", value: 1200, unit: "tokens" },
+          { key: "output_tokens", value: 300, unit: "tokens" },
+          { key: "model_requests", value: 7, unit: "requests" },
+        ],
+      },
     });
     expect(JSON.stringify(refreshed)).not.toContain("FAKE_OPENAI_ADMIN_KEY_FOR_TESTS");
 
@@ -66,6 +84,9 @@ describe("live today cache", () => {
       freshness: "stale",
       included: false,
       todayLiveAmountMinor: 1234,
+      usageSummary: {
+        kind: "llm_subscription",
+      },
     });
   });
 
@@ -95,5 +116,69 @@ describe("live today cache", () => {
       included: false,
       status: "partial",
     });
+  });
+
+  it("keeps separate live cache entries for multiple provider connections", async () => {
+    const store = createMemoryCredentialStore({
+      now: () => NOW,
+    });
+    await store.setCredential("openai", "read-only", {
+      connectionId: "conn_personal",
+      label: "Personal",
+      secret: "FAKE_OPENAI_PERSONAL_ADMIN_KEY",
+      authMethod: "api_key",
+    });
+    await store.setCredential("openai", "read-only", {
+      connectionId: "conn_work",
+      label: "Work",
+      secret: "FAKE_OPENAI_WORK_ADMIN_KEY",
+      authMethod: "api_key",
+    });
+    const connections = await readConnectionsStatus({
+      credentialStore: store,
+      now: () => NOW,
+    });
+    const seenConnectionIds: string[] = [];
+
+    const snapshot = await refreshLiveToday({
+      connections,
+      credentialStore: store,
+      now: () => NOW,
+      collectors: {
+        openai: async (context) => {
+          const connectionId = context.credentialConnection?.connectionId ?? "missing";
+          seenConnectionIds.push(connectionId);
+
+          return {
+            providerKey: "openai",
+            connectionId,
+            ...(context.credentialConnection?.label === undefined
+              ? {}
+              : { connectionLabel: context.credentialConnection.label }),
+            status: "ok",
+            checkedAt: NOW.toISOString(),
+            todayLiveAmountMinor: connectionId === "conn_work" ? 200 : 100,
+            currency: "USD",
+            included: true,
+            confidence: "medium",
+          };
+        },
+      },
+    });
+    const openAiSnapshots = snapshot.providers.filter((provider) => provider.providerKey === "openai");
+
+    expect(seenConnectionIds.sort()).toEqual(["conn_personal", "conn_work"]);
+    expect(openAiSnapshots).toEqual([
+      expect.objectContaining({
+        connectionId: "conn_personal",
+        connectionLabel: "Personal",
+        todayLiveAmountMinor: 100,
+      }),
+      expect.objectContaining({
+        connectionId: "conn_work",
+        connectionLabel: "Work",
+        todayLiveAmountMinor: 200,
+      }),
+    ]);
   });
 });

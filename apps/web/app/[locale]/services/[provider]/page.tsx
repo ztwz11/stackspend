@@ -20,7 +20,7 @@ export default async function ServiceDetailPage({ params }: PageProps) {
   const { locale, provider: providerKey } = await readParams(params);
   const messages = getMessages(locale);
   const dashboard = await readOperationsDashboard();
-  const provider = dashboard.providers.find((item) => item.providerKey === providerKey);
+  const provider = dashboard.visibleProviders.find((item) => item.providerKey === providerKey);
 
   if (provider === undefined) {
     notFound();

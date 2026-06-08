@@ -1,6 +1,6 @@
 import {
-  DashboardTabs,
   PageHeader,
+  type DashboardGrouping,
   RisksView,
 } from "../../../../components/OperationsViews";
 import { getMessages, isLocale, type Locale } from "../../../../lib/i18n";
@@ -10,20 +10,29 @@ interface PageProps {
   params: Promise<{
     locale: string;
   }>;
+  searchParams?: Promise<{
+    group?: string | string[];
+  }>;
 }
 
 export const dynamic = "force-dynamic";
 
-export default async function RisksPage({ params }: PageProps) {
+export default async function RisksPage({ params, searchParams }: PageProps) {
   const locale = await readLocale(params);
+  const grouping = await readGrouping(searchParams);
   const messages = getMessages(locale);
   const dashboard = await readOperationsDashboard();
 
   return (
     <>
       <PageHeader title={messages.dashboard.risksTitle} subtitle={messages.dashboard.risksSubtitle} />
-      <DashboardTabs locale={locale} messages={messages} active="risks" />
-      <RisksView dashboard={dashboard} locale={locale} messages={messages} />
+      <RisksView
+        dashboard={dashboard}
+        locale={locale}
+        messages={messages}
+        grouping={grouping}
+        groupingBasePath={`/${locale}/dashboard/risks`}
+      />
     </>
   );
 }
@@ -32,4 +41,11 @@ async function readLocale(params: PageProps["params"]): Promise<Locale> {
   const { locale } = await params;
 
   return isLocale(locale) ? locale : "en";
+}
+
+async function readGrouping(searchParams: PageProps["searchParams"]): Promise<DashboardGrouping> {
+  const group = (await searchParams)?.group;
+  const value = Array.isArray(group) ? group[0] : group;
+
+  return value === "connection" ? "connection" : "service";
 }

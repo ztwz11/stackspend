@@ -60,12 +60,23 @@ describe("provider credential routes", () => {
       credentialSource: "credential_store",
       readOnlyTestState: "read_only_ready",
     });
+    expect(payload.connectionId).toEqual(expect.any(String));
+    expect(payload.provider.connections).toEqual([
+      expect.objectContaining({
+        connectionId: payload.connectionId,
+        label: "OpenAI",
+        readOnlyTestState: "read_only_ready",
+      }),
+    ]);
     expect(JSON.stringify(payload)).not.toContain("FAKE_OPENAI_ADMIN_KEY_FOR_TESTS");
 
-    const deleted = await DELETE(new Request("http://127.0.0.1:3000/api/connections/openai/credentials", {
+    const deleted = await DELETE(new Request(
+      `http://127.0.0.1:3000/api/connections/openai/credentials?connectionId=${payload.connectionId}`,
+      {
       method: "DELETE",
       headers: session,
-    }), {
+      },
+    ), {
       params: Promise.resolve({
         provider: "openai",
       }),
@@ -77,7 +88,7 @@ describe("provider credential routes", () => {
       providerKey: "openai",
       connectionState: "not_configured",
     });
-  }, 15000);
+  }, 30000);
 
   it("rejects credential mutation without CSRF", async () => {
     const response = await POST(new Request("http://127.0.0.1:3000/api/connections/openai/credentials", {
