@@ -18,6 +18,8 @@ export const PROVIDER_KEYS = [
   "mongodb-atlas",
   "datadog",
   "sentry",
+  "codex-cli",
+  "claude-cli",
 ] as const;
 
 export const LIVE_PROVIDER_KEYS = ["aws", "openai", "supabase", "cloudflare"] as const;
@@ -70,10 +72,22 @@ export const providerCatalog: readonly ProviderCatalogItem[] = [
     credentialRequirements: ["AWS_PROFILE or SDK default credential chain outside StackSpend"],
     setupLinks: [
       {
+        label: "Install AWS CLI",
+        href: "https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html",
+        description: "Install AWS CLI v2 before creating a local profile or IAM Identity Center login.",
+        valueHints: ["aws --version", "Windows MSI", "AWS CLI v2"],
+      },
+      {
         label: "AWS Cost Management console",
         href: "https://console.aws.amazon.com/costmanagement/home#/cost-explorer",
         description: "Open Cost Explorer and confirm Cost Management access for the local AWS profile.",
         valueHints: ["AWS_PROFILE", "ce:GetCostAndUsage", "ce:GetCostForecast"],
+      },
+      {
+        label: "AWS IAM Identity Center SSO",
+        href: "https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-sso.html",
+        description: "Create a local SSO profile that StackSpend can read through AWS_PROFILE.",
+        valueHints: ["aws configure sso", "aws sso login", "AWS_PROFILE"],
       },
       {
         label: "AWS CLI profiles",
@@ -191,12 +205,30 @@ export const providerCatalog: readonly ProviderCatalogItem[] = [
     name: "GCP",
     category: "Cloud",
     status: "planned",
-    authMethods: ["Application Default Credentials", "Service account"],
+    authMethods: ["Google Cloud CLI", "Application Default Credentials", "Service account"],
     dataSurfaces: ["cost", "usage", "forecast"],
     liveGranularity: "unavailable",
     requiredEnvKeys: ["GOOGLE_APPLICATION_CREDENTIALS", "GOOGLE_CLOUD_PROJECT"],
-    credentialRequirements: ["Google Application Default Credentials or service account key"],
+    credentialRequirements: ["Google Cloud CLI auth plus Application Default Credentials or service account key"],
     setupLinks: [
+      {
+        label: "Install Google Cloud CLI",
+        href: "https://docs.cloud.google.com/sdk/docs/install",
+        description: "Install gcloud before configuring local Google Cloud auth.",
+        valueHints: ["gcloud --version", "gcloud init"],
+      },
+      {
+        label: "Authenticate gcloud CLI",
+        href: "https://docs.cloud.google.com/docs/authentication/gcloud",
+        description: "Sign in to Google Cloud CLI and select the local project.",
+        valueHints: ["gcloud auth login", "gcloud config set project"],
+      },
+      {
+        label: "Application Default Credentials",
+        href: "https://docs.cloud.google.com/sdk/gcloud/reference/auth/application-default/login",
+        description: "Create local ADC credentials for Google SDK reads without storing keys in StackSpend.",
+        valueHints: ["gcloud auth application-default login", "application_default_credentials.json"],
+      },
       {
         label: "Service accounts",
         href: "https://console.cloud.google.com/iam-admin/serviceaccounts",
@@ -582,6 +614,44 @@ export const providerCatalog: readonly ProviderCatalogItem[] = [
         href: "https://docs.sentry.io/hosted/api/auth/",
         description: "Review Sentry API token usage and scopes.",
         valueHints: ["org:read", "project:read"],
+      },
+    ],
+  },
+  {
+    key: "codex-cli",
+    name: "Codex CLI",
+    category: "AI",
+    status: "available",
+    authMethods: ["Local CLI"],
+    dataSurfaces: ["usage", "health"],
+    liveGranularity: "usage_only",
+    requiredEnvKeys: ["STACKSPEND_CODEX_CLI_USAGE"],
+    credentialRequirements: ["Local codex command or Codex session logs"],
+    setupLinks: [
+      {
+        label: "Codex CLI command",
+        href: "https://help.openai.com/en/articles/11096431",
+        description: "Install or inspect the local Codex CLI used for local usage estimates.",
+        valueHints: ["codex --version", "CODEX_HOME", ".codex/sessions"],
+      },
+    ],
+  },
+  {
+    key: "claude-cli",
+    name: "Claude CLI",
+    category: "AI",
+    status: "available",
+    authMethods: ["Local CLI"],
+    dataSurfaces: ["usage", "health"],
+    liveGranularity: "usage_only",
+    requiredEnvKeys: ["STACKSPEND_CLAUDE_CLI_USAGE"],
+    credentialRequirements: ["Local claude command or Claude Code project logs"],
+    setupLinks: [
+      {
+        label: "Claude CLI command",
+        href: "https://docs.anthropic.com/en/docs/claude-code/cli-usage",
+        description: "Install or inspect the local Claude CLI used for local usage estimates.",
+        valueHints: ["claude --version", "CLAUDE_CONFIG_DIR", ".claude/projects"],
       },
     ],
   },

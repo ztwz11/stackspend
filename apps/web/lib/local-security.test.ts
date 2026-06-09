@@ -31,6 +31,40 @@ describe("local dashboard security helpers", () => {
     expect(localSessionCookie(session)).not.toContain(session.csrfToken);
   });
 
+  it("validates a local session even when route-local memory was cleared", () => {
+    const session = createLocalSession(new Date("2026-06-08T00:00:00.000Z"));
+    const cookie = localSessionCookie(session);
+    clearLocalSecurityState();
+    const request = new Request("http://127.0.0.1:3000/api/local-tools/aws/profile", {
+      method: "POST",
+      headers: {
+        host: "127.0.0.1:3000",
+        origin: "http://127.0.0.1:3000",
+        cookie,
+        "x-stackspend-csrf": session.csrfToken,
+      },
+    });
+
+    expect(requireLocalSession(request, new Date("2026-06-08T00:01:00.000Z"))).toMatchObject({
+      sessionId: session.sessionId,
+    });
+  });
+
+  it("rejects a signed local session when the CSRF header does not match", () => {
+    const session = createLocalSession(new Date("2026-06-08T00:00:00.000Z"));
+    const request = new Request("http://127.0.0.1:3000/api/local-tools/aws/profile", {
+      method: "POST",
+      headers: {
+        host: "127.0.0.1:3000",
+        origin: "http://127.0.0.1:3000",
+        cookie: localSessionCookie(session),
+        "x-stackspend-csrf": "wrong-csrf-token",
+      },
+    });
+
+    expect(() => requireLocalSession(request, new Date("2026-06-08T00:01:00.000Z"))).toThrow("invalid");
+  });
+
   it("rejects non-local origins", () => {
     const session = createLocalSession();
     const request = new Request("http://127.0.0.1:3000/api/connections/openai/credentials", {

@@ -10,6 +10,11 @@ import {
   findAvailableProvider,
   type ProviderKey,
 } from "./provider-catalog";
+import {
+  readLocalAiCliStatus,
+  type LocalAiCliProviderStatus,
+  type LocalAiCliStatusPayload,
+} from "./local-tools";
 
 export type ConnectionState =
   | "not_configured"
@@ -75,6 +80,7 @@ export interface ReadConnectionsStatusOptions {
   env?: Record<string, string | undefined>;
   now?: () => Date;
   credentialStore?: CredentialStore;
+  localAiCliStatus?: LocalAiCliStatusPayload;
 }
 
 export async function readConnectionsStatus(
@@ -84,18 +90,24 @@ export async function readConnectionsStatus(
   const now = options.now ?? (() => new Date());
   const credentialStore = options.credentialStore ?? createDefaultCredentialStore({ env, now });
   const config = loadStackSpendConfig(env);
+  const localAiCliStatus = options.localAiCliStatus ?? await readLocalAiCliStatus({
+    env,
+    now,
+  });
   const providers = await Promise.all(
     CONNECTABLE_PROVIDER_KEYS.map(async (providerKey) => {
       const readOnlyStatus = await credentialStore.getCredentialStatus(providerKey, "read-only");
       const readOnlyStatuses = await credentialStore.listCredentialStatuses(providerKey, "read-only");
       const emergencyStatus = await credentialStore.getCredentialStatus(providerKey, "emergency");
       const providerConfig = config.providers[providerKey];
-      const envConfigured = isProviderEnvConfigured(providerKey, env, providerConfig.configured);
+      const localCliProvider = localAiCliStatus.providers.find((item) => item.providerKey === providerKey);
+      const envConfigured = isProviderEnvConfigured(providerKey, env, providerConfig.configured, localCliProvider);
       const connections = readOnlyStatuses
         .filter((status) => status.connectionId !== undefined && status.label !== undefined)
         .map((status) => credentialConnectionStatusFor(status));
       const connectionState = summarizeProviderConnectionState(envConfigured, readOnlyStatus, connections);
       const catalog = findAvailableProvider(providerKey);
+      const readOnlyTestState = summarizeProviderReadOnlyTestState(connectionState, readOnlyStatus, connections);
 
       return {
         providerKey,
@@ -103,12 +115,12 @@ export async function readConnectionsStatus(
         authMethod: catalog?.authMethods.join(" / ") ?? "Unknown",
         connectionState,
         credentialSource: credentialSourceFor(connectionState),
-        readOnlyTestState: summarizeProviderReadOnlyTestState(connectionState, readOnlyStatus, connections),
+        readOnlyTestState: localCliProvider !== undefined && envConfigured ? "read_only_ready" : readOnlyTestState,
         emergencyAccessState: "emergency_planned",
         connections,
         requiredEnvKeys: providerConfig.requiredEnvKeys,
-        configuredEnvKeys: redactedConfiguredEnvKeys(providerKey, env, providerConfig.configuredEnvKeys),
-        missingEnvKeys: providerConfig.missingEnvKeys,
+        configuredEnvKeys: configuredEnvKeysForProvider(providerKey, env, providerConfig.configuredEnvKeys, localCliProvider),
+        missingEnvKeys: missingEnvKeysForProvider(providerConfig.missingEnvKeys, localCliProvider, envConfigured),
         credentialRequirements: catalog?.credentialRequirements ?? [],
         credentialStore: {
           backend: readOnlyStatus.backend,
@@ -251,7 +263,14 @@ function isProviderEnvConfigured(
   providerKey: ProviderKey,
   env: Record<string, string | undefined>,
   configConfigured: boolean,
+  localCliProvider?: LocalAiCliProviderStatus,
 ): boolean {
+  if (localCliProvider !== undefined) {
+    return localCliProvider.cli.state === "installed" ||
+      localCliProvider.usage.logFileCount > 0 ||
+      configConfigured;
+  }
+
   if (providerKey !== "aws") {
     return configConfigured;
   }
@@ -261,11 +280,26 @@ function isProviderEnvConfigured(
     configConfigured;
 }
 
-function redactedConfiguredEnvKeys(
+function configuredEnvKeysForProvider(
   providerKey: ProviderKey,
   env: Record<string, string | undefined>,
   configuredEnvKeys: readonly string[],
+  localCliProvider?: LocalAiCliProviderStatus,
 ): readonly string[] {
+  if (localCliProvider !== undefined) {
+    const keys = new Set(configuredEnvKeys);
+
+    if (localCliProvider.cli.state === "installed") {
+      keys.add(`${localCliProvider.command} command`);
+    }
+
+    if (localCliProvider.usage.logFileCount > 0) {
+      keys.add(localCliProvider.usage.source);
+    }
+
+    return [...keys].sort();
+  }
+
   if (providerKey !== "aws") {
     return configuredEnvKeys;
   }
@@ -278,6 +312,18 @@ function redactedConfiguredEnvKeys(
   }
 
   return [...keys].sort();
+}
+
+function missingEnvKeysForProvider(
+  missingEnvKeys: readonly string[],
+  localCliProvider: LocalAiCliProviderStatus | undefined,
+  envConfigured: boolean,
+): readonly string[] {
+  if (localCliProvider !== undefined && envConfigured) {
+    return [];
+  }
+
+  return missingEnvKeys;
 }
 
 function isConfigured(value: string | undefined): boolean {

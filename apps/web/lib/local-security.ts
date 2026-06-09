@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
 export interface LocalSession {
   sessionId: string;
@@ -20,8 +20,16 @@ export interface OAuthTransaction {
 const SESSION_COOKIE = "stackspend_session";
 const SESSION_TTL_MS = 30 * 60 * 1000;
 const OAUTH_TTL_MS = 10 * 60 * 1000;
+const SESSION_COOKIE_VERSION = "v1";
+const LOCAL_SESSION_SECRET_ENV = "STACKSPEND_LOCAL_SESSION_SECRET";
 const sessions = new Map<string, LocalSession>();
 const oauthTransactions = new Map<string, OAuthTransaction>();
+
+interface SignedLocalSessionPayload {
+  sessionId: string;
+  csrfHash: string;
+  expiresAt: number;
+}
 
 export function createLocalSession(now: Date = new Date()): LocalSession {
   pruneExpired(now);
@@ -36,8 +44,14 @@ export function createLocalSession(now: Date = new Date()): LocalSession {
 }
 
 export function localSessionCookie(session: LocalSession): string {
+  const payload = encodeSignedSessionPayload({
+    sessionId: session.sessionId,
+    csrfHash: hashCsrfToken(session.csrfToken),
+    expiresAt: session.expiresAt,
+  });
+
   return [
-    `${SESSION_COOKIE}=${session.sessionId}`,
+    `${SESSION_COOKIE}=${payload}`,
     "Path=/",
     "HttpOnly",
     "SameSite=Strict",
@@ -57,6 +71,16 @@ export function requireLocalSession(request: Request, now: Date = new Date()): L
 
   if (sessionId === undefined || csrfToken === undefined || csrfToken.length === 0) {
     throw new Error("Local session and CSRF token are required.");
+  }
+
+  const signedSession = decodeSignedSessionPayload(sessionId, csrfToken, now);
+
+  if (signedSession !== null) {
+    return {
+      sessionId: signedSession.sessionId,
+      csrfToken,
+      expiresAt: signedSession.expiresAt,
+    };
   }
 
   const session = sessions.get(sessionId);
@@ -191,6 +215,83 @@ function parseCookies(header: string | null): Record<string, string> {
           : [part.slice(0, separator), part.slice(separator + 1)];
       }),
   );
+}
+
+function encodeSignedSessionPayload(payload: SignedLocalSessionPayload): string {
+  const encodedPayload = Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
+  const signature = signValue(encodedPayload);
+
+  return `${SESSION_COOKIE_VERSION}.${encodedPayload}.${signature}`;
+}
+
+function decodeSignedSessionPayload(
+  value: string,
+  csrfToken: string,
+  now: Date,
+): SignedLocalSessionPayload | null {
+  const [version, encodedPayload, signature] = value.split(".");
+
+  if (version !== SESSION_COOKIE_VERSION || encodedPayload === undefined || signature === undefined) {
+    return null;
+  }
+
+  if (!constantTimeEqual(signature, signValue(encodedPayload))) {
+    return null;
+  }
+
+  try {
+    const payload = JSON.parse(Buffer.from(encodedPayload, "base64url").toString("utf8")) as Partial<SignedLocalSessionPayload>;
+
+    if (
+      typeof payload.sessionId !== "string" ||
+      typeof payload.csrfHash !== "string" ||
+      typeof payload.expiresAt !== "number" ||
+      !Number.isFinite(payload.expiresAt) ||
+      payload.expiresAt <= now.getTime()
+    ) {
+      return null;
+    }
+
+    if (!constantTimeEqual(payload.csrfHash, hashCsrfToken(csrfToken))) {
+      return null;
+    }
+
+    return {
+      sessionId: payload.sessionId,
+      csrfHash: payload.csrfHash,
+      expiresAt: payload.expiresAt,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function hashCsrfToken(value: string): string {
+  return createHash("sha256").update(value).digest("base64url");
+}
+
+function signValue(value: string): string {
+  return createHmac("sha256", localSessionSecret()).update(value).digest("base64url");
+}
+
+function localSessionSecret(): string {
+  const configured = process.env[LOCAL_SESSION_SECRET_ENV]?.trim();
+
+  if (configured !== undefined && configured.length > 0) {
+    return configured;
+  }
+
+  const generated = randomToken(32);
+  process.env[LOCAL_SESSION_SECRET_ENV] = generated;
+
+  return generated;
+}
+
+function constantTimeEqual(left: string, right: string): boolean {
+  const leftBuffer = Buffer.from(left);
+  const rightBuffer = Buffer.from(right);
+
+  return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);
 }
 
 function createPkceChallenge(codeVerifier: string): string {

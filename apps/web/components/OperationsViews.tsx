@@ -373,6 +373,10 @@ export function ServiceDetail({
   provider: OperationsProvider;
   dashboard: OperationsDashboard;
 }) {
+  if (isLocalAiCliProvider(provider.providerKey)) {
+    return <LocalAiCliServiceDetail dashboard={dashboard} locale={locale} messages={messages} provider={provider} />;
+  }
+
   return (
     <div className="stack">
       <section className="metric-grid">
@@ -438,6 +442,85 @@ export function ServiceDetail({
           <Link className="ghost-button" href={`/${locale}/settings/connections#${provider.providerKey}`}>
             {messages.services.viewRequirements}
           </Link>
+        </InfoPanel>
+      </div>
+    </div>
+  );
+}
+
+function LocalAiCliServiceDetail({
+  locale,
+  messages,
+  provider,
+  dashboard,
+}: {
+  locale: Locale;
+  messages: Messages;
+  provider: OperationsProvider;
+  dashboard: OperationsDashboard;
+}) {
+  const summary = provider.currentUsageSummary;
+  const fiveHourLimit = usageMetricValue(summary, "five_hour_limit_percent", locale) ??
+    usageMetricValue(summary, "five_hour_tokens", locale) ??
+    messages.services.noCurrentUsage;
+  const weeklyLimit = usageMetricValue(summary, "weekly_limit_percent", locale) ??
+    usageMetricValue(summary, "weekly_tokens", locale) ??
+    messages.services.noCurrentUsage;
+  const totalTokens = usageMetricValue(summary, "total_tokens", locale) ??
+    usageMetricValue(summary, "input_tokens", locale) ??
+    messages.services.noCurrentUsage;
+  const contextValue = usageMetricValue(summary, "context_percent", locale) ??
+    usageMetricValue(summary, "context_tokens", locale) ??
+    messages.services.noCurrentUsage;
+
+  return (
+    <div className="stack">
+      <section className="metric-grid">
+        <MetricCard
+          label={messages.services.fiveHourLimit}
+          value={fiveHourLimit}
+          meta={metricMeta(summary, "five_hour_tokens", locale, messages)}
+        />
+        <MetricCard
+          label={messages.services.weeklyLimit}
+          value={weeklyLimit}
+          meta={metricMeta(summary, "weekly_tokens", locale, messages)}
+        />
+        <MetricCard
+          label={messages.services.totalTokens}
+          value={totalTokens}
+          meta={messages.services.localCliBillingNote}
+        />
+        <MetricCard
+          label={messages.services.contextPercent}
+          value={contextValue}
+          meta={metricMeta(summary, "context_tokens", locale, messages)}
+        />
+      </section>
+      <div className="two-column">
+        <InfoPanel title={messages.settings.localCliTitle}>
+          <p className="muted">{messages.services.localCliBillingNote}</p>
+          <UsageSummaryBlock summary={summary} locale={locale} messages={messages} />
+        </InfoPanel>
+        <InfoPanel title={messages.services.dataConfidence}>
+          <KeyValue label={messages.services.liveGranularity} value={labelFor(messages, provider.liveGranularity)} />
+          <KeyValue label={messages.services.confidence} value={provider.liveConfidence} />
+          <KeyValue label={messages.services.latestLiveCheck} value={formatOptionalDate(provider.latestLiveCheck, locale, dashboard.timezone, messages)} />
+          <KeyValue label={messages.settings.credentialSource} value={labelFor(messages, provider.connectionState)} />
+        </InfoPanel>
+      </div>
+      <div className="two-column">
+        <InfoPanel title={messages.services.securityPermissions}>
+          <div>
+            <div className="metric-label">{messages.settings.requiredEnv}</div>
+            <RequirementLinks provider={provider} messages={messages} />
+          </div>
+          <KeyValue label={messages.settings.readOnlyTest} value={labelFor(messages, provider.readOnlyTestState)} />
+          <KeyValue label={messages.services.currentUsage} value={summary === null ? messages.services.noCurrentUsage : messages.dashboard.provisional} />
+        </InfoPanel>
+        <InfoPanel title={messages.services.healthRisk}>
+          <BadgeLine messages={messages} states={[provider.liveFreshness, provider.healthStatus, provider.riskLevel]} />
+          <KeyValue label={messages.table.status} value={`${provider.alertCount}`} />
         </InfoPanel>
       </div>
     </div>
@@ -1126,6 +1209,35 @@ function RequirementLinks({ provider, messages }: { provider: OperationsProvider
   );
 }
 
+function isLocalAiCliProvider(providerKey: string): boolean {
+  return providerKey === "codex-cli" || providerKey === "claude-cli";
+}
+
+function usageMetricValue(
+  summary: OperationsProvider["currentUsageSummary"],
+  key: string,
+  locale: Locale,
+): string | undefined {
+  const metric = summary?.metrics.find((item) => item.key === key);
+
+  return metric === undefined ? undefined : formatUsageMetric(metric.value, metric.unit, locale);
+}
+
+function metricMeta(
+  summary: OperationsProvider["currentUsageSummary"],
+  key: string,
+  locale: Locale,
+  messages: Messages,
+): string {
+  const value = usageMetricValue(summary, key, locale);
+
+  if (value === undefined) {
+    return messages.services.noCurrentUsage;
+  }
+
+  return `${usageMetricLabel(key, messages)}: ${value}`;
+}
+
 function UsageSummaryBlock({
   summary,
   locale,
@@ -1204,6 +1316,66 @@ function usageMetricLabel(metric: string, messages: Messages): string {
     return messages.services.outputTokens;
   }
 
+  if (metric === "cache_tokens") {
+    return messages.services.cacheTokens;
+  }
+
+  if (metric === "sessions") {
+    return messages.services.sessions;
+  }
+
+  if (metric === "turns") {
+    return messages.services.turns;
+  }
+
+  if (metric === "tool_calls") {
+    return messages.services.toolCalls;
+  }
+
+  if (metric === "log_files") {
+    return messages.services.logFiles;
+  }
+
+  if (metric === "context_tokens") {
+    return messages.services.contextTokens;
+  }
+
+  if (metric === "context_percent") {
+    return messages.services.contextPercent;
+  }
+
+  if (metric === "five_hour_limit_percent") {
+    return messages.services.fiveHourLimit;
+  }
+
+  if (metric === "weekly_limit_percent") {
+    return messages.services.weeklyLimit;
+  }
+
+  if (metric === "five_hour_tokens") {
+    return messages.services.fiveHourTokens;
+  }
+
+  if (metric === "weekly_tokens") {
+    return messages.services.weeklyTokens;
+  }
+
+  if (metric === "last_request_tokens") {
+    return messages.services.lastRequestTokens;
+  }
+
+  if (metric === "total_tokens") {
+    return messages.services.totalTokens;
+  }
+
+  if (metric === "reasoning_tokens") {
+    return messages.services.reasoningTokens;
+  }
+
+  if (metric === "estimated_cost_usd") {
+    return messages.services.estimatedCost;
+  }
+
   return messages.services.modelRequests;
 }
 
@@ -1250,7 +1422,23 @@ function formatMinorAmount(amountMinor: number, currency: string, locale: Locale
   }).format(amountMinor / 100);
 }
 
-function formatUsageMetric(value: number, unit: "tokens" | "requests", locale: Locale): string {
+function formatUsageMetric(
+  value: number,
+  unit: "tokens" | "requests" | "sessions" | "turns" | "calls" | "files" | "percent" | "usd",
+  locale: Locale,
+): string {
+  if (unit === "percent") {
+    return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(value)}%`;
+  }
+
+  if (unit === "usd") {
+    return new Intl.NumberFormat(locale, {
+      currency: "USD",
+      maximumFractionDigits: 2,
+      style: "currency",
+    }).format(value);
+  }
+
   const formatted = new Intl.NumberFormat(locale).format(value);
 
   return unit === "tokens" ? `${formatted} tok` : formatted;

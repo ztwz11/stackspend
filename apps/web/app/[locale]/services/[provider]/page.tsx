@@ -4,7 +4,9 @@ import {
   ServiceDetail,
 } from "../../../../components/OperationsViews";
 import { getMessages, isLocale, type Locale } from "../../../../lib/i18n";
-import { readOperationsDashboard } from "../../../../lib/operations-data";
+import { summarizeLocalAiCliUsage } from "../../../../lib/live-today";
+import { readLocalAiCliStatus } from "../../../../lib/local-tools";
+import { readOperationsDashboard, type OperationsProvider } from "../../../../lib/operations-data";
 import { isProviderKey, type ProviderKey } from "../../../../lib/provider-catalog";
 
 interface PageProps {
@@ -20,19 +22,23 @@ export default async function ServiceDetailPage({ params }: PageProps) {
   const { locale, provider: providerKey } = await readParams(params);
   const messages = getMessages(locale);
   const dashboard = await readOperationsDashboard();
-  const provider = dashboard.visibleProviders.find((item) => item.providerKey === providerKey);
+  const localCliProvider = isLocalAiCliProvider(providerKey);
+  const provider = (localCliProvider ? dashboard.providers : dashboard.visibleProviders)
+    .find((item) => item.providerKey === providerKey);
 
   if (provider === undefined) {
     notFound();
   }
 
-  const selectedProvider = provider;
+  const selectedProvider = await withFreshLocalAiCliUsage(provider);
 
   return (
     <>
       <PageHeader
         title={selectedProvider.displayName}
-        subtitle={`${messages.services.serviceTitle} - ${messages.services.readOnly}`}
+        subtitle={localCliProvider
+          ? messages.services.localCliBillingNote
+          : `${messages.services.serviceTitle} - ${messages.services.readOnly}`}
       />
       <ServiceDetail dashboard={dashboard} locale={locale} messages={messages} provider={selectedProvider} />
     </>
@@ -50,4 +56,48 @@ async function readParams(params: PageProps["params"]): Promise<{ locale: Locale
     locale: locale as Locale,
     provider: provider as ProviderKey,
   };
+}
+
+async function withFreshLocalAiCliUsage(provider: OperationsProvider): Promise<OperationsProvider> {
+  if (!isLocalAiCliProvider(provider.providerKey)) {
+    return provider;
+  }
+
+  const status = await readLocalAiCliStatus({
+    providerKeys: [provider.providerKey],
+  });
+  const localProvider = status.providers.find((item) => item.providerKey === provider.providerKey);
+
+  if (localProvider === undefined) {
+    return provider;
+  }
+
+  const usageSummary = summarizeLocalAiCliUsage(localProvider);
+  const localConfigured = localProvider.cli.state === "installed" || localProvider.usage.logFileCount > 0;
+  const configuredEnvKeys = localConfigured
+    ? [...new Set([
+        ...provider.configuredEnvKeys,
+        ...(localProvider.cli.state === "installed" ? [`${localProvider.command} command`] : []),
+        ...(localProvider.usage.logFileCount > 0 ? [localProvider.usage.source] : []),
+      ])].sort()
+    : provider.configuredEnvKeys;
+
+  return {
+    ...provider,
+    configuredEnvKeys,
+    currentUsageSummary: usageSummary,
+    latestLiveCheck: status.generatedAt,
+    liveConfidence: usageSummary === null ? "none" : "low",
+    liveFreshness: localProvider.cli.state === "error"
+      ? "error"
+      : usageSummary === null
+        ? "stale"
+        : "live",
+    missingEnvKeys: localConfigured ? [] : provider.missingEnvKeys,
+    readOnlyTestState: localConfigured ? "read_only_ready" : provider.readOnlyTestState,
+  };
+}
+
+function isLocalAiCliProvider(providerKey: ProviderKey): providerKey is "codex-cli" | "claude-cli" {
+  return providerKey === "codex-cli" || providerKey === "claude-cli";
 }

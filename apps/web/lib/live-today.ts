@@ -28,6 +28,7 @@ import {
   type LiveGranularity,
   type ProviderKey,
 } from "./provider-catalog";
+import { readLocalAiCliStatus, type LocalAiCliProviderKey, type LocalAiCliProviderStatus } from "./local-tools";
 
 export type LiveTodayFreshness = "live" | "stale" | "error" | "unavailable" | "not_configured" | "locked";
 export type LiveTodayConfidence = "high" | "medium" | "low" | "none";
@@ -81,9 +82,9 @@ export interface LiveTodayUsageSummary {
 }
 
 export interface LiveTodayUsageMetric {
-  key: "input_tokens" | "output_tokens" | "model_requests";
+  key: "input_tokens" | "output_tokens" | "cache_tokens" | "model_requests" | "sessions" | "turns" | "tool_calls" | "log_files" | "context_tokens" | "context_percent" | "last_request_tokens" | "total_tokens" | "reasoning_tokens" | "estimated_cost_usd" | "five_hour_limit_percent" | "weekly_limit_percent" | "five_hour_tokens" | "weekly_tokens";
   value: number;
-  unit: "tokens" | "requests";
+  unit: "tokens" | "requests" | "sessions" | "turns" | "calls" | "files" | "percent" | "usd";
 }
 
 export type LiveTodayProviderCollector = (
@@ -431,6 +432,10 @@ function createDefaultLiveTodayCollector(providerKey: ProviderKey): LiveTodayPro
     return collectCloudflareLiveToday;
   }
 
+  if (providerKey === "codex-cli" || providerKey === "claude-cli") {
+    return collectLocalAiCliLiveToday;
+  }
+
   throw new Error(`Live today collector is not implemented for ${providerKey}.`);
 }
 
@@ -531,6 +536,132 @@ async function collectCloudflareLiveToday(context: LiveTodayCollectionContext): 
     confidence: collection.status === "error" ? "none" : "low",
     message: "Cloudflare exposes billing-period or month-to-date surfaces; exact current-day cost is excluded.",
   };
+}
+
+async function collectLocalAiCliLiveToday(context: LiveTodayCollectionContext): Promise<LiveTodayProviderCollection> {
+  const providerKey = context.providerKey as LocalAiCliProviderKey;
+  const status = await readLocalAiCliStatus({
+    env: context.env,
+    now: () => context.now,
+  });
+  const provider = status.providers.find((item) => item.providerKey === providerKey);
+
+  if (provider === undefined) {
+    throw new Error("Local AI CLI provider is not available.");
+  }
+
+  const usageSummary = summarizeLocalAiCliUsage(provider);
+  const hasUsage = usageSummary !== null;
+
+  return {
+    providerKey,
+    status: hasUsage ? "ok" : "partial",
+    checkedAt: status.generatedAt,
+    todayLiveAmountMinor: null,
+    currency: "USD",
+    included: false,
+    confidence: hasUsage ? "low" : "none",
+    ...(hasUsage
+      ? {
+          usageSummary,
+        }
+      : {}),
+    message: provider.usage.message,
+  };
+}
+
+export function summarizeLocalAiCliUsage(provider: LocalAiCliProviderStatus): LiveTodayUsageSummary | null {
+  const metrics = localCliUsageMetrics(provider);
+
+  if (metrics.length === 0) {
+    return null;
+  }
+
+  return {
+    kind: "llm_subscription",
+    period: "current_month",
+    metrics,
+    topServices: provider.usage.topModels.length === 0
+      ? [provider.displayName]
+      : provider.usage.topModels,
+  };
+}
+
+function localCliUsageMetrics(provider: LocalAiCliProviderStatus): LiveTodayUsageMetric[] {
+  const metrics: LiveTodayUsageMetric[] = [];
+  const statusLine = provider.usage.statusLine;
+
+  if (statusLine.fiveHourLimitPercent !== null && statusLine.fiveHourLimitPercent >= 0) {
+    metrics.push({ key: "five_hour_limit_percent", value: statusLine.fiveHourLimitPercent, unit: "percent" });
+  }
+
+  if (statusLine.weeklyLimitPercent !== null && statusLine.weeklyLimitPercent >= 0) {
+    metrics.push({ key: "weekly_limit_percent", value: statusLine.weeklyLimitPercent, unit: "percent" });
+  }
+
+  if (statusLine.fiveHourUsedTokens !== null && statusLine.fiveHourUsedTokens > 0) {
+    metrics.push({ key: "five_hour_tokens", value: statusLine.fiveHourUsedTokens, unit: "tokens" });
+  }
+
+  if (statusLine.weeklyUsedTokens !== null && statusLine.weeklyUsedTokens > 0) {
+    metrics.push({ key: "weekly_tokens", value: statusLine.weeklyUsedTokens, unit: "tokens" });
+  }
+
+  if (statusLine.contextWindowTokens !== null && statusLine.contextWindowTokens > 0) {
+    metrics.push({ key: "context_tokens", value: statusLine.contextWindowTokens, unit: "tokens" });
+  }
+
+  if (statusLine.contextWindowPercent !== null && statusLine.contextWindowPercent > 0) {
+    metrics.push({ key: "context_percent", value: statusLine.contextWindowPercent, unit: "percent" });
+  }
+
+  if (statusLine.lastTotalTokens !== null && statusLine.lastTotalTokens > 0) {
+    metrics.push({ key: "last_request_tokens", value: statusLine.lastTotalTokens, unit: "tokens" });
+  }
+
+  if (statusLine.totalTokens !== null && statusLine.totalTokens > 0) {
+    metrics.push({ key: "total_tokens", value: statusLine.totalTokens, unit: "tokens" });
+  }
+
+  if (statusLine.totalReasoningTokens !== null && statusLine.totalReasoningTokens > 0) {
+    metrics.push({ key: "reasoning_tokens", value: statusLine.totalReasoningTokens, unit: "tokens" });
+  } else if (provider.usage.reasoningOutputTokens !== null && provider.usage.reasoningOutputTokens > 0) {
+    metrics.push({ key: "reasoning_tokens", value: provider.usage.reasoningOutputTokens, unit: "tokens" });
+  }
+
+  if (statusLine.estimatedCostUsd !== null && statusLine.estimatedCostUsd > 0) {
+    metrics.push({ key: "estimated_cost_usd", value: statusLine.estimatedCostUsd, unit: "usd" });
+  }
+
+  if (provider.usage.sessionCount > 0) {
+    metrics.push({ key: "sessions", value: provider.usage.sessionCount, unit: "sessions" });
+  }
+
+  if (provider.usage.turnCount > 0) {
+    metrics.push({ key: "turns", value: provider.usage.turnCount, unit: "turns" });
+  }
+
+  if (provider.usage.toolCallCount > 0) {
+    metrics.push({ key: "tool_calls", value: provider.usage.toolCallCount, unit: "calls" });
+  }
+
+  if (provider.usage.inputTokens !== null && provider.usage.inputTokens > 0) {
+    metrics.push({ key: "input_tokens", value: provider.usage.inputTokens, unit: "tokens" });
+  }
+
+  if (provider.usage.outputTokens !== null && provider.usage.outputTokens > 0) {
+    metrics.push({ key: "output_tokens", value: provider.usage.outputTokens, unit: "tokens" });
+  }
+
+  if (provider.usage.cacheTokens !== null && provider.usage.cacheTokens > 0) {
+    metrics.push({ key: "cache_tokens", value: provider.usage.cacheTokens, unit: "tokens" });
+  }
+
+  if (provider.usage.logFileCount > 0) {
+    metrics.push({ key: "log_files", value: provider.usage.logFileCount, unit: "files" });
+  }
+
+  return metrics;
 }
 
 async function resolveProviderSecret(

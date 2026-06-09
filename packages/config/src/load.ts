@@ -78,6 +78,8 @@ function loadProviders(env: StackSpendEnv): ProviderConfigMap {
     "mongodb-atlas": loadProviderConfig("mongodb-atlas", env),
     datadog: loadProviderConfig("datadog", env),
     sentry: loadProviderConfig("sentry", env),
+    "codex-cli": loadProviderConfig("codex-cli", env),
+    "claude-cli": loadProviderConfig("claude-cli", env),
   };
 }
 

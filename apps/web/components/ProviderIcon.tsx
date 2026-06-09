@@ -18,6 +18,8 @@ const providerIconAssets: Record<string, string> = {
   "mongodb-atlas": "mongodb-atlas.svg",
   datadog: "datadog.svg",
   sentry: "sentry.svg",
+  "codex-cli": "openai.svg",
+  "claude-cli": "anthropic-claude.svg",
 };
 
 export function ProviderIcon({

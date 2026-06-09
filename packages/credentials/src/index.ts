@@ -22,6 +22,8 @@ export const CREDENTIAL_PROVIDERS = [
   "mongodb-atlas",
   "datadog",
   "sentry",
+  "codex-cli",
+  "claude-cli",
 ] as const;
 export const CREDENTIAL_SCOPES = ["read-only", "emergency"] as const;
 

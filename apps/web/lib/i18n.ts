@@ -77,8 +77,24 @@ export interface Messages {
     topServices: string;
     inputTokens: string;
     outputTokens: string;
+    cacheTokens: string;
     modelRequests: string;
+    sessions: string;
+    turns: string;
+    toolCalls: string;
+    logFiles: string;
+    contextTokens: string;
+    contextPercent: string;
+    fiveHourLimit: string;
+    weeklyLimit: string;
+    fiveHourTokens: string;
+    weeklyTokens: string;
+    lastRequestTokens: string;
+    totalTokens: string;
+    reasoningTokens: string;
+    estimatedCost: string;
     noCurrentUsage: string;
+    localCliBillingNote: string;
   };
   catalog: {
     title: string;
@@ -120,7 +136,63 @@ export interface Messages {
     saveCredential: string;
     removeCredential: string;
     startOAuth: string;
+    toolLoadingTitle: string;
+    toolLoadingCheckingCli: string;
+    toolLoadingCheckingCredentials: string;
+    toolLoadingReadingUsage: string;
+    toolLoadingPreparingView: string;
     awsManaged: string;
+    awsCliTitle: string;
+    awsCliInstalled: string;
+    awsCliMissing: string;
+    awsCliError: string;
+    awsCliVersion: string;
+    awsCredentialChain: string;
+    awsCredentialConfigured: string;
+    awsCredentialMissing: string;
+    installAwsCli: string;
+    configureAwsSso: string;
+    refreshAwsCliStatus: string;
+    awsCliCommandHint: string;
+    awsProfileName: string;
+    registerAwsProfileGlobally: string;
+    awsProfilePersistHint: string;
+    awsProfilePersistSuccess: string;
+    awsProfilePersistError: string;
+    gcpManaged: string;
+    gcpCliTitle: string;
+    gcpCliInstalled: string;
+    gcpCliMissing: string;
+    gcpCliError: string;
+    gcpAccount: string;
+    gcpProject: string;
+    gcpAdc: string;
+    gcpConfigured: string;
+    gcpMissing: string;
+    installGcloudCli: string;
+    configureGcloudAuth: string;
+    configureGcloudAdc: string;
+    refreshGcpCliStatus: string;
+    gcpCliCommandHint: string;
+    localCliTitle: string;
+    localCliInstalled: string;
+    localCliMissing: string;
+    localCliCheckFailed: string;
+    localCliUsageSource: string;
+    localCliLatestActivity: string;
+    localCliSessionsTurns: string;
+    localCliNoUsage: string;
+    localCliStatusLine: string;
+    localCliContextWindow: string;
+    localCliFiveHourLimit: string;
+    localCliWeeklyLimit: string;
+    localCliLastRequest: string;
+    localCliSessionTokens: string;
+    localCliCurrentUsage: string;
+    localCliReasoning: string;
+    localCliEstimatedCost: string;
+    localCliLogFiles: string;
+    refreshLocalCliStatus: string;
     defaultLocale: string;
     dashboardTimezone: string;
     defaultStart: string;
@@ -223,8 +295,24 @@ export const messages = {
       topServices: "Top services",
       inputTokens: "Input tokens",
       outputTokens: "Output tokens",
+      cacheTokens: "Cache tokens",
       modelRequests: "Model requests",
+      sessions: "Sessions",
+      turns: "Turns",
+      toolCalls: "Tool calls",
+      logFiles: "Log files",
+      contextTokens: "Context tokens",
+      contextPercent: "Context used",
+      fiveHourLimit: "5-hour limit",
+      weeklyLimit: "Weekly limit",
+      fiveHourTokens: "5-hour tokens",
+      weeklyTokens: "Weekly tokens",
+      lastRequestTokens: "Last request",
+      totalTokens: "Total tokens",
+      reasoningTokens: "Reasoning tokens",
+      estimatedCost: "Estimated cost",
       noCurrentUsage: "No current usage",
+      localCliBillingNote: "Local CLI usage from statusline and session logs, not API billing.",
     },
     catalog: {
       title: "Provider catalog",
@@ -266,7 +354,63 @@ export const messages = {
       saveCredential: "Save",
       removeCredential: "Remove local",
       startOAuth: "OAuth",
+      toolLoadingTitle: "Loading local tools",
+      toolLoadingCheckingCli: "Checking CLI installation",
+      toolLoadingCheckingCredentials: "Checking local profile and credentials",
+      toolLoadingReadingUsage: "Reading local usage logs",
+      toolLoadingPreparingView: "Preparing setup details",
       awsManaged: "Use AWS profile or SSO outside StackSpend.",
+      awsCliTitle: "AWS local setup",
+      awsCliInstalled: "AWS CLI installed",
+      awsCliMissing: "AWS CLI missing",
+      awsCliError: "AWS CLI check failed",
+      awsCliVersion: "Version",
+      awsCredentialChain: "Credential chain",
+      awsCredentialConfigured: "Credential chain configured",
+      awsCredentialMissing: "AWS_PROFILE not configured",
+      installAwsCli: "Install AWS CLI",
+      configureAwsSso: "Configure SSO profile",
+      refreshAwsCliStatus: "Check again",
+      awsCliCommandHint: "After installation, open a new terminal and run aws configure sso, aws sso login --profile <profile>, then register AWS_PROFILE for StackSpend.",
+      awsProfileName: "AWS profile",
+      registerAwsProfileGlobally: "Save as user env",
+      awsProfilePersistHint: "Saves AWS_PROFILE to the Windows user environment. New terminals inherit it, and the current StackSpend server is updated immediately.",
+      awsProfilePersistSuccess: "AWS_PROFILE was saved.",
+      awsProfilePersistError: "AWS_PROFILE was not saved.",
+      gcpManaged: "Use Google Cloud CLI and Application Default Credentials outside StackSpend.",
+      gcpCliTitle: "Google Cloud local setup",
+      gcpCliInstalled: "gcloud installed",
+      gcpCliMissing: "gcloud missing",
+      gcpCliError: "gcloud check failed",
+      gcpAccount: "Active account",
+      gcpProject: "Project",
+      gcpAdc: "Application Default Credentials",
+      gcpConfigured: "Configured",
+      gcpMissing: "Missing",
+      installGcloudCli: "Install gcloud",
+      configureGcloudAuth: "Configure CLI auth",
+      configureGcloudAdc: "Configure ADC",
+      refreshGcpCliStatus: "Check again",
+      gcpCliCommandHint: "Run gcloud auth login for the CLI, gcloud auth application-default login for local SDK credentials, and set a project before using Google Cloud reads.",
+      localCliTitle: "Local CLI usage",
+      localCliInstalled: "CLI installed",
+      localCliMissing: "CLI missing",
+      localCliCheckFailed: "CLI check failed",
+      localCliUsageSource: "Usage source",
+      localCliLatestActivity: "Latest activity",
+      localCliSessionsTurns: "Sessions / turns",
+      localCliNoUsage: "No local usage logs found.",
+      localCliStatusLine: "Statusline usage",
+      localCliContextWindow: "Context window",
+      localCliFiveHourLimit: "5-hour limit",
+      localCliWeeklyLimit: "Weekly limit",
+      localCliLastRequest: "Last request",
+      localCliSessionTokens: "Session tokens",
+      localCliCurrentUsage: "Current usage",
+      localCliReasoning: "Reasoning",
+      localCliEstimatedCost: "Estimated cost",
+      localCliLogFiles: "Log files",
+      refreshLocalCliStatus: "Check usage",
       defaultLocale: "Default locale",
       dashboardTimezone: "Dashboard timezone",
       defaultStart: "Default start",
@@ -399,8 +543,24 @@ export const messages = {
       topServices: "상위 서비스",
       inputTokens: "입력 토큰",
       outputTokens: "출력 토큰",
+      cacheTokens: "캐시 토큰",
       modelRequests: "모델 요청",
+      sessions: "세션",
+      turns: "턴",
+      toolCalls: "툴 호출",
+      logFiles: "로그 파일",
+      contextTokens: "컨텍스트 토큰",
+      contextPercent: "컨텍스트 사용률",
+      fiveHourLimit: "5시간 한도",
+      weeklyLimit: "주간 한도",
+      fiveHourTokens: "5시간 토큰",
+      weeklyTokens: "주간 토큰",
+      lastRequestTokens: "마지막 요청",
+      totalTokens: "전체 토큰",
+      reasoningTokens: "Reasoning 토큰",
+      estimatedCost: "예상 비용",
       noCurrentUsage: "현재 사용량 없음",
+      localCliBillingNote: "API 청구 비용이 아니라 statusline과 로컬 세션 로그 기반 CLI 사용량입니다.",
     },
     catalog: {
       title: "프로바이더 카탈로그",
@@ -442,7 +602,63 @@ export const messages = {
       saveCredential: "저장",
       removeCredential: "로컬 제거",
       startOAuth: "OAuth",
+      toolLoadingTitle: "로컬 도구 확인 중",
+      toolLoadingCheckingCli: "CLI 설치 상태 확인",
+      toolLoadingCheckingCredentials: "로컬 프로필과 자격 증명 확인",
+      toolLoadingReadingUsage: "로컬 사용량 로그 읽기",
+      toolLoadingPreparingView: "화면 표시 정보 정리",
       awsManaged: "AWS profile 또는 SSO를 StackSpend 밖에서 사용합니다.",
+      awsCliTitle: "AWS 로컬 설정",
+      awsCliInstalled: "AWS CLI 설치됨",
+      awsCliMissing: "AWS CLI 없음",
+      awsCliError: "AWS CLI 확인 실패",
+      awsCliVersion: "버전",
+      awsCredentialChain: "자격 증명 체인",
+      awsCredentialConfigured: "자격 증명 체인 설정됨",
+      awsCredentialMissing: "AWS_PROFILE 미설정",
+      installAwsCli: "AWS CLI 설치",
+      configureAwsSso: "SSO 프로필 설정",
+      refreshAwsCliStatus: "다시 확인",
+      awsCliCommandHint: "설치 후 새 터미널에서 aws configure sso, aws sso login --profile <profile>를 실행하고 StackSpend용 AWS_PROFILE을 등록합니다.",
+      awsProfileName: "AWS 프로필",
+      registerAwsProfileGlobally: "사용자 env 저장",
+      awsProfilePersistHint: "AWS_PROFILE을 Windows 사용자 환경변수로 저장합니다. 새 터미널은 이 값을 상속하고, 현재 StackSpend 서버도 즉시 갱신됩니다.",
+      awsProfilePersistSuccess: "AWS_PROFILE을 저장했습니다.",
+      awsProfilePersistError: "AWS_PROFILE을 저장하지 못했습니다.",
+      gcpManaged: "Google Cloud CLI와 Application Default Credentials는 StackSpend 밖에서 설정합니다.",
+      gcpCliTitle: "Google Cloud 로컬 설정",
+      gcpCliInstalled: "gcloud 설치됨",
+      gcpCliMissing: "gcloud 없음",
+      gcpCliError: "gcloud 확인 실패",
+      gcpAccount: "활성 계정",
+      gcpProject: "프로젝트",
+      gcpAdc: "Application Default Credentials",
+      gcpConfigured: "설정됨",
+      gcpMissing: "미설정",
+      installGcloudCli: "gcloud 설치",
+      configureGcloudAuth: "CLI 인증 설정",
+      configureGcloudAdc: "ADC 설정",
+      refreshGcpCliStatus: "다시 확인",
+      gcpCliCommandHint: "CLI에는 gcloud auth login, 로컬 SDK 자격 증명에는 gcloud auth application-default login을 실행하고 프로젝트를 설정합니다.",
+      localCliTitle: "로컬 CLI 사용량",
+      localCliInstalled: "CLI 설치됨",
+      localCliMissing: "CLI 없음",
+      localCliCheckFailed: "CLI 확인 실패",
+      localCliUsageSource: "사용량 소스",
+      localCliLatestActivity: "최근 활동",
+      localCliSessionsTurns: "세션 / 턴",
+      localCliNoUsage: "로컬 사용량 로그를 찾지 못했습니다.",
+      localCliStatusLine: "Statusline 사용량",
+      localCliContextWindow: "컨텍스트 창",
+      localCliFiveHourLimit: "5시간 한도",
+      localCliWeeklyLimit: "주간 한도",
+      localCliLastRequest: "마지막 요청",
+      localCliSessionTokens: "세션 토큰",
+      localCliCurrentUsage: "현재 사용량",
+      localCliReasoning: "Reasoning",
+      localCliEstimatedCost: "예상 비용",
+      localCliLogFiles: "로그 파일",
+      refreshLocalCliStatus: "사용량 확인",
       defaultLocale: "기본 언어",
       dashboardTimezone: "대시보드 시간대",
       defaultStart: "기본 시작 화면",
@@ -575,8 +791,24 @@ export const messages = {
       topServices: "上位サービス",
       inputTokens: "入力トークン",
       outputTokens: "出力トークン",
+      cacheTokens: "キャッシュトークン",
       modelRequests: "モデルリクエスト",
+      sessions: "セッション",
+      turns: "ターン",
+      toolCalls: "ツール呼び出し",
+      logFiles: "ログファイル",
+      contextTokens: "コンテキストトークン",
+      contextPercent: "コンテキスト使用率",
+      fiveHourLimit: "5時間上限",
+      weeklyLimit: "週間上限",
+      fiveHourTokens: "5時間トークン",
+      weeklyTokens: "週間トークン",
+      lastRequestTokens: "直近リクエスト",
+      totalTokens: "合計トークン",
+      reasoningTokens: "Reasoning トークン",
+      estimatedCost: "推定コスト",
       noCurrentUsage: "現在の使用量なし",
+      localCliBillingNote: "API 請求ではなく、statusline とローカルセッションログに基づく CLI 使用量です。",
     },
     catalog: {
       title: "プロバイダーカタログ",
@@ -618,7 +850,63 @@ export const messages = {
       saveCredential: "保存",
       removeCredential: "ローカルから外す",
       startOAuth: "OAuth",
+      toolLoadingTitle: "ローカルツール確認中",
+      toolLoadingCheckingCli: "CLI インストール状態を確認",
+      toolLoadingCheckingCredentials: "ローカルプロファイルと認証情報を確認",
+      toolLoadingReadingUsage: "ローカル使用量ログを読み込み",
+      toolLoadingPreparingView: "表示情報を準備",
       awsManaged: "AWS profile または SSO を StackSpend の外で使用します。",
+      awsCliTitle: "AWS ローカル設定",
+      awsCliInstalled: "AWS CLI インストール済み",
+      awsCliMissing: "AWS CLI なし",
+      awsCliError: "AWS CLI 確認失敗",
+      awsCliVersion: "バージョン",
+      awsCredentialChain: "認証チェーン",
+      awsCredentialConfigured: "認証チェーン設定済み",
+      awsCredentialMissing: "AWS_PROFILE 未設定",
+      installAwsCli: "AWS CLI をインストール",
+      configureAwsSso: "SSO プロファイル設定",
+      refreshAwsCliStatus: "再確認",
+      awsCliCommandHint: "インストール後、新しいターミナルで aws configure sso、aws sso login --profile <profile> を実行し、StackSpend 用の AWS_PROFILE を登録します。",
+      awsProfileName: "AWS プロファイル",
+      registerAwsProfileGlobally: "ユーザー env に保存",
+      awsProfilePersistHint: "AWS_PROFILE を Windows ユーザー環境変数に保存します。新しいターミナルに継承され、現在の StackSpend サーバーもすぐに更新されます。",
+      awsProfilePersistSuccess: "AWS_PROFILE を保存しました。",
+      awsProfilePersistError: "AWS_PROFILE を保存できませんでした。",
+      gcpManaged: "Google Cloud CLI と Application Default Credentials は StackSpend の外で設定します。",
+      gcpCliTitle: "Google Cloud ローカル設定",
+      gcpCliInstalled: "gcloud インストール済み",
+      gcpCliMissing: "gcloud なし",
+      gcpCliError: "gcloud 確認失敗",
+      gcpAccount: "有効なアカウント",
+      gcpProject: "プロジェクト",
+      gcpAdc: "Application Default Credentials",
+      gcpConfigured: "設定済み",
+      gcpMissing: "未設定",
+      installGcloudCli: "gcloud をインストール",
+      configureGcloudAuth: "CLI 認証設定",
+      configureGcloudAdc: "ADC 設定",
+      refreshGcpCliStatus: "再確認",
+      gcpCliCommandHint: "CLI には gcloud auth login、ローカル SDK 認証には gcloud auth application-default login を実行し、プロジェクトを設定します。",
+      localCliTitle: "ローカル CLI 使用量",
+      localCliInstalled: "CLI インストール済み",
+      localCliMissing: "CLI なし",
+      localCliCheckFailed: "CLI 確認失敗",
+      localCliUsageSource: "使用量ソース",
+      localCliLatestActivity: "最新アクティビティ",
+      localCliSessionsTurns: "セッション / ターン",
+      localCliNoUsage: "ローカル使用量ログが見つかりません。",
+      localCliStatusLine: "Statusline 使用量",
+      localCliContextWindow: "コンテキスト枠",
+      localCliFiveHourLimit: "5時間上限",
+      localCliWeeklyLimit: "週間上限",
+      localCliLastRequest: "直近リクエスト",
+      localCliSessionTokens: "セッショントークン",
+      localCliCurrentUsage: "現在の使用量",
+      localCliReasoning: "Reasoning",
+      localCliEstimatedCost: "推定コスト",
+      localCliLogFiles: "ログファイル",
+      refreshLocalCliStatus: "使用量を確認",
       defaultLocale: "既定の言語",
       dashboardTimezone: "ダッシュボードタイムゾーン",
       defaultStart: "既定の開始画面",

@@ -6,13 +6,32 @@ Collect AWS Cost Explorer billing snapshots and service-level cost grouping.
 
 ## Credentials
 
-Use env-only configuration. Recommended v0.1 input:
+Use env-only configuration. AWS does not use a StackSpend-managed API key. Install AWS CLI v2 locally,
+create a read-only profile, then point StackSpend at that profile.
+
+Recommended v0.1 input:
 
 ```text
 AWS_PROFILE=stackspend-readonly-fake
 ```
 
 The live CLI path uses the AWS SDK default credential chain and Cost Explorer region `us-east-1` by default. `STACKSPEND_AWS_REGION` can override the region when needed.
+
+Recommended local setup:
+
+```text
+aws --version
+aws configure sso
+aws sso login --profile stackspend-readonly-fake
+```
+
+Then register `AWS_PROFILE` for StackSpend. The web UI can save this as a Windows user environment variable, or you can run:
+
+```powershell
+setx AWS_PROFILE stackspend-readonly-fake
+```
+
+New terminals inherit the saved value. The StackSpend web UI also updates the current server process after using the save action.
 
 For fixture-only local verification, use a fake Cost Explorer response file:
 

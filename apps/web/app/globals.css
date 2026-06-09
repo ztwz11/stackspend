@@ -95,12 +95,12 @@ select {
 
 .layout-grid {
   display: grid;
-  grid-template-columns: 188px minmax(0, 1fr);
+  grid-template-columns: 172px minmax(0, 1fr);
   min-height: 100vh;
 }
 
 .layout-grid-collapsed {
-  grid-template-columns: 58px minmax(0, 1fr);
+  grid-template-columns: 54px minmax(0, 1fr);
 }
 
 .sidebar {
@@ -109,7 +109,7 @@ select {
   display: grid;
   grid-template-rows: auto 1fr auto;
   min-height: 100vh;
-  padding: 22px 10px 16px;
+  padding: 18px 8px 12px;
   position: sticky;
   top: 0;
 }
@@ -123,7 +123,7 @@ select {
   align-items: center;
   display: flex;
   gap: 7px;
-  padding: 0 10px 20px;
+  padding: 0 8px 14px;
 }
 
 .brand-mark {
@@ -162,7 +162,7 @@ select {
 
 .nav-groups {
   display: grid;
-  gap: 6px;
+  gap: 4px;
   margin-top: 0;
   align-content: start;
 }
@@ -185,8 +185,8 @@ select {
   font-size: 12px;
   justify-content: space-between;
   line-height: 1.2;
-  min-height: 30px;
-  padding: 0 10px;
+  min-height: 28px;
+  padding: 0 8px;
 }
 
 .nav-link-body {
@@ -230,9 +230,9 @@ select {
 .sidebar-footer {
   color: var(--muted);
   display: grid;
-  gap: 12px;
+  gap: 8px;
   font-size: 11px;
-  padding: 0 10px;
+  padding: 0 8px;
 }
 
 .locale-switcher {
@@ -295,17 +295,17 @@ select {
   align-content: start;
   align-items: start;
   display: grid;
-  gap: 14px;
+  gap: 10px;
   margin: 0;
-  max-width: 1260px;
-  padding: 23px 36px 40px 30px;
+  max-width: none;
+  padding: 18px 22px 28px;
   width: 100%;
 }
 
 .page-header {
   align-items: flex-start;
   display: flex;
-  gap: 1rem;
+  gap: 12px;
   justify-content: space-between;
 }
 
@@ -413,8 +413,8 @@ select {
 
 .metric-grid {
   display: grid;
-  gap: 13px;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  grid-template-columns: repeat(4, minmax(180px, 1fr));
 }
 
 .panel,
@@ -427,9 +427,9 @@ select {
 
 .metric-card {
   display: grid;
-  gap: 6px;
-  min-height: 88px;
-  padding: 17px 18px 12px;
+  gap: 5px;
+  min-height: 76px;
+  padding: 12px 14px 10px;
   position: relative;
 }
 
@@ -506,13 +506,13 @@ select {
   align-items: center;
   border-bottom: 1px solid var(--border-soft);
   display: flex;
-  gap: 0.75rem;
+  gap: 10px;
   justify-content: space-between;
-  padding: 10px 14px;
+  padding: 9px 12px;
 }
 
 .compact-header {
-  min-height: 3.25rem;
+  min-height: 44px;
 }
 
 .panel-actions {
@@ -530,7 +530,7 @@ select {
 }
 
 .panel-body {
-  padding: 14px;
+  padding: 11px 12px;
 }
 
 .data-table-wrap {
@@ -549,7 +549,7 @@ select {
   color: var(--muted);
   font-size: 11px;
   font-weight: 680;
-  padding: 10px 12px;
+  padding: 8px 10px;
   text-align: left;
   text-transform: none;
 }
@@ -557,7 +557,7 @@ select {
 .data-table td {
   border-top: 1px solid var(--border-soft);
   font-size: 12px;
-  padding: 8px 12px;
+  padding: 7px 10px;
   vertical-align: middle;
 }
 
@@ -782,7 +782,7 @@ select {
   align-content: start;
   align-items: stretch;
   display: grid;
-  gap: 14px;
+  gap: 10px;
 }
 
 .view-switch-row {
@@ -791,15 +791,15 @@ select {
 
 .two-column {
   display: grid;
-  gap: 1rem;
+  gap: 10px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .ops-grid {
   align-items: start;
   display: grid;
-  gap: 1rem;
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) minmax(250px, 310px);
 }
 
 .ops-main-panel {
@@ -812,16 +812,16 @@ select {
 
 .ops-rail-body {
   display: grid;
-  gap: 1rem;
+  gap: 10px;
 }
 
 .status-strip {
   background: var(--surface-raised);
   border-bottom: 1px solid var(--border-soft);
   display: grid;
-  gap: 0.65rem;
+  gap: 8px;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  padding: 0.75rem 1rem;
+  padding: 9px 10px;
 }
 
 .status-metric {
@@ -830,10 +830,10 @@ select {
   border: 1px solid var(--border-soft);
   border-radius: 8px;
   display: flex;
-  gap: 0.75rem;
+  gap: 8px;
   justify-content: space-between;
-  min-height: 4rem;
-  padding: 0.7rem 0.75rem;
+  min-height: 50px;
+  padding: 8px 10px;
 }
 
 .status-metric strong {
@@ -870,8 +870,8 @@ select {
 
 .risk-summary-grid {
   display: grid;
-  gap: 0.85rem;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  grid-template-columns: repeat(4, minmax(150px, 1fr));
 }
 
 .risk-table {
@@ -983,8 +983,8 @@ select {
 
 .catalog-grid {
   display: grid;
-  gap: 14px;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
 .catalog-filter-panel {
@@ -994,9 +994,9 @@ select {
 .catalog-filter-grid {
   align-items: end;
   display: grid;
-  gap: 14px;
-  grid-template-columns: minmax(240px, 1fr) minmax(150px, 180px) minmax(132px, 160px) minmax(132px, 160px);
-  padding: 16px;
+  gap: 10px;
+  grid-template-columns: minmax(200px, 1fr) minmax(140px, 170px) minmax(120px, 150px) minmax(120px, 150px);
+  padding: 11px;
 }
 
 .catalog-filter-field {
@@ -1026,16 +1026,16 @@ select {
   border: 1px solid var(--border);
   border-radius: 8px;
   display: grid;
-  gap: 14px;
+  gap: 9px;
   grid-template-rows: auto auto auto auto 1fr;
-  min-height: 246px;
-  padding: 16px;
+  min-height: 204px;
+  padding: 12px;
 }
 
 .catalog-card-header {
   align-items: center;
   display: flex;
-  gap: 12px;
+  gap: 9px;
   min-width: 0;
 }
 
@@ -1057,13 +1057,13 @@ select {
 }
 
 .catalog-provider-mark {
-  height: 32px;
-  width: 32px;
+  height: 28px;
+  width: 28px;
 }
 
 .connection-card-list {
   display: grid;
-  gap: 14px;
+  gap: 9px;
 }
 
 .connection-card {
@@ -1083,10 +1083,10 @@ select {
   background: var(--surface);
   border-bottom: 1px solid var(--border-soft);
   display: flex;
-  gap: 14px;
+  gap: 10px;
   justify-content: space-between;
-  min-height: 55px;
-  padding: 11px 14px;
+  min-height: 48px;
+  padding: 9px 12px;
 }
 
 .connection-card-body[hidden] {
@@ -1096,7 +1096,7 @@ select {
 .provider-title-block {
   align-items: center;
   display: flex;
-  gap: 11px;
+  gap: 9px;
   min-width: 0;
 }
 
@@ -1149,7 +1149,7 @@ select {
 .connection-title-line {
   align-items: center;
   display: flex;
-  gap: 12px;
+  gap: 8px;
 }
 
 .connection-guide-link {
@@ -1168,16 +1168,16 @@ select {
 
 .connection-card-body {
   display: grid;
-  gap: 7px;
+  gap: 6px;
   grid-template-columns: 1fr;
-  padding: 9px 12px 10px;
+  padding: 8px 10px;
 }
 
 .connection-action-panel {
   background: var(--surface);
   border: 1px solid var(--border-soft);
   border-radius: 6px;
-  padding: 8px;
+  padding: 7px;
 }
 
 .connection-action-panel .credential-field > .metric-label {
@@ -1244,7 +1244,7 @@ select {
 .credential-panel,
 .credential-form {
   display: grid;
-  gap: 7px;
+  gap: 6px;
   min-width: 220px;
 }
 
@@ -1270,8 +1270,8 @@ select {
   display: flex;
   gap: 10px;
   justify-content: space-between;
-  min-height: 38px;
-  padding: 7px 8px;
+  min-height: 34px;
+  padding: 6px 7px;
 }
 
 .credential-list .metric-label + .credential-list-item {
@@ -1286,8 +1286,8 @@ select {
 
 .credential-form-grid {
   display: grid;
-  gap: 9px;
-  grid-template-columns: minmax(150px, 0.85fr) minmax(180px, 1.15fr);
+  gap: 7px;
+  grid-template-columns: minmax(130px, 0.75fr) minmax(170px, 1.25fr);
 }
 
 .connection-action-panel .credential-form-grid {
@@ -1317,6 +1317,7 @@ select {
 }
 
 .credential-hint,
+.credential-success,
 .credential-error {
   font-size: 11px;
   line-height: 1.35;
@@ -1332,6 +1333,14 @@ select {
   border: 1px solid #f5b5b0;
   border-radius: 5px;
   color: var(--red);
+  padding: 7px 9px;
+}
+
+.credential-success {
+  background: var(--green-soft);
+  border: 1px solid #b9dfca;
+  border-radius: 5px;
+  color: var(--green);
   padding: 7px 9px;
 }
 
@@ -1364,9 +1373,124 @@ select {
   width: 5px;
 }
 
+.aws-setup-panel {
+  display: grid;
+  gap: 10px;
+  min-width: 220px;
+}
+
+.aws-setup-header {
+  align-items: flex-start;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.aws-setup-title {
+  align-items: center;
+  color: var(--text);
+  display: inline-flex;
+  gap: 6px;
+}
+
+.tool-loading-panel {
+  background: #f8fafc;
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  display: grid;
+  gap: 7px;
+  padding: 9px 10px;
+}
+
+.tool-loading-header {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.tool-loading-header strong {
+  color: var(--blue);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.tool-loading-track {
+  background: #e2e8f0;
+  border-radius: 999px;
+  height: 6px;
+  overflow: hidden;
+  width: 100%;
+}
+
+.tool-loading-bar {
+  background: linear-gradient(90deg, var(--blue), var(--green));
+  border-radius: inherit;
+  display: block;
+  height: 100%;
+  transition: width 180ms ease;
+}
+
+.tool-loading-task {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.aws-setup-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.aws-setup-item {
+  background: var(--surface-raised);
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 8px 9px;
+}
+
+.aws-setup-item strong,
+.aws-setup-item .metric-meta {
+  overflow-wrap: anywhere;
+}
+
+.aws-command-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.aws-command-strip code {
+  background: #111827;
+  border-radius: 5px;
+  color: #ffffff;
+  font-size: 11px;
+  line-height: 1.4;
+  padding: 4px 6px;
+}
+
+.aws-profile-form {
+  align-items: end;
+  display: grid;
+  gap: 7px;
+  grid-template-columns: minmax(180px, 1fr) auto;
+}
+
+.aws-setup-actions {
+  grid-column: 1 / -1;
+  justify-content: flex-start;
+}
+
 .insight-grid {
   display: grid;
-  gap: 14px;
+  gap: 10px;
   grid-template-columns: minmax(0, 1fr) minmax(300px, 0.75fr);
 }
 
@@ -1397,7 +1521,7 @@ select {
 .forecast-body {
   align-items: center;
   display: grid;
-  gap: 16px;
+  gap: 12px;
   grid-template-columns: auto minmax(0, 1fr);
 }
 
@@ -1448,12 +1572,43 @@ select {
   margin-bottom: 1rem;
 }
 
+@media (min-width: 1440px) {
+  .content {
+    padding-right: 24px;
+  }
+}
+
+@media (max-width: 1280px) {
+  .content {
+    padding: 16px 18px 24px;
+  }
+
+  .layout-grid {
+    grid-template-columns: 164px minmax(0, 1fr);
+  }
+
+  .layout-grid-collapsed {
+    grid-template-columns: 52px minmax(0, 1fr);
+  }
+}
+
 @media (max-width: 1180px) {
+  .metric-grid,
+  .risk-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ops-grid,
+  .insight-grid {
+    grid-template-columns: 1fr;
+  }
+
   .catalog-filter-grid {
     grid-template-columns: minmax(220px, 1fr) minmax(140px, 1fr);
   }
 
-  .risk-summary-grid {
+  .ops-rail-body,
+  .forecast-stack {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -1472,7 +1627,8 @@ select {
   }
 
   .content {
-    padding: 1rem;
+    gap: 9px;
+    padding: 10px;
   }
 
   .page-header,
@@ -1496,6 +1652,8 @@ select {
   .catalog-filter-grid,
   .connection-card-body,
   .credential-form-grid,
+  .aws-profile-form,
+  .aws-setup-grid,
   .insight-grid,
   .forecast-body,
   .metric-grid {
@@ -1511,5 +1669,75 @@ select {
   .credential-actions,
   .panel-actions {
     justify-content: flex-start;
+  }
+
+  .panel-header,
+  .connection-card-header {
+    gap: 8px;
+    padding: 8px 10px;
+  }
+
+  .panel-body,
+  .catalog-card,
+  .metric-card {
+    padding: 10px;
+  }
+
+  .catalog-grid {
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .content {
+    padding: 8px;
+  }
+
+  .mobile-bar {
+    padding: 8px 10px;
+  }
+
+  .page-header {
+    gap: 8px;
+  }
+
+  .page-title {
+    font-size: 19px;
+  }
+
+  .metric-value {
+    font-size: 20px;
+  }
+
+  .catalog-grid,
+  .metric-grid,
+  .risk-summary-grid,
+  .ops-rail-body,
+  .forecast-stack {
+    grid-template-columns: 1fr;
+  }
+
+  .catalog-filter-grid {
+    gap: 8px;
+    padding: 8px;
+  }
+
+  .connection-card-body {
+    padding: 7px 8px;
+  }
+
+  .connection-requirements {
+    grid-template-columns: 1fr;
+  }
+
+  .connection-requirements .requirements-cell,
+  .connection-requirements .setup-link-list {
+    align-items: flex-start;
+  }
+
+  .primary-button,
+  .ghost-button,
+  .menu-button {
+    min-height: 32px;
   }
 }
