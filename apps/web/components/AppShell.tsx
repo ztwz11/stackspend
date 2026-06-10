@@ -6,6 +6,7 @@ import { useState, type ReactNode } from "react";
 import {
   BarChart3,
   Bell,
+  BellRing,
   ChevronsLeft,
   CircleHelp,
   Cloud,
@@ -249,6 +250,7 @@ function buildNavGroups(
       label: messages.nav.settings,
       items: [
         { href: `${base}/settings/connections`, label: messages.nav.connections, icon: Link2 },
+        { href: `${base}/settings/notifications`, label: messages.nav.notifications, icon: BellRing },
         { href: `${base}/settings/preferences`, label: messages.nav.preferences, icon: SlidersHorizontal },
         { href: `${base}/providers`, label: messages.nav.providers, icon: KeyRound },
       ],

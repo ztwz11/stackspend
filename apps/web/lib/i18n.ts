@@ -23,6 +23,7 @@ export interface Messages {
     risks: string;
     allServices: string;
     connections: string;
+    notifications: string;
     preferences: string;
     providers: string;
   };
@@ -115,6 +116,45 @@ export interface Messages {
   settings: {
     connectionsTitle: string;
     connectionsSubtitle: string;
+    notificationsTitle: string;
+    notificationsSubtitle: string;
+    notificationsMaster: string;
+    notificationsMasterHelp: string;
+    notificationEnabled: string;
+    notificationDisabled: string;
+    digestEnabled: string;
+    digestHelp: string;
+    digestInterval: string;
+    digestEverySixHours: string;
+    digestDaily: string;
+    digestWeekly: string;
+    quietHours: string;
+    quietHoursHelp: string;
+    quietHoursStart: string;
+    quietHoursEnd: string;
+    widgetsTitle: string;
+    widgetsSubtitle: string;
+    widgetSelection: string;
+    widgetOrder: string;
+    thresholdsTitle: string;
+    thresholdsSubtitle: string;
+    thresholdWidget: string;
+    thresholdOperator: string;
+    thresholdValue: string;
+    thresholdCooldown: string;
+    desktopStatusTitle: string;
+    desktopStatus: string;
+    desktopNotConnected: string;
+    desktopAppInfo: string;
+    testNotification: string;
+    testNotificationSent: string;
+    notificationLocalOnly: string;
+    notificationPreview: string;
+    saveNotifications: string;
+    notificationPrefsSaved: string;
+    notificationPrefsSaveError: string;
+    notificationPrefsLoadError: string;
+    notificationStoredLocally: string;
     preferencesTitle: string;
     preferencesSubtitle: string;
     authMethod: string;
@@ -202,6 +242,21 @@ export interface Messages {
     telemetry: string;
     off: string;
   };
+  notificationWidgets: {
+    month_forecast: string;
+    today_live_cost: string;
+    risk_high_count: string;
+    stale_connection_count: string;
+    aws_month_forecast: string;
+    openai_today_cost: string;
+    openai_today_tokens: string;
+    claude_five_hour_percent: string;
+    claude_weekly_percent: string;
+    codex_five_hour_percent: string;
+    codex_weekly_percent: string;
+    supabase_usage_health: string;
+    cloudflare_month_to_date: string;
+  };
   states: Record<string, string>;
   table: {
     provider: string;
@@ -241,6 +296,7 @@ export const messages = {
       risks: "Risks",
       allServices: "All services",
       connections: "Connections",
+      notifications: "Notifications",
       preferences: "Preferences",
       providers: "Provider catalog",
     },
@@ -333,6 +389,45 @@ export const messages = {
     settings: {
       connectionsTitle: "Connections",
       connectionsSubtitle: "Credential status without exposing secret values.",
+      notificationsTitle: "Notifications",
+      notificationsSubtitle: "Choose the local digest, widgets, and alert thresholds shown by the desktop notifier.",
+      notificationsMaster: "Notifications",
+      notificationsMasterHelp: "Controls local digest and desktop notification preferences only.",
+      notificationEnabled: "On",
+      notificationDisabled: "Off",
+      digestEnabled: "Digest",
+      digestHelp: "Selected widgets appear in the digest in the order shown below.",
+      digestInterval: "Digest interval",
+      digestEverySixHours: "Every 6 hours",
+      digestDaily: "Daily",
+      digestWeekly: "Weekly",
+      quietHours: "Quiet hours",
+      quietHoursHelp: "Notifications stay silent during this local time window.",
+      quietHoursStart: "Start",
+      quietHoursEnd: "End",
+      widgetsTitle: "Digest widgets",
+      widgetsSubtitle: "Only selected widgets are included in the local digest preview.",
+      widgetSelection: "Widget selection",
+      widgetOrder: "Order",
+      thresholdsTitle: "Threshold rules",
+      thresholdsSubtitle: "Threshold rows are stored locally and evaluated by the desktop notifier.",
+      thresholdWidget: "Widget",
+      thresholdOperator: "Operator",
+      thresholdValue: "Value",
+      thresholdCooldown: "Cooldown",
+      desktopStatusTitle: "Desktop app",
+      desktopStatus: "Status",
+      desktopNotConnected: "Not connected",
+      desktopAppInfo: "The tray app is planned as a thin local controller. It should read sanitized preferences and never collect secrets.",
+      testNotification: "Test notification",
+      testNotificationSent: "Preview generated",
+      notificationLocalOnly: "Local preview only. No webhook, provider call, or desktop notification is sent.",
+      notificationPreview: "Preview",
+      saveNotifications: "Save notifications",
+      notificationPrefsSaved: "Notification preferences saved locally.",
+      notificationPrefsSaveError: "Notification preferences were not saved.",
+      notificationPrefsLoadError: "Notification preferences could not be loaded.",
+      notificationStoredLocally: "Preferences are stored in a local StackSpend file.",
       preferencesTitle: "Preferences",
       preferencesSubtitle: "Local display settings only.",
       authMethod: "Auth method",
@@ -420,6 +515,21 @@ export const messages = {
       telemetry: "Telemetry",
       off: "Off",
     },
+    notificationWidgets: {
+      month_forecast: "Month forecast",
+      today_live_cost: "Today live cost",
+      risk_high_count: "High-risk count",
+      stale_connection_count: "Stale connections",
+      aws_month_forecast: "AWS month forecast",
+      openai_today_cost: "OpenAI today cost",
+      openai_today_tokens: "OpenAI today tokens",
+      claude_five_hour_percent: "Claude 5-hour usage",
+      claude_weekly_percent: "Claude weekly usage",
+      codex_five_hour_percent: "Codex 5-hour usage",
+      codex_weekly_percent: "Codex weekly usage",
+      supabase_usage_health: "Supabase usage health",
+      cloudflare_month_to_date: "Cloudflare month to date",
+    },
     states: {
       fresh: "Fresh",
       stale: "Stale",
@@ -489,6 +599,7 @@ export const messages = {
       risks: "리스크",
       allServices: "전체 서비스",
       connections: "연결",
+      notifications: "알림",
       preferences: "환경설정",
       providers: "프로바이더 카탈로그",
     },
@@ -581,6 +692,45 @@ export const messages = {
     settings: {
       connectionsTitle: "연결",
       connectionsSubtitle: "secret 값을 노출하지 않고 인증 상태만 보여줍니다.",
+      notificationsTitle: "알림",
+      notificationsSubtitle: "로컬 digest, 위젯, desktop notifier에 표시할 기준을 선택합니다.",
+      notificationsMaster: "알림",
+      notificationsMasterHelp: "로컬 digest와 desktop 알림 환경설정만 제어합니다.",
+      notificationEnabled: "켜짐",
+      notificationDisabled: "꺼짐",
+      digestEnabled: "Digest",
+      digestHelp: "선택한 위젯은 아래 순서대로 digest에 표시됩니다.",
+      digestInterval: "Digest 주기",
+      digestEverySixHours: "6시간마다",
+      digestDaily: "매일",
+      digestWeekly: "매주",
+      quietHours: "조용한 시간",
+      quietHoursHelp: "이 로컬 시간대에는 알림을 무음으로 둡니다.",
+      quietHoursStart: "시작",
+      quietHoursEnd: "종료",
+      widgetsTitle: "Digest 위젯",
+      widgetsSubtitle: "선택한 위젯만 로컬 digest preview에 포함합니다.",
+      widgetSelection: "위젯 선택",
+      widgetOrder: "순서",
+      thresholdsTitle: "Threshold 규칙",
+      thresholdsSubtitle: "Threshold 행은 로컬에 저장되고 데스크톱 알리미가 평가합니다.",
+      thresholdWidget: "위젯",
+      thresholdOperator: "연산자",
+      thresholdValue: "값",
+      thresholdCooldown: "쿨다운",
+      desktopStatusTitle: "Desktop app",
+      desktopStatus: "상태",
+      desktopNotConnected: "연결 안 됨",
+      desktopAppInfo: "Tray app은 얇은 로컬 컨트롤러로 계획되어 있습니다. 정리된 환경설정만 읽고 secret은 수집하지 않아야 합니다.",
+      testNotification: "테스트 알림",
+      testNotificationSent: "Preview 생성됨",
+      notificationLocalOnly: "로컬 미리보기 전용입니다. webhook, provider 호출, desktop 알림은 전송하지 않습니다.",
+      notificationPreview: "Preview",
+      saveNotifications: "알림 저장",
+      notificationPrefsSaved: "알림 환경설정을 로컬에 저장했습니다.",
+      notificationPrefsSaveError: "알림 환경설정을 저장하지 못했습니다.",
+      notificationPrefsLoadError: "알림 환경설정을 불러오지 못했습니다.",
+      notificationStoredLocally: "환경설정은 StackSpend 로컬 파일에 저장됩니다.",
       preferencesTitle: "환경설정",
       preferencesSubtitle: "로컬 표시 설정만 관리합니다.",
       authMethod: "인증 방식",
@@ -668,6 +818,21 @@ export const messages = {
       telemetry: "텔레메트리",
       off: "꺼짐",
     },
+    notificationWidgets: {
+      month_forecast: "이번 달 예상",
+      today_live_cost: "오늘 실시간 비용",
+      risk_high_count: "높은 리스크 수",
+      stale_connection_count: "오래된 연결",
+      aws_month_forecast: "AWS 이번 달 예상",
+      openai_today_cost: "OpenAI 오늘 비용",
+      openai_today_tokens: "OpenAI 오늘 토큰",
+      claude_five_hour_percent: "Claude 5시간 사용률",
+      claude_weekly_percent: "Claude 주간 사용률",
+      codex_five_hour_percent: "Codex 5시간 사용률",
+      codex_weekly_percent: "Codex 주간 사용률",
+      supabase_usage_health: "Supabase 사용량 상태",
+      cloudflare_month_to_date: "Cloudflare 월 누적",
+    },
     states: {
       fresh: "최신",
       stale: "오래됨",
@@ -737,6 +902,7 @@ export const messages = {
       risks: "リスク",
       allServices: "全サービス",
       connections: "接続",
+      notifications: "通知",
       preferences: "環境設定",
       providers: "プロバイダーカタログ",
     },
@@ -829,6 +995,45 @@ export const messages = {
     settings: {
       connectionsTitle: "接続",
       connectionsSubtitle: "secret 値を表示せずに認証状態だけを示します。",
+      notificationsTitle: "通知",
+      notificationsSubtitle: "ローカル digest、ウィジェット、desktop notifier に表示する条件を選びます。",
+      notificationsMaster: "通知",
+      notificationsMasterHelp: "ローカル digest と desktop 通知の環境設定だけを制御します。",
+      notificationEnabled: "オン",
+      notificationDisabled: "オフ",
+      digestEnabled: "Digest",
+      digestHelp: "選択したウィジェットは下の順序で digest に表示されます。",
+      digestInterval: "Digest 間隔",
+      digestEverySixHours: "6時間ごと",
+      digestDaily: "毎日",
+      digestWeekly: "毎週",
+      quietHours: "静音時間",
+      quietHoursHelp: "このローカル時間帯は通知を静かにします。",
+      quietHoursStart: "開始",
+      quietHoursEnd: "終了",
+      widgetsTitle: "Digest ウィジェット",
+      widgetsSubtitle: "選択したウィジェットだけをローカル digest preview に含めます。",
+      widgetSelection: "ウィジェット選択",
+      widgetOrder: "順序",
+      thresholdsTitle: "Threshold ルール",
+      thresholdsSubtitle: "Threshold 行はローカルに保存され、デスクトップ通知側で評価されます。",
+      thresholdWidget: "ウィジェット",
+      thresholdOperator: "演算子",
+      thresholdValue: "値",
+      thresholdCooldown: "クールダウン",
+      desktopStatusTitle: "Desktop app",
+      desktopStatus: "状態",
+      desktopNotConnected: "未接続",
+      desktopAppInfo: "Tray app は薄いローカルコントローラーとして予定されています。整形済みの設定だけを読み、secret は収集しない設計です。",
+      testNotification: "テスト通知",
+      testNotificationSent: "Preview 生成済み",
+      notificationLocalOnly: "ローカルプレビュー専用です。webhook、provider 呼び出し、desktop 通知は送信しません。",
+      notificationPreview: "Preview",
+      saveNotifications: "通知を保存",
+      notificationPrefsSaved: "通知設定をローカルに保存しました。",
+      notificationPrefsSaveError: "通知設定を保存できませんでした。",
+      notificationPrefsLoadError: "通知設定を読み込めませんでした。",
+      notificationStoredLocally: "設定は StackSpend のローカルファイルに保存されます。",
       preferencesTitle: "環境設定",
       preferencesSubtitle: "ローカル表示設定のみを管理します。",
       authMethod: "認証方式",
@@ -915,6 +1120,21 @@ export const messages = {
       density: "密度",
       telemetry: "テレメトリー",
       off: "オフ",
+    },
+    notificationWidgets: {
+      month_forecast: "月次予測",
+      today_live_cost: "今日のライブコスト",
+      risk_high_count: "高リスク数",
+      stale_connection_count: "古い接続",
+      aws_month_forecast: "AWS 月次予測",
+      openai_today_cost: "OpenAI 今日のコスト",
+      openai_today_tokens: "OpenAI 今日のトークン",
+      claude_five_hour_percent: "Claude 5時間使用率",
+      claude_weekly_percent: "Claude 週間使用率",
+      codex_five_hour_percent: "Codex 5時間使用率",
+      codex_weekly_percent: "Codex 週間使用率",
+      supabase_usage_health: "Supabase 利用ヘルス",
+      cloudflare_month_to_date: "Cloudflare 月初来",
     },
     states: {
       fresh: "最新",

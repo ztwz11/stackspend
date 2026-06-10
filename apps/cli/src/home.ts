@@ -14,6 +14,10 @@ export function renderHomeScreen(input: { version: string; theme: Theme }): stri
     `  ${theme.command("/init")}                 Create local SQLite storage`,
     `  ${theme.command("/dashboard")}            Check the local dashboard API`,
     `  ${theme.command("/dashboard check")}      Same as /dashboard`,
+    `  ${theme.command("/summary json")}         Print sanitized local summary JSON`,
+    `  ${theme.command("/notify dry-run")}       Preview a sanitized notification digest`,
+    `  ${theme.command("/notify prefs")}         List local notification defaults`,
+    `  ${theme.command("/desktop status")}       Check local runtime status`,
     `  ${theme.command("/theme preview")}        Preview the active CLI image-reference theme`,
     `  ${theme.command("/sync mock")}            Sync fake local review snapshots`,
     `  ${theme.command("/sync aws")}             Sync AWS Cost Explorer snapshots`,
@@ -26,7 +30,13 @@ export function renderHomeScreen(input: { version: string; theme: Theme }): stri
     theme.heading("Classic CLI"),
     "  stackspend doctor",
     "  stackspend init",
+    "  stackspend serve [--port <port>]",
+    "  stackspend open",
     "  stackspend sync --provider mock",
+    "  stackspend summary --json",
+    "  stackspend notify once --dry-run",
+    "  stackspend notify prefs list",
+    "  stackspend desktop status",
     "  stackspend report daily --lang ko",
     "  stackspend dashboard check",
     "  stackspend theme preview",
@@ -50,10 +60,16 @@ Usage:
   stackspend init
   stackspend doctor
   stackspend dashboard check [--url <local-dashboard-url>]
+  stackspend serve [--port <port>]
+  stackspend open
   stackspend theme preview
   stackspend theme image-prompt
   stackspend theme image-generate [--out <png> --theme-out <json> --model <model>]
   stackspend sync --provider <mock|aws|openai|supabase|cloudflare>
+  stackspend summary --json
+  stackspend notify once --dry-run
+  stackspend notify prefs list
+  stackspend desktop status
   stackspend report daily --lang ko [--send slack]
 
 Slash commands:
@@ -63,6 +79,10 @@ Slash commands:
   stackspend /init
   stackspend /dashboard
   stackspend /dashboard check
+  stackspend /summary json
+  stackspend /notify dry-run
+  stackspend /notify prefs
+  stackspend /desktop status
   stackspend /theme <preview|image-prompt|image-generate>
   stackspend /sync <mock|aws|openai|supabase|cloudflare>
   stackspend /report ko

@@ -2,9 +2,39 @@
 
 Local-first cloud/SaaS usage, status, and expected billing dashboard for individual developers and small teams.
 
+StackSpend keeps provider credentials, SQLite snapshots, local logs, and reports on the user's machine by default. It is not a hosted SaaS, and provider connectors are read-only.
+
 ## Status
 
 StackSpend is preparing `v0.1.0-alpha.0` for local review. The supported alpha path is local CLI sync into SQLite plus a local Next.js dashboard.
+
+## Why Local-First?
+
+Cloud, SaaS, and AI usage data often includes sensitive identifiers and billing context. StackSpend is designed so users can inspect usage and cost risk without sending API keys or raw provider responses to a hosted service.
+
+Core security expectations:
+
+- Secrets are read from local env, OS keychain, or an explicitly configured encrypted vault.
+- SQLite stores normalized snapshots, not credential material.
+- Raw provider payloads must not be persisted in SQLite, dashboard JSON, reports, Slack payloads, logs, fixtures, screenshots, or test snapshots.
+- Today live values are provisional overlays, not confirmed canonical history.
+- Telemetry is off by default and any future telemetry must be opt-in only.
+
+See [docs/security-model.md](docs/security-model.md) for the detailed security model.
+
+## Supported Providers
+
+| Provider | Status | Data | Auth |
+|---|---|---|---|
+| AWS | available | cost, usage, forecast | AWS profile / SSO |
+| OpenAI | available | organization usage, costs | Admin API key |
+| Supabase | experimental | usage, health | OAuth / PAT |
+| Cloudflare | experimental | billing, usage | API token |
+| GCP | planned/local setup | CLI and ADC readiness | gcloud CLI |
+| Codex CLI | local-only | local usage and quota estimate | local CLI/logs |
+| Claude CLI | local-only | local usage and quota estimate | local CLI/statusline/logs |
+
+Codex CLI and Claude CLI are local usage providers, not API billing providers. StackSpend prioritizes 5-hour quota percent, weekly quota percent, and rolling token usage where those values can be derived safely. See [docs/local-ai-cli-usage.md](docs/local-ai-cli-usage.md).
 
 ## v0.1 Direction
 

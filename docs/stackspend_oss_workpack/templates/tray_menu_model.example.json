@@ -1,0 +1,42 @@
+{
+  "localOnly": true,
+  "secretsReturned": false,
+  "generatedAt": "2026-06-09T00:00:00.000Z",
+  "tooltip": "StackSpend · Claude 5h 72% · risks 1",
+  "status": "warning",
+  "items": [
+    {
+      "id": "open-dashboard",
+      "label": "Open Dashboard",
+      "kind": "action",
+      "action": "open_url",
+      "urlPath": "/ko/dashboard/overview"
+    },
+    {
+      "id": "open-connections",
+      "label": "Open Connections",
+      "kind": "action",
+      "action": "open_url",
+      "urlPath": "/ko/settings/connections"
+    },
+    {
+      "id": "refresh-now",
+      "label": "Refresh Now",
+      "kind": "action",
+      "action": "refresh_live"
+    },
+    {
+      "id": "pause-1h",
+      "label": "Pause Notifications 1h",
+      "kind": "action",
+      "action": "pause_notifications",
+      "durationMinutes": 60
+    },
+    {
+      "id": "quit",
+      "label": "Quit StackSpend",
+      "kind": "action",
+      "action": "quit"
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "localOnly": true,
+  "secretsReturned": false,
+  "generatedAt": "2026-06-09T00:00:00.000Z",
+  "title": "StackSpend",
+  "body": "Claude 5h 72% · Codex week 41% · High risks 1",
+  "severity": "high",
+  "clickUrl": "http://127.0.0.1:47831/ko/dashboard/risks",
+  "items": [
+    {
+      "key": "claude_five_hour_percent",
+      "label": "Claude 5h",
+      "value": "72%",
+      "rawValue": 72,
+      "unit": "percent",
+      "providerKey": "claude-cli",
+      "severity": "medium",
+      "freshness": "live",
+      "confidence": "medium",
+      "clickPath": "/ko/services/claude-cli"
+    },
+    {
+      "key": "codex_weekly_percent",
+      "label": "Codex week",
+      "value": "41%",
+      "rawValue": 41,
+      "unit": "percent",
+      "providerKey": "codex-cli",
+      "severity": "low",
+      "freshness": "live",
+      "confidence": "low",
+      "clickPath": "/ko/services/codex-cli"
+    }
+  ]
+}

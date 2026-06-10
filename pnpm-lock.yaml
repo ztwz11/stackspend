@@ -26,6 +26,8 @@ importers:
 
   apps/cli: {}
 
+  apps/tray: {}
+
   apps/web:
     dependencies:
       lucide-react:
@@ -71,9 +73,15 @@ importers:
 
   packages/db: {}
 
+  packages/local-api: {}
+
   packages/report: {}
 
+  packages/runtime: {}
+
   packages/security: {}
+
+  packages/view-model: {}
 
 packages:
 

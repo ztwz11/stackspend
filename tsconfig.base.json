@@ -39,6 +39,15 @@
       "@stackspend/report": [
         "packages/report/src/index.ts"
       ],
+      "@stackspend/view-model": [
+        "packages/view-model/src/index.ts"
+      ],
+      "@stackspend/runtime": [
+        "packages/runtime/src/index.ts"
+      ],
+      "@stackspend/local-api": [
+        "packages/local-api/src/index.ts"
+      ],
       "@stackspend/connector-mock": [
         "packages/connectors/mock/src/index.ts"
       ]

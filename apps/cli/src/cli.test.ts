@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import { resolveSqliteBin } from "../../../packages/db/src/sqlite-bin.js";
 import type { SlackReportTransportRequest } from "../../../packages/report/src/slack.js";
 import { CLI_VERSION, runCli } from "./cli.js";
+import type { CliLocalRuntimeAdapter, LocalRuntime, StartRuntimeOptions } from "./runtime-adapter.js";
 
 const FIXED_NOW = "2026-06-02T09:00:00.000Z";
 const AWS_FIXTURE_PATH = resolve(
@@ -115,7 +116,7 @@ describe("StackSpend CLI", () => {
 
   it("generates a CLI image reference and theme file with an explicit env-only API key", async () => {
     const cwd = await mkdtemp(join(tmpdir(), "stackspend-cli-"));
-    const fetchRequests: Array<{ url: string; model?: string; hasAuthorization: boolean }> = [];
+    const fetchRequests: Array<{ url: string; model: string | undefined; hasAuthorization: boolean }> = [];
     const result = await runCli(
       [
         "theme",
@@ -417,6 +418,279 @@ describe("StackSpend CLI", () => {
     expect(result.stdout.join("\n")).toContain("API status: 503");
     expect(result.stderr.join("\n")).toContain("pnpm --filter @stackspend/web dev");
     expect(result.stderr.join("\n")).toContain("pnpm --filter @stackspend/cli dev -- dashboard check");
+  });
+
+  it("prints sanitized summary JSON from local normalized data", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "stackspend-cli-"));
+
+    const syncResult = await runCli(["sync", "--provider", "mock"], testContext(cwd));
+    const result = await runCli(["summary", "--json"], testContext(cwd, {
+      OPENAI_ADMIN_KEY: "sk-fake-openai-admin-key",
+      SLACK_WEBHOOK_URL: TEST_SLACK_WEBHOOK_URL,
+    }));
+    const stdout = result.stdout.join("\n");
+    const parsed = JSON.parse(stdout) as {
+      database: { available: boolean; path: string };
+      secretsReturned: boolean;
+      providerCount: number;
+      providers: Array<Record<string, unknown>>;
+      totals: { estimatedAmountMinorByCurrency: Array<{ currency: string; amountMinor: number }> };
+    };
+
+    expect(syncResult.exitCode).toBe(0);
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toEqual([]);
+    expect(parsed.database).toEqual({
+      available: true,
+      path: ".stackspend/stackspend.sqlite",
+    });
+    expect(parsed.secretsReturned).toBe(false);
+    expect(parsed.providerCount).toBe(1);
+    expect(parsed.providers[0]).toMatchObject({
+      key: "mock",
+      displayName: "Mock Provider",
+      usageSnapshotCount: 1,
+      billingSnapshotCount: 1,
+      healthSnapshotCount: 1,
+      costEstimateCount: 1,
+      alertCount: 0,
+    });
+    expect(parsed.providers[0]).not.toHaveProperty("id");
+    expect(parsed.providers[0]).not.toHaveProperty("providerAccountRef");
+    expect(parsed).not.toHaveProperty("rawProviderPayloadsReturned");
+    expect(parsed.totals.estimatedAmountMinorByCurrency).toEqual([
+      {
+        currency: "USD",
+        amountMinor: 1500,
+      },
+    ]);
+    expect(stdout).not.toMatch(FORBIDDEN_PERSISTED_PROVIDER_DATA_PATTERN);
+    expect(stdout).not.toContain("sk-fake-openai-admin-key");
+    expect(stdout).not.toContain(TEST_SLACK_WEBHOOK_URL);
+  });
+
+  it("previews sanitized notification digest output without sending Slack", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "stackspend-cli-"));
+
+    const syncResult = await runCli(["sync", "--provider", "mock"], testContext(cwd));
+    const result = await runCli(["notify", "once", "--dry-run"], testContext(cwd, {
+      SLACK_WEBHOOK_URL: TEST_SLACK_WEBHOOK_URL,
+    }));
+    const stdout = result.stdout.join("\n");
+
+    expect(syncResult.exitCode).toBe(0);
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toEqual([]);
+    expect(stdout).toContain("StackSpend notification dry run");
+    expect(stdout).toContain("Secrets returned: false");
+    expect(stdout).toContain("Providers: 1");
+    expect(stdout).toContain("Estimated total USD: 15.00");
+    expect(stdout).not.toMatch(FORBIDDEN_PERSISTED_PROVIDER_DATA_PATTERN);
+    expect(stdout).not.toContain(TEST_SLACK_WEBHOOK_URL);
+  });
+
+  it("lists default notification preferences without local API secrets", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "stackspend-cli-"));
+    const result = await runCli(["notify", "prefs", "list"], testContext(cwd, {
+      SLACK_WEBHOOK_URL: TEST_SLACK_WEBHOOK_URL,
+    }));
+    const stdout = result.stdout.join("\n");
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toEqual([]);
+    expect(stdout).toContain("StackSpend notification preferences");
+    expect(stdout).toContain("Source: default preference template");
+    expect(stdout).toContain("Secrets returned: false");
+    expect(stdout).toContain("Quiet hours: 22:00-08:00");
+    expect(stdout).toContain("- openai_today_tokens: enabled");
+    expect(stdout).toContain("- claude_five_hour_percent: disabled");
+    expect(stdout).toContain("- risk_high_count: gte 1 cooldown 60m");
+    expect(stdout).not.toContain(TEST_SLACK_WEBHOOK_URL);
+  });
+
+  it("updates persisted notification preferences from CLI prefs commands", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "stackspend-cli-"));
+    const env = {
+      STACKSPEND_NOTIFICATION_PREFS_PATH: "prefs/notifications.json",
+      SLACK_WEBHOOK_URL: TEST_SLACK_WEBHOOK_URL,
+    };
+
+    const enable = await runCli(["notify", "prefs", "enable", "claude_five_hour_percent"], testContext(cwd, env));
+    const disable = await runCli(["notify", "prefs", "disable", "openai_today_tokens"], testContext(cwd, env));
+    const threshold = await runCli(
+      ["notify", "prefs", "threshold", "claude_five_hour_percent", "--gte", "80", "--cooldown", "60"],
+      testContext(cwd, env),
+    );
+    const quietHours = await runCli(["notify", "prefs", "quiet-hours", "21:30", "07:15"], testContext(cwd, env));
+    const list = await runCli(["notify", "prefs", "list"], testContext(cwd, env));
+    const preferences = JSON.parse(await readFile(join(cwd, "prefs", "notifications.json"), "utf8")) as {
+      quietHours: { start: string; end: string };
+      selectedWidgets: string[];
+      thresholdRules: Array<{
+        widgetKey: string;
+        operator: string;
+        value: number;
+        cooldownMinutes: number;
+      }>;
+    };
+    const allOutput = [
+      ...enable.stdout,
+      ...disable.stdout,
+      ...threshold.stdout,
+      ...quietHours.stdout,
+      ...list.stdout,
+      ...enable.stderr,
+      ...disable.stderr,
+      ...threshold.stderr,
+      ...quietHours.stderr,
+      ...list.stderr,
+    ].join("\n");
+
+    expect(enable.exitCode).toBe(0);
+    expect(disable.exitCode).toBe(0);
+    expect(threshold.exitCode).toBe(0);
+    expect(quietHours.exitCode).toBe(0);
+    expect(list.exitCode).toBe(0);
+    expect(preferences.selectedWidgets).toContain("claude_five_hour_percent");
+    expect(preferences.selectedWidgets).not.toContain("openai_today_tokens");
+    expect(preferences.quietHours).toEqual({
+      start: "21:30",
+      end: "07:15",
+    });
+    expect(preferences.thresholdRules).toContainEqual({
+      widgetKey: "claude_five_hour_percent",
+      operator: "gte",
+      value: 80,
+      cooldownMinutes: 60,
+    });
+    expect(list.stdout.join("\n")).toContain("Source: local preference file");
+    expect(list.stdout.join("\n")).toContain("- claude_five_hour_percent: enabled");
+    expect(list.stdout.join("\n")).toContain("- openai_today_tokens: disabled");
+    expect(list.stdout.join("\n")).toContain("- claude_five_hour_percent: gte 80 cooldown 60m");
+    expect(allOutput).not.toContain(TEST_SLACK_WEBHOOK_URL);
+  });
+
+  it("sends a sanitized notification test through the injected Slack transport", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "stackspend-cli-"));
+    const slackRequests: SlackReportTransportRequest[] = [];
+    const result = await runCli(["notify", "test"], {
+      ...testContext(cwd, {
+        SLACK_WEBHOOK_URL: TEST_SLACK_WEBHOOK_URL,
+      }),
+      slackTransport: async (request) => {
+        slackRequests.push(request);
+        return {
+          ok: true,
+          status: 200,
+          body: "ok",
+        };
+      },
+    });
+    const stdout = result.stdout.join("\n");
+    const allOutput = [...result.stdout, ...result.stderr].join("\n");
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toEqual([]);
+    expect(slackRequests).toHaveLength(1);
+    expect(slackRequests[0]?.webhookUrl).toBe(TEST_SLACK_WEBHOOK_URL);
+    expect(slackRequests[0]?.payload.text).toContain("StackSpend test notification");
+    expect(slackRequests[0]?.payload.text).toContain("Secrets returned: false");
+    expect(stdout).toContain("StackSpend test notification sent");
+    expect(allOutput).not.toContain(TEST_SLACK_WEBHOOK_URL);
+  });
+
+  it("routes serve, open, and desktop status through the runtime adapter boundary", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "stackspend-cli-"));
+    const runtime: LocalRuntime = {
+      pid: 12345,
+      port: 47831,
+      baseUrl: "http://127.0.0.1:47831",
+      startedAt: FIXED_NOW,
+      version: CLI_VERSION,
+    };
+    const serveStarts: StartRuntimeOptions[] = [];
+    const openStarts: StartRuntimeOptions[] = [];
+    const openedUrls: string[] = [];
+    const serveRuntime: CliLocalRuntimeAdapter = {
+      async findRuntime() {
+        return null;
+      },
+      async assertRuntimeHealthy() {
+        return true;
+      },
+      async startRuntime(options) {
+        serveStarts.push(options);
+        return {
+          status: "started",
+          runtime,
+        };
+      },
+    };
+    const openRuntime: CliLocalRuntimeAdapter = {
+      async findRuntime() {
+        return null;
+      },
+      async assertRuntimeHealthy() {
+        return true;
+      },
+      async startRuntime(options) {
+        openStarts.push(options);
+        return {
+          status: "started",
+          runtime,
+        };
+      },
+    };
+    const statusRuntime: CliLocalRuntimeAdapter = {
+      async findRuntime() {
+        return runtime;
+      },
+      async assertRuntimeHealthy() {
+        return true;
+      },
+      async startRuntime() {
+        return {
+          status: "running",
+          runtime,
+        };
+      },
+    };
+
+    const serve = await runCli(["serve", "--port", "47831"], {
+      ...testContext(cwd),
+      localRuntime: serveRuntime,
+    });
+    const open = await runCli(["open"], {
+      ...testContext(cwd),
+      localRuntime: openRuntime,
+      openUrl: (url) => {
+        openedUrls.push(url);
+      },
+    });
+    const status = await runCli(["desktop", "status"], {
+      ...testContext(cwd),
+      localRuntime: statusRuntime,
+    });
+
+    expect(serve.exitCode).toBe(0);
+    expect(serveStarts).toEqual([
+      {
+        headless: false,
+        port: 47831,
+      },
+    ]);
+    expect(serve.stdout.join("\n")).toContain("Base URL: http://127.0.0.1:47831");
+    expect(open.exitCode).toBe(0);
+    expect(openStarts).toEqual([
+      {
+        openBrowser: true,
+        headless: true,
+      },
+    ]);
+    expect(openedUrls).toEqual(["http://127.0.0.1:47831"]);
+    expect(status.exitCode).toBe(0);
+    expect(status.stdout.join("\n")).toContain("Runtime: healthy");
+    expect(status.stdout.join("\n")).toContain("Desktop shell: not detected by CLI");
   });
 
   it("syncs the mock provider and renders a Korean daily report from persisted normalized data", async () => {

@@ -1,11 +1,15 @@
 import { runDashboardCommand } from "./commands/dashboard.js";
 import { runDoctorCommand } from "./commands/doctor.js";
 import { runInitCommand } from "./commands/init.js";
+import { runNotifyCommand } from "./commands/notify.js";
 import { runReportCommand } from "./commands/report.js";
+import { runDesktopCommand, runOpenCommand, runServeCommand } from "./commands/runtime.js";
+import { runSummaryCommand } from "./commands/summary.js";
 import { runSyncCommand } from "./commands/sync.js";
 import { runThemeCommand } from "./commands/theme.js";
 import { renderHelpScreen, renderHomeScreen } from "./home.js";
 import { runSlashPrompt } from "./interactive.js";
+import { openUrlInBrowser, type CliLocalRuntimeAdapter } from "./runtime-adapter.js";
 import { resolveSlashCommand } from "./slash.js";
 import { createTheme, type Theme } from "./theme.js";
 import type { SlackReportTransport } from "../../../packages/report/src/index.js";
@@ -34,6 +38,8 @@ export interface CliRuntime {
   slackTransport?: SlackReportTransport;
   liveClients?: CliLiveClients;
   fetch?: typeof fetch;
+  localRuntime?: CliLocalRuntimeAdapter;
+  openUrl?: (url: string) => Promise<void> | void;
 }
 
 export interface CliLiveClients {
@@ -52,10 +58,12 @@ export interface CliExecutionContext {
   slackTransport?: SlackReportTransport;
   liveClients?: CliLiveClients;
   fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response>;
+  openUrl(url: string): Promise<void> | void;
   stdin?: NodeJS.ReadableStream;
   output?: NodeJS.WritableStream;
   interactive: boolean;
   theme: Theme;
+  localRuntime?: CliLocalRuntimeAdapter;
 }
 
 export interface CliResult {
@@ -105,12 +113,14 @@ export async function runCli(args: readonly string[], runtime: CliRuntime = {}):
       runtime.stderr(line);
     },
     fetch: runtime.fetch ?? globalThis.fetch,
+    openUrl: runtime.openUrl ?? openUrlInBrowser,
     interactive: runtime.interactive ?? shouldEnterInteractivePrompt({
       env,
       stdinIsTTY,
       stdoutIsTTY,
     }),
     theme,
+    ...(runtime.localRuntime === undefined ? {} : { localRuntime: runtime.localRuntime }),
   };
 
   context.stdin = runtime.stdin ?? process.stdin;
@@ -186,8 +196,28 @@ async function dispatchCommand(args: readonly string[], context: CliExecutionCon
     return runDashboardCommand(rest, context);
   }
 
+  if (command === "serve") {
+    return runServeCommand(rest, context);
+  }
+
+  if (command === "open") {
+    return runOpenCommand(rest, context);
+  }
+
   if (command === "sync") {
     return runSyncCommand(rest, context);
+  }
+
+  if (command === "summary") {
+    return runSummaryCommand(rest, context);
+  }
+
+  if (command === "notify") {
+    return runNotifyCommand(rest, context);
+  }
+
+  if (command === "desktop") {
+    return runDesktopCommand(rest, context);
   }
 
   if (command === "report") {

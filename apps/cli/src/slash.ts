@@ -62,6 +62,18 @@ export function resolveSlashCommand(args: readonly string[]): SlashDispatch {
     return resolveDashboardSlash(rest);
   }
 
+  if (command === "/summary") {
+    return resolveSummarySlash(rest);
+  }
+
+  if (command === "/notify") {
+    return resolveNotifySlash(rest);
+  }
+
+  if (command === "/desktop") {
+    return resolveDesktopSlash(rest);
+  }
+
   if (command === "/sync") {
     return resolveSyncSlash(rest);
   }
@@ -132,6 +144,46 @@ function resolveSyncSlash(rest: readonly string[]): SlashDispatch {
   return {
     kind: "dispatch",
     args: ["sync", "--provider", provider],
+  };
+}
+
+function resolveSummarySlash(rest: readonly string[]): SlashDispatch {
+  if (rest.length !== 1 || rest[0] !== "json") {
+    return invalidUsage("/summary", "Usage: stackspend /summary json");
+  }
+
+  return {
+    kind: "dispatch",
+    args: ["summary", "--json"],
+  };
+}
+
+function resolveNotifySlash(rest: readonly string[]): SlashDispatch {
+  if (rest.length === 1 && rest[0] === "dry-run") {
+    return {
+      kind: "dispatch",
+      args: ["notify", "once", "--dry-run"],
+    };
+  }
+
+  if (rest.length === 1 && rest[0] === "prefs") {
+    return {
+      kind: "dispatch",
+      args: ["notify", "prefs", "list"],
+    };
+  }
+
+  return invalidUsage("/notify", "Usage: stackspend /notify <dry-run|prefs>");
+}
+
+function resolveDesktopSlash(rest: readonly string[]): SlashDispatch {
+  if (rest.length !== 1 || rest[0] !== "status") {
+    return invalidUsage("/desktop", "Usage: stackspend /desktop status");
+  }
+
+  return {
+    kind: "dispatch",
+    args: ["desktop", "status"],
   };
 }
 
