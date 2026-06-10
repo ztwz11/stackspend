@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
@@ -12,6 +12,7 @@ const LOCAL_CLI_TIMEOUT_MS = 3_000;
 const MAX_LOCAL_USAGE_FILES = 400;
 const LOCAL_AI_CLI_STATUS_CACHE_MS = 5_000;
 const AWS_PROFILE_NAME_PATTERN = /^[A-Za-z0-9_.:@+=,-]{1,80}$/;
+const WINDOWS_PATH_DELIMITER = ";";
 
 export const AWS_CLI_INSTALL_URL = "https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html";
 export const AWS_CLI_SSO_URL = "https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-sso.html";
@@ -195,6 +196,24 @@ export type LocalCommandRunner = (
   stdout?: string;
   stderr?: string;
 }>;
+
+export function buildWindowsLocalToolPath(
+  currentPath: string,
+  env: Record<string, string | undefined>,
+  nodeExecutable: string,
+): string {
+  return appendUniqueWindowsPathSegments(currentPath, [
+    trimToNull(nodeExecutable) === null ? null : dirname(nodeExecutable),
+    trimToNull(env.NVM_SYMLINK),
+    trimToNull(env.NVM_HOME),
+    joinIfBase(env.APPDATA, "npm"),
+    joinIfBase(env.USERPROFILE, "AppData", "Roaming", "npm"),
+    joinIfBase(env.LOCALAPPDATA, "Microsoft", "WindowsApps"),
+    joinIfBase(env["ProgramFiles"], "Amazon", "AWSCLIV2"),
+    joinIfBase(env["ProgramFiles"], "Google", "Cloud SDK", "google-cloud-sdk", "bin"),
+    joinIfBase(env["ProgramFiles(x86)"], "Google", "Cloud SDK", "google-cloud-sdk", "bin"),
+  ]);
+}
 
 let localAiCliStatusCache: {
   expiresAt: number;
@@ -1586,7 +1605,8 @@ async function defaultRunCommand(
 
     const commandLine = [file, ...args].map(windowsShellQuote).join(" ");
 
-    return execFileAsync("cmd.exe", ["/d", "/s", "/c", `"${commandLine}"`], {
+    return execFileAsync("cmd.exe", ["/d", "/c", commandLine], {
+      env: buildWindowsLocalToolEnv(),
       timeout: options.timeout,
       windowsHide: options.windowsHide,
     });
@@ -1691,7 +1711,61 @@ function maskProjectIdentifier(value: string): string {
 }
 
 function windowsShellQuote(value: string): string {
+  if (/^[A-Za-z0-9_./:@%+=,-]+$/.test(value)) {
+    return value;
+  }
+
   return `"${value.replace(/"/g, "\\\"")}"`;
+}
+
+function buildWindowsLocalToolEnv(): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+  };
+  const currentPath = env.Path ?? env.PATH ?? "";
+  const path = buildWindowsLocalToolPath(currentPath, env, process.execPath);
+
+  env.Path = path;
+  env.PATH = path;
+
+  return env;
+}
+
+function appendUniqueWindowsPathSegments(currentPath: string, candidates: readonly (string | null)[]): string {
+  const segments = currentPath
+    .split(WINDOWS_PATH_DELIMITER)
+    .map((segment) => segment.trim())
+    .filter((segment) => segment.length > 0);
+  const seen = new Set(segments.map(normalizeWindowsPathSegment));
+
+  for (const candidate of candidates) {
+    const segment = trimToNull(candidate ?? undefined);
+
+    if (segment === null) {
+      continue;
+    }
+
+    const key = normalizeWindowsPathSegment(segment);
+
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    segments.push(segment);
+  }
+
+  return segments.join(WINDOWS_PATH_DELIMITER);
+}
+
+function normalizeWindowsPathSegment(value: string): string {
+  return value.replace(/[\\/]+$/, "").toLowerCase();
+}
+
+function joinIfBase(base: string | undefined, ...segments: string[]): string | null {
+  const normalizedBase = trimToNull(base);
+
+  return normalizedBase === null ? null : join(normalizedBase, ...segments);
 }
 
 function windowsSystemExecutable(fileName: string, env: Record<string, string | undefined>): string {

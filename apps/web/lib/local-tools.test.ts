@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  buildWindowsLocalToolPath,
   readAwsLocalSetupStatus,
   readGcpLocalSetupStatus,
   readLocalAiCliStatus,
@@ -11,6 +12,25 @@ import {
 } from "./local-tools";
 
 describe("local tool status", () => {
+  it("adds common Windows CLI shim locations without duplicating PATH entries", () => {
+    const path = buildWindowsLocalToolPath("C:\\Windows\\System32;C:\\nvm4w\\nodejs\\", {
+      APPDATA: "C:\\Users\\developer\\AppData\\Roaming",
+      LOCALAPPDATA: "C:\\Users\\developer\\AppData\\Local",
+      NVM_HOME: "C:\\Users\\developer\\AppData\\Local\\nvm",
+      NVM_SYMLINK: "C:\\nvm4w\\nodejs",
+      ProgramFiles: "C:\\Program Files",
+      "ProgramFiles(x86)": "C:\\Program Files (x86)",
+      USERPROFILE: "C:\\Users\\developer",
+    }, "C:\\nvm4w\\nodejs\\node.exe");
+    const segments = path.split(";");
+
+    expect(segments.filter((segment) => segment.toLowerCase().replace(/[\\/]+$/, "") === "c:\\nvm4w\\nodejs")).toHaveLength(1);
+    expect(segments).toContain("C:\\Users\\developer\\AppData\\Roaming\\npm");
+    expect(segments).toContain("C:\\Users\\developer\\AppData\\Local\\Microsoft\\WindowsApps");
+    expect(segments).toContain("C:\\Program Files\\Amazon\\AWSCLIV2");
+    expect(segments).toContain("C:\\Program Files\\Google\\Cloud SDK\\google-cloud-sdk\\bin");
+  });
+
   it("detects an installed AWS CLI without returning secrets", async () => {
     const status = await readAwsLocalSetupStatus({
       env: {
