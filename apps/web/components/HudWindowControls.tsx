@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, Minus, Pin, PinOff, Settings, X } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Check, Minus, Pin, PinOff, RefreshCw, Save, Settings, X } from "lucide-react";
 import type { Locale } from "../lib/i18n";
 import type { NotificationPreferences } from "./NotificationSettingsModel";
 
 type SaveState = "idle" | "saving" | "saved" | "error";
+const HUD_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 
 interface HudWindowControlsProps {
   initialPreferences: NotificationPreferences;
@@ -13,7 +15,11 @@ interface HudWindowControlsProps {
     alwaysOnTop: string;
     close: string;
     error: string;
+    fontSize: string;
     minimize: string;
+    opacity: string;
+    refresh: string;
+    save: string;
     saved: string;
     settings: string;
   };
@@ -28,8 +34,11 @@ interface TauriWindow {
 }
 
 export function HudWindowControls({ initialPreferences, labels, locale }: HudWindowControlsProps) {
-  const [alwaysOnTop, setAlwaysOnTop] = useState(initialPreferences.hud.alwaysOnTop);
+  const router = useRouter();
   const [controlsOpen, setControlsOpen] = useState(false);
+  const [draftAlwaysOnTop, setDraftAlwaysOnTop] = useState(initialPreferences.hud.alwaysOnTop);
+  const [draftFontScale, setDraftFontScale] = useState(initialPreferences.hud.fontScale);
+  const [draftOpacity, setDraftOpacity] = useState(initialPreferences.hud.opacity);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [tauriAvailable, setTauriAvailable] = useState(false);
 
@@ -46,7 +55,7 @@ export function HudWindowControls({ initialPreferences, labels, locale }: HudWin
       const currentAlwaysOnTop = await hudWindow.isAlwaysOnTop();
 
       if (mounted) {
-        setAlwaysOnTop(currentAlwaysOnTop);
+        setDraftAlwaysOnTop(currentAlwaysOnTop);
       }
     }).catch(() => {
       if (mounted) {
@@ -59,9 +68,46 @@ export function HudWindowControls({ initialPreferences, labels, locale }: HudWin
     };
   }, [initialPreferences.hud.alwaysOnTop]);
 
+  useEffect(() => {
+    setDraftAlwaysOnTop(initialPreferences.hud.alwaysOnTop);
+    setDraftFontScale(initialPreferences.hud.fontScale);
+    setDraftOpacity(initialPreferences.hud.opacity);
+    setSaveState("idle");
+  }, [
+    initialPreferences.hud.alwaysOnTop,
+    initialPreferences.hud.fontScale,
+    initialPreferences.hud.opacity,
+  ]);
+
+  useEffect(() => {
+    const hudPage = document.querySelector<HTMLElement>(".hud-page");
+
+    hudPage?.style.setProperty("--hud-font-scale", String(draftFontScale));
+    hudPage?.style.setProperty("--hud-opacity", String(draftOpacity));
+  }, [draftFontScale, draftOpacity]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      router.refresh();
+    }, HUD_REFRESH_INTERVAL_MS);
+
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, [router]);
+
   return (
     <>
       <div className="hud-window-controls" aria-label={labels.settings}>
+        <button
+          aria-label={labels.refresh}
+          className="hud-control-button"
+          onClick={() => router.refresh()}
+          title={labels.refresh}
+          type="button"
+        >
+          <RefreshCw aria-hidden="true" size={14} strokeWidth={1.9} />
+        </button>
         <button
           aria-expanded={controlsOpen}
           aria-label={labels.settings}
@@ -102,20 +148,62 @@ export function HudWindowControls({ initialPreferences, labels, locale }: HudWin
         <div className="hud-settings-popover">
           <label className="hud-toggle-row">
             <input
-              checked={alwaysOnTop}
+              checked={draftAlwaysOnTop}
               onChange={() => {
-                void updateAlwaysOnTop(!alwaysOnTop);
+                setDraftAlwaysOnTop((current) => !current);
+                setSaveState("idle");
               }}
               type="checkbox"
             />
             <span className="toggle-switch" aria-hidden="true" />
             <span>{labels.alwaysOnTop}</span>
-            {alwaysOnTop ? (
+            {draftAlwaysOnTop ? (
               <Pin aria-hidden="true" size={13} strokeWidth={1.9} />
             ) : (
               <PinOff aria-hidden="true" size={13} strokeWidth={1.9} />
             )}
           </label>
+          <label className="hud-range-row">
+            <span>{labels.fontSize}</span>
+            <input
+              max="130"
+              min="80"
+              onChange={(event) => {
+                setDraftFontScale(Number(event.currentTarget.value) / 100);
+                setSaveState("idle");
+              }}
+              step="5"
+              type="range"
+              value={Math.round(draftFontScale * 100)}
+            />
+            <strong>{Math.round(draftFontScale * 100)}%</strong>
+          </label>
+          <label className="hud-range-row">
+            <span>{labels.opacity}</span>
+            <input
+              max="100"
+              min="65"
+              onChange={(event) => {
+                setDraftOpacity(Number(event.currentTarget.value) / 100);
+                setSaveState("idle");
+              }}
+              step="5"
+              type="range"
+              value={Math.round(draftOpacity * 100)}
+            />
+            <strong>{Math.round(draftOpacity * 100)}%</strong>
+          </label>
+          <button
+            className="hud-save-button"
+            disabled={saveState === "saving"}
+            onClick={() => {
+              void saveHudSettings();
+            }}
+            type="button"
+          >
+            <Save aria-hidden="true" size={13} strokeWidth={1.9} />
+            <span>{labels.save}</span>
+          </button>
           <a className="hud-settings-link" href={`/${locale}/settings/notifications`}>
             <Settings aria-hidden="true" size={13} strokeWidth={1.9} />
             <span>{labels.settings}</span>
@@ -132,23 +220,24 @@ export function HudWindowControls({ initialPreferences, labels, locale }: HudWin
     </>
   );
 
-  async function updateAlwaysOnTop(nextAlwaysOnTop: boolean) {
-    const previousAlwaysOnTop = alwaysOnTop;
-
-    setAlwaysOnTop(nextAlwaysOnTop);
+  async function saveHudSettings() {
     setSaveState("saving");
 
     try {
       const hudWindow = await getCurrentHudWindow();
 
       if (hudWindow !== null) {
-        await hudWindow.setAlwaysOnTop(nextAlwaysOnTop);
+        await hudWindow.setAlwaysOnTop(draftAlwaysOnTop);
       }
 
-      await saveHudAlwaysOnTop(initialPreferences, nextAlwaysOnTop);
+      await saveHudPreferences(initialPreferences, {
+        alwaysOnTop: draftAlwaysOnTop,
+        fontScale: draftFontScale,
+        opacity: draftOpacity,
+      });
+      router.refresh();
       setSaveState("saved");
     } catch {
-      setAlwaysOnTop(previousAlwaysOnTop);
       setSaveState("error");
     }
   }
@@ -178,9 +267,9 @@ async function getCurrentHudWindow(): Promise<TauriWindow | null> {
   }
 }
 
-async function saveHudAlwaysOnTop(
+async function saveHudPreferences(
   initialPreferences: NotificationPreferences,
-  alwaysOnTop: boolean,
+  hudPreferences: Pick<NotificationPreferences["hud"], "alwaysOnTop" | "fontScale" | "opacity">,
 ): Promise<NotificationPreferences> {
   const preferences = await loadNotificationPreferences(initialPreferences);
   const session = await createLocalSession();
@@ -189,7 +278,7 @@ async function saveHudAlwaysOnTop(
       ...preferences,
       hud: {
         ...preferences.hud,
-        alwaysOnTop,
+        ...hudPreferences,
       },
     }),
     credentials: "same-origin",

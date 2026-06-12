@@ -2035,7 +2035,7 @@ body:has(.hud-page) {
   box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12);
   display: grid;
   gap: 6px;
-  min-width: 174px;
+  min-width: 202px;
   padding: 7px;
   position: absolute;
   right: 6px;
@@ -2044,6 +2044,7 @@ body:has(.hud-page) {
 }
 
 .hud-toggle-row,
+.hud-range-row,
 .hud-settings-link,
 .hud-save-status {
   align-items: center;
@@ -2064,6 +2065,22 @@ body:has(.hud-page) {
   opacity: 0;
   position: absolute;
   width: 1px;
+}
+
+.hud-range-row {
+  grid-template-columns: minmax(52px, 1fr) minmax(72px, 88px) 34px;
+}
+
+.hud-range-row input {
+  accent-color: var(--blue);
+  min-width: 0;
+  width: 100%;
+}
+
+.hud-range-row strong {
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  justify-self: end;
 }
 
 .hud-toggle-row .toggle-switch {
@@ -2088,6 +2105,28 @@ body:has(.hud-page) {
   border-top: 1px solid var(--border-soft);
   grid-template-columns: auto minmax(0, 1fr);
   padding-top: 6px;
+}
+
+.hud-save-button {
+  align-items: center;
+  background: var(--blue);
+  border: 1px solid var(--blue);
+  border-radius: 5px;
+  color: #ffffff;
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 11px;
+  font-weight: 680;
+  gap: 6px;
+  justify-content: center;
+  min-height: 28px;
+  padding: 0 9px;
+  width: 100%;
+}
+
+.hud-save-button:disabled {
+  cursor: wait;
+  opacity: 0.72;
 }
 
 .hud-save-status {

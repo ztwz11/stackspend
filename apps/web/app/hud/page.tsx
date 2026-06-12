@@ -39,7 +39,11 @@ export default async function HudPage({ searchParams }: HudPageProps) {
           alwaysOnTop: messages.settings.hudAlwaysOnTop,
           close: messages.settings.hudClose,
           error: messages.settings.notificationPrefsSaveError,
+          fontSize: messages.settings.hudFontSize,
           minimize: messages.settings.hudMinimize,
+          opacity: messages.settings.hudOpacity,
+          refresh: messages.dashboard.refresh,
+          save: messages.settings.hudSaveSettings,
           saved: messages.settings.notificationPrefsSaved,
           settings: messages.nav.settings,
         }}

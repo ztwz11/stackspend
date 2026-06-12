@@ -154,6 +154,7 @@ export interface Messages {
     hudOpacity: string;
     hudMinimize: string;
     hudClose: string;
+    hudSaveSettings: string;
     hudWidgetsTitle: string;
     hudWidgetsSubtitle: string;
     testNotification: string;
@@ -442,6 +443,7 @@ export const messages = {
       hudOpacity: "Opacity",
       hudMinimize: "Minimize HUD",
       hudClose: "Close HUD",
+      hudSaveSettings: "Save HUD",
       hudWidgetsTitle: "HUD items",
       hudWidgetsSubtitle: "Choose exactly what stays visible in the floating HUD.",
       testNotification: "Test notification",
@@ -760,6 +762,7 @@ export const messages = {
       hudOpacity: "투명도",
       hudMinimize: "HUD 최소화",
       hudClose: "HUD 닫기",
+      hudSaveSettings: "HUD 저장",
       hudWidgetsTitle: "HUD 표시 항목",
       hudWidgetsSubtitle: "떠 있는 HUD에 계속 보여줄 항목을 고릅니다.",
       testNotification: "테스트 알림",
@@ -1078,6 +1081,7 @@ export const messages = {
       hudOpacity: "透明度",
       hudMinimize: "HUD を最小化",
       hudClose: "HUD を閉じる",
+      hudSaveSettings: "HUD を保存",
       hudWidgetsTitle: "HUD 表示項目",
       hudWidgetsSubtitle: "浮かせた HUD に表示する項目を選びます。",
       testNotification: "テスト通知",
