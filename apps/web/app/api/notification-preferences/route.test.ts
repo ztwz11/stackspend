@@ -79,6 +79,12 @@ describe("notification preference route", () => {
           },
         ],
         desktopEnabled: true,
+        hud: {
+          alwaysOnTop: false,
+          fontScale: 0.9,
+          opacity: 0.8,
+          selectedWidgets: ["today_live_cost"],
+        },
       }),
     }));
     const payload = await response.json();
@@ -91,6 +97,12 @@ describe("notification preference route", () => {
         digestInterval: "six-hours",
         selectedWidgets: ["today_live_cost"],
         desktopEnabled: true,
+        hud: {
+          alwaysOnTop: false,
+          fontScale: 0.9,
+          opacity: 0.8,
+          selectedWidgets: ["today_live_cost"],
+        },
       },
     });
 

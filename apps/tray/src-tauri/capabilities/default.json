@@ -1,0 +1,14 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "stackspend-local-desktop",
+  "description": "Local StackSpend desktop windows can drag, minimize, close, and toggle always-on-top.",
+  "windows": ["main", "stackspend-hud"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-close",
+    "core:window:allow-is-always-on-top",
+    "core:window:allow-minimize",
+    "core:window:allow-set-always-on-top",
+    "core:window:allow-start-dragging"
+  ]
+}

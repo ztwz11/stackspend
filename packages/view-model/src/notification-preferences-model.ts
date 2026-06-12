@@ -40,6 +40,7 @@ export interface NotificationPreferences {
 }
 
 export interface HudPreferences {
+  alwaysOnTop: boolean;
   fontScale: number;
   opacity: number;
   selectedWidgets: readonly NotificationWidgetKey[];
@@ -93,6 +94,7 @@ export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
   thresholdRules: DEFAULT_NOTIFICATION_THRESHOLD_RULES,
   desktopEnabled: false,
   hud: {
+    alwaysOnTop: true,
     fontScale: 0.95,
     opacity: 0.94,
     selectedWidgets: DEFAULT_SELECTED_NOTIFICATION_WIDGET_KEYS,
@@ -144,6 +146,9 @@ function parseHudPreferences(
   const record = isRecord(value) ? value : {};
 
   return {
+    alwaysOnTop: typeof record.alwaysOnTop === "boolean"
+      ? record.alwaysOnTop
+      : DEFAULT_NOTIFICATION_PREFERENCES.hud.alwaysOnTop,
     fontScale: clampNumber(record.fontScale, 0.8, 1.3, DEFAULT_NOTIFICATION_PREFERENCES.hud.fontScale),
     opacity: clampNumber(record.opacity, 0.65, 1, DEFAULT_NOTIFICATION_PREFERENCES.hud.opacity),
     selectedWidgets: parseSelectedWidgets(record.selectedWidgets, fallbackSelectedWidgets),

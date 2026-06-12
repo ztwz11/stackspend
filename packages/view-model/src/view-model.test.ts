@@ -221,17 +221,20 @@ describe("shared view model", () => {
         opacity: 0.1,
       },
     }).hud).toEqual({
+      alwaysOnTop: DEFAULT_NOTIFICATION_PREFERENCES.hud.alwaysOnTop,
       fontScale: 1.3,
       opacity: 0.65,
       selectedWidgets: DEFAULT_NOTIFICATION_PREFERENCES.hud.selectedWidgets,
     });
     expect(parseNotificationPreferences({
       hud: {
+        alwaysOnTop: false,
         fontScale: 0.87,
         opacity: 0.92,
         selectedWidgets: ["openai_today_tokens"],
       },
     }).hud).toEqual({
+      alwaysOnTop: false,
       fontScale: 0.87,
       opacity: 0.92,
       selectedWidgets: ["openai_today_tokens"],
@@ -242,6 +245,7 @@ describe("shared view model", () => {
         fontScale: 0.95,
       },
     }).hud).toEqual({
+      alwaysOnTop: DEFAULT_NOTIFICATION_PREFERENCES.hud.alwaysOnTop,
       fontScale: 0.95,
       opacity: DEFAULT_NOTIFICATION_PREFERENCES.hud.opacity,
       selectedWidgets: ["risk_high_count"],

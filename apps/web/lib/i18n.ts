@@ -149,8 +149,11 @@ export interface Messages {
     desktopAppInfo: string;
     hudSettingsTitle: string;
     hudSettingsSubtitle: string;
+    hudAlwaysOnTop: string;
     hudFontSize: string;
     hudOpacity: string;
+    hudMinimize: string;
+    hudClose: string;
     hudWidgetsTitle: string;
     hudWidgetsSubtitle: string;
     testNotification: string;
@@ -434,8 +437,11 @@ export const messages = {
       desktopAppInfo: "The tray/HUD app reads this local preference and sanitized digest data. It never receives provider secrets.",
       hudSettingsTitle: "HUD display",
       hudSettingsSubtitle: "Tune the always-on-top HUD for compact, long-running desktop use.",
+      hudAlwaysOnTop: "Always on top",
       hudFontSize: "Font size",
       hudOpacity: "Opacity",
+      hudMinimize: "Minimize HUD",
+      hudClose: "Close HUD",
       hudWidgetsTitle: "HUD items",
       hudWidgetsSubtitle: "Choose exactly what stays visible in the floating HUD.",
       testNotification: "Test notification",
@@ -749,8 +755,11 @@ export const messages = {
       desktopAppInfo: "Tray/HUD 앱은 이 로컬 설정과 정리된 digest 데이터만 읽습니다. provider secret은 받지 않습니다.",
       hudSettingsTitle: "HUD 표시",
       hudSettingsSubtitle: "항상 위에 띄워둘 수 있도록 작고 오래 보기 편하게 조절합니다.",
+      hudAlwaysOnTop: "항상 위에 표시",
       hudFontSize: "폰트 크기",
       hudOpacity: "투명도",
+      hudMinimize: "HUD 최소화",
+      hudClose: "HUD 닫기",
       hudWidgetsTitle: "HUD 표시 항목",
       hudWidgetsSubtitle: "떠 있는 HUD에 계속 보여줄 항목을 고릅니다.",
       testNotification: "테스트 알림",
@@ -1064,8 +1073,11 @@ export const messages = {
       desktopAppInfo: "Tray/HUD app はこのローカル設定と整形済み digest だけを読みます。provider secret は受け取りません。",
       hudSettingsTitle: "HUD 表示",
       hudSettingsSubtitle: "常時表示しやすい小さな HUD に調整します。",
+      hudAlwaysOnTop: "常に手前に表示",
       hudFontSize: "フォントサイズ",
       hudOpacity: "透明度",
+      hudMinimize: "HUD を最小化",
+      hudClose: "HUD を閉じる",
       hudWidgetsTitle: "HUD 表示項目",
       hudWidgetsSubtitle: "浮かせた HUD に表示する項目を選びます。",
       testNotification: "テスト通知",

@@ -30,6 +30,7 @@ export function NotificationSettingsPanel({ messages }: { messages: Messages }) 
   const [digestInterval, setDigestInterval] = useState<DigestInterval>(DEFAULT_NOTIFICATION_PREFERENCES.digestInterval);
   const [quietStart, setQuietStart] = useState(DEFAULT_NOTIFICATION_PREFERENCES.quietHours.start);
   const [quietEnd, setQuietEnd] = useState(DEFAULT_NOTIFICATION_PREFERENCES.quietHours.end);
+  const [hudAlwaysOnTop, setHudAlwaysOnTop] = useState(DEFAULT_NOTIFICATION_PREFERENCES.hud.alwaysOnTop);
   const [hudFontScale, setHudFontScale] = useState(DEFAULT_NOTIFICATION_PREFERENCES.hud.fontScale);
   const [hudOpacity, setHudOpacity] = useState(DEFAULT_NOTIFICATION_PREFERENCES.hud.opacity);
   const [hudSelectedWidgets, setHudSelectedWidgets] = useState<NotificationWidgetKey[]>(
@@ -300,6 +301,21 @@ export function NotificationSettingsPanel({ messages }: { messages: Messages }) 
                 <strong>{messages.settings.hudSettingsTitle}</strong>
                 <span className="metric-meta">{messages.settings.hudSettingsSubtitle}</span>
               </div>
+              <div className="notification-field">
+                <span className="metric-label">{messages.settings.hudAlwaysOnTop}</span>
+                <label className="notification-toggle-card notification-hud-toggle-card">
+                  <input
+                    checked={hudAlwaysOnTop}
+                    onChange={(event) => setHudAlwaysOnTop(event.currentTarget.checked)}
+                    type="checkbox"
+                  />
+                  <span className="toggle-switch" aria-hidden="true" />
+                  <span>
+                    <strong>{hudAlwaysOnTop ? messages.settings.notificationEnabled : messages.settings.notificationDisabled}</strong>
+                    <span className="metric-meta">{messages.settings.hudAlwaysOnTop}</span>
+                  </span>
+                </label>
+              </div>
               <label className="notification-field">
                 <span className="metric-label">{messages.settings.hudFontSize}</span>
                 <input
@@ -400,6 +416,7 @@ export function NotificationSettingsPanel({ messages }: { messages: Messages }) 
     setSelectedWidgets([...preferences.selectedWidgets]);
     setThresholdRules(preferences.thresholdRules.map((rule) => ({ ...rule })));
     setDesktopEnabled(preferences.desktopEnabled);
+    setHudAlwaysOnTop(preferences.hud.alwaysOnTop);
     setHudFontScale(preferences.hud.fontScale);
     setHudOpacity(preferences.hud.opacity);
     setHudSelectedWidgets([...preferences.hud.selectedWidgets]);
@@ -418,6 +435,7 @@ export function NotificationSettingsPanel({ messages }: { messages: Messages }) 
       thresholdRules,
       desktopEnabled,
       hud: {
+        alwaysOnTop: hudAlwaysOnTop,
         fontScale: hudFontScale,
         opacity: hudOpacity,
         selectedWidgets: hudSelectedWidgets,

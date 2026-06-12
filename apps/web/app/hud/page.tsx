@@ -3,6 +3,7 @@ import {
   readWebLocalNotificationDigest,
   readWebNotificationPreferences,
 } from "../../lib/local-notification-model";
+import { HudWindowControls } from "../../components/HudWindowControls";
 import type { CSSProperties } from "react";
 
 interface HudPageProps {
@@ -32,6 +33,18 @@ export default async function HudPage({ searchParams }: HudPageProps) {
 
   return (
     <main className="hud-page" style={hudStyle}>
+      <HudWindowControls
+        initialPreferences={preferences}
+        labels={{
+          alwaysOnTop: messages.settings.hudAlwaysOnTop,
+          close: messages.settings.hudClose,
+          error: messages.settings.notificationPrefsSaveError,
+          minimize: messages.settings.hudMinimize,
+          saved: messages.settings.notificationPrefsSaved,
+          settings: messages.nav.settings,
+        }}
+        locale={locale}
+      />
       <header className="hud-header" data-tauri-drag-region>
         <div>
           <p className="hud-kicker">{messages.nav.notifications}</p>

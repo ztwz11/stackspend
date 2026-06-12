@@ -10,6 +10,7 @@ const expectedFiles = [
   "src-tauri/build.rs",
   "src-tauri/src/main.rs",
   "src-tauri/tauri.conf.json",
+  "src-tauri/capabilities/default.json",
   "src-tauri/assets/index.html",
   "src-tauri/icons/tray.png",
   "src-tauri/icons/tray.ico",
@@ -57,6 +58,19 @@ assert(config.app.windows[0]?.url === "http://127.0.0.1:3000/ko/dashboard/overvi
 assert(config.app.windows[0]?.visible === true, "Tauri GUI window must be visible by default.");
 assert(JSON.stringify(config.bundle?.icon ?? []).includes("icons/tray.ico"), "Windows .ico icon must be configured.");
 assert(JSON.stringify(config.bundle?.icon ?? []).includes("icons/tray.png"), "PNG tray icon must be configured.");
+
+const capability = JSON.parse(read("src-tauri/capabilities/default.json"));
+assert(capability.windows?.includes("main"), "Tauri capability must include the main window.");
+assert(capability.windows?.includes("stackspend-hud"), "Tauri capability must include the HUD window.");
+for (const permission of [
+  "core:window:allow-close",
+  "core:window:allow-is-always-on-top",
+  "core:window:allow-minimize",
+  "core:window:allow-set-always-on-top",
+  "core:window:allow-start-dragging",
+]) {
+  assert(capability.permissions?.includes(permission), `Tauri capability is missing permission: ${permission}.`);
+}
 
 const cargoToml = read("src-tauri/Cargo.toml");
 for (const feature of ["image-ico", "image-png", "macos-private-api", "tray-icon"]) {
