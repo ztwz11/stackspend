@@ -29,8 +29,8 @@ interface HudWindowControlsProps {
 
 interface TauriWindow {
   close: () => Promise<void>;
+  hide: () => Promise<void>;
   isAlwaysOnTop: () => Promise<boolean>;
-  minimize: () => Promise<void>;
   setAlwaysOnTop: (alwaysOnTop: boolean) => Promise<void>;
 }
 
@@ -45,22 +45,35 @@ export function HudWindowControls({ initialPreferences, labels, locale }: HudWin
   useEffect(() => {
     let mounted = true;
 
-    void getCurrentHudWindow().then(async (hudWindow) => {
-      if (!mounted || hudWindow === null) {
-        return;
-      }
-
-      await hudWindow.setAlwaysOnTop(initialPreferences.hud.alwaysOnTop);
-      const currentAlwaysOnTop = await hudWindow.isAlwaysOnTop();
-
-      if (mounted) {
-        setDraftAlwaysOnTop(currentAlwaysOnTop);
-      }
-    }).catch(() => {});
+    void syncInitialAlwaysOnTop();
 
     return () => {
       mounted = false;
     };
+
+    async function syncInitialAlwaysOnTop(): Promise<void> {
+      const hudWindow = await getCurrentHudWindow();
+
+      if (!mounted || hudWindow === null) {
+        return;
+      }
+
+      try {
+        await hudWindow.setAlwaysOnTop(initialPreferences.hud.alwaysOnTop);
+      } catch (error) {
+        console.warn("StackSpend HUD always-on-top initial sync failed.", error);
+      }
+
+      try {
+        const currentAlwaysOnTop = await hudWindow.isAlwaysOnTop();
+
+        if (mounted) {
+          setDraftAlwaysOnTop(currentAlwaysOnTop);
+        }
+      } catch (error) {
+        console.warn("StackSpend HUD always-on-top read failed.", error);
+      }
+    }
   }, [initialPreferences.hud.alwaysOnTop]);
 
   useEffect(() => {
@@ -217,20 +230,16 @@ export function HudWindowControls({ initialPreferences, labels, locale }: HudWin
     setSaveState("saving");
 
     try {
-      const hudWindow = await getCurrentHudWindow();
-
-      if (hudWindow !== null) {
-        await hudWindow.setAlwaysOnTop(draftAlwaysOnTop);
-      }
-
-      await saveHudPreferences(initialPreferences, {
+      const savedPreferences = await saveHudPreferences(initialPreferences, {
         alwaysOnTop: draftAlwaysOnTop,
         fontScale: draftFontScale,
         opacity: draftOpacity,
       });
+      void applyAlwaysOnTop(savedPreferences.hud.alwaysOnTop);
       router.refresh();
       setSaveState("saved");
-    } catch {
+    } catch (error) {
+      console.error("StackSpend HUD settings save failed.", error);
       setSaveState("error");
     }
   }
@@ -245,23 +254,31 @@ export function HudWindowControls({ initialPreferences, labels, locale }: HudWin
 }
 
 async function runWindowAction(action: HudWindowAction): Promise<void> {
-  try {
-    const hudWindow = await getCurrentHudWindow();
+  const hudWindow = await getCurrentHudWindow();
 
-    if (hudWindow !== null) {
-      if (action === "close") {
-        await hudWindow.close();
-      } else {
-        await hudWindow.minimize();
-      }
-      return;
-    }
-  } catch (error) {
-    console.warn("Tauri window API action failed; falling back to native HUD command.", error);
+  if (hudWindow === null) {
+    throw new Error("StackSpend HUD window API is not available.");
   }
 
-  const { invoke } = await import("@tauri-apps/api/core");
-  await invoke("hud_window_action", { action });
+  if (action === "close") {
+    await hudWindow.close();
+  } else {
+    await hudWindow.hide();
+  }
+}
+
+async function applyAlwaysOnTop(alwaysOnTop: boolean): Promise<void> {
+  const hudWindow = await getCurrentHudWindow();
+
+  if (hudWindow === null) {
+    return;
+  }
+
+  try {
+    await hudWindow.setAlwaysOnTop(alwaysOnTop);
+  } catch (error) {
+    console.warn("StackSpend HUD always-on-top apply failed.", error);
+  }
 }
 
 async function getCurrentHudWindow(): Promise<TauriWindow | null> {

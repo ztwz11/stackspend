@@ -51,7 +51,6 @@ export default async function HudPage({ searchParams }: HudPageProps) {
       />
       <header className="hud-header" data-tauri-drag-region>
         <div>
-          <p className="hud-kicker">{messages.nav.notifications}</p>
           <h1>StackSpend HUD</h1>
         </div>
         <span className={digest.status === "ok" ? "badge badge-ok" : digest.status === "critical" ? "badge badge-critical" : "badge badge-warn"}>

@@ -62,8 +62,11 @@ assert(JSON.stringify(config.bundle?.icon ?? []).includes("icons/tray.png"), "PN
 const capability = JSON.parse(read("src-tauri/capabilities/default.json"));
 assert(capability.windows?.includes("main"), "Tauri capability must include the main window.");
 assert(capability.windows?.includes("stackspend-hud"), "Tauri capability must include the HUD window.");
+assert(capability.remote?.urls?.includes("http://127.0.0.1:3000/*"), "Tauri capability must allow the local dev web URL.");
+assert(capability.remote?.urls?.includes("http://localhost:3000/*"), "Tauri capability must allow the localhost web URL.");
 for (const permission of [
   "core:window:allow-close",
+  "core:window:allow-hide",
   "core:window:allow-is-always-on-top",
   "core:window:allow-minimize",
   "core:window:allow-set-always-on-top",
@@ -86,7 +89,6 @@ assert(mainRs.includes("/hud?locale=ko"), "Rust HUD action must open the local H
 assert(mainRs.includes("STACKSPEND_DESKTOP_MODE"), "Rust entrypoint must support HUD-only desktop mode.");
 assert(mainRs.includes("DesktopMode::Hud"), "Rust entrypoint must branch into HUD-only desktop mode.");
 assert(mainRs.includes(".skip_taskbar(true)"), "HUD window must stay out of the taskbar.");
-assert(mainRs.includes("hud_window_action"), "Rust entrypoint must expose HUD window controls to the webview.");
 assert(mainRs.includes("get_webview_window(\"stackspend-hud\")"), "HUD window controls must target the HUD window label.");
 assert(mainRs.includes("secrets_returned: false"), "Native status must declare secretsReturned=false.");
 for (const actionId of actionIds) {
