@@ -11,6 +11,7 @@ export function renderHomeScreen(input: { version: string; theme: Theme }): stri
     `  ${theme.command("/help")}                 Show CLI usage and slash guide`,
     `  ${theme.command("/version")}              Print the installed CLI version`,
     `  ${theme.command("/doctor")}               Check local readiness without printing secrets`,
+    `  ${theme.command("/install")}              Choose CLI, web dashboard, and HUD components`,
     `  ${theme.command("/modes")}                Show the CLI, web, and desktop modes`,
     `  ${theme.command("/init")}                 Create local SQLite storage`,
     `  ${theme.command("/dashboard")}            Check the local dashboard API`,
@@ -30,6 +31,8 @@ export function renderHomeScreen(input: { version: string; theme: Theme }): stri
     "",
     theme.heading("Classic CLI"),
     "  stackspend doctor",
+    "  stackspend install",
+    "  stackspend install --status",
     "  stackspend modes",
     "  stackspend init",
     "  stackspend serve [--port <port>]",
@@ -60,6 +63,7 @@ Usage:
   stackspend --help
   stackspend --version
   stackspend init
+  stackspend install [--status|--all|--cli|--web|--hud|--no-cli|--no-web|--no-hud]
   stackspend doctor
   stackspend modes
   stackspend dashboard check [--url <local-dashboard-url>]
@@ -79,6 +83,7 @@ Slash commands:
   stackspend /help
   stackspend /version
   stackspend /doctor
+  stackspend /install
   stackspend /modes
   stackspend /init
   stackspend /dashboard

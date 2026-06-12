@@ -1,4 +1,10 @@
 import type { CliExecutionContext } from "../cli.js";
+import {
+  DEFAULT_INSTALL_SURFACES,
+  formatInstallSurfaces,
+  readInstallProfileFile,
+  type InstallSurface,
+} from "../install-profile.js";
 
 const MODES_USAGE = "Usage: stackspend modes";
 
@@ -13,27 +19,39 @@ export async function runModesCommand(args: readonly string[], context: CliExecu
     return 1;
   }
 
+  const profile = await readInstallProfileFile({
+    env: context.env,
+  });
+  const selectedSurfaces = profile?.selectedSurfaces ?? DEFAULT_INSTALL_SURFACES;
+
   context.stdout("StackSpend modes");
   context.stdout(`Platform: ${platformLabel()}`);
+  context.stdout(`Install profile: ${formatInstallSurfaces(selectedSurfaces)}${profile === null ? " (recommended default)" : ""}`);
   context.stdout("npm install: npm install -g @stackspend/cli@alpha");
   context.stdout(`Runtime lock: ${runtimeLockHint()}`);
   context.stdout("");
   context.stdout("1. CLI automation");
-  context.stdout("   Status: available from the npm CLI package");
+  context.stdout(`   Status: ${surfaceStatus("cli", selectedSurfaces)} from the npm CLI package`);
   context.stdout("   Try: stackspend doctor");
   context.stdout("   Try: stackspend sync --provider mock");
   context.stdout("");
   context.stdout("2. Local web dashboard/runtime");
-  context.stdout("   Status: local API runtime is available from the npm CLI package");
+  context.stdout(`   Status: ${surfaceStatus("web", selectedSurfaces)} local API runtime is available from the npm CLI package`);
   context.stdout("   Try: stackspend serve [--port <port>]");
   context.stdout("   Try: stackspend dashboard check");
   context.stdout("   Note: the full Next.js dashboard is run from the repo or a future bundled desktop app.");
   context.stdout("");
   context.stdout("3. Desktop tray/notifier");
-  context.stdout("   Status: macOS target is the thin Tauri tray shell; the native tray binary is not bundled in @stackspend/cli");
+  context.stdout(`   Status: ${surfaceStatus("hud", selectedSurfaces)} macOS target is the thin Tauri tray shell; the native tray binary is not bundled in @stackspend/cli`);
   context.stdout("   Try: stackspend desktop status");
   context.stdout("   Try: stackspend notify once --dry-run");
+  context.stdout("");
+  context.stdout("Change selection: stackspend install");
   return 0;
+}
+
+function surfaceStatus(surface: InstallSurface, selectedSurfaces: readonly InstallSurface[]): string {
+  return selectedSurfaces.includes(surface) ? "selected;" : "not selected;";
 }
 
 function platformLabel(): string {

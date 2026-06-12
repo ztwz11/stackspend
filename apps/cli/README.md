@@ -22,12 +22,21 @@ npm install -g @stackspend/cli@alpha
 stackspend
 stackspend --version
 stackspend /version
+stackspend install --status
 stackspend modes
 stackspend /modes
 stackspend doctor
 stackspend /doctor
 stackspend dashboard check
 ```
+
+During a PowerShell, cmd, or shell install with an interactive TTY, `postinstall` prompts for the local surfaces to enable:
+
+- CLI
+- Web dashboard
+- HUD
+
+Press Enter to accept the recommended default, which selects all three. In CI or non-interactive npm installs, StackSpend writes that all-selected profile automatically. Re-run `stackspend install` later to change the profile, or use `stackspend install --status` to inspect it.
 
 One-off execution:
 
@@ -94,6 +103,7 @@ Supported slash aliases:
 stackspend /help
 stackspend /version
 stackspend /doctor
+stackspend /install
 stackspend /modes
 stackspend /init
 stackspend /dashboard
@@ -116,6 +126,8 @@ Slash aliases are thin wrappers around the existing CLI commands. Home/help does
 - CLI automation from the npm package.
 - Local web dashboard/runtime, with `stackspend serve` providing the sanitized local API runtime.
 - Desktop tray/notifier status and notification preview commands, while the native Tauri tray binary remains a separate repo/native build artifact for this alpha.
+
+The mode list includes the local install profile selected by npm `postinstall` or `stackspend install`.
 
 On macOS, the shared runtime lock defaults to `~/Library/Application Support/StackSpend/runtime.json` so a globally installed CLI and the desktop tray can discover the same local runtime. Set `STACKSPEND_RUNTIME_LOCK_PATH` only when you intentionally need an isolated runtime lock for testing.
 

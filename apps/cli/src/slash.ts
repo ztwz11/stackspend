@@ -54,6 +54,10 @@ export function resolveSlashCommand(args: readonly string[]): SlashDispatch {
     return noExtraArgs(command, rest, ["doctor"]);
   }
 
+  if (command === "/install") {
+    return resolveInstallSlash(rest);
+  }
+
   if (command === "/modes") {
     return noExtraArgs(command, rest, ["modes"]);
   }
@@ -136,6 +140,27 @@ function resolveDashboardSlash(rest: readonly string[]): SlashDispatch {
   }
 
   return invalidUsage("/dashboard", "Usage: stackspend /dashboard [check]");
+}
+
+function resolveInstallSlash(rest: readonly string[]): SlashDispatch {
+  if (rest.length === 0) {
+    return {
+      kind: "dispatch",
+      args: ["install"],
+    };
+  }
+
+  if (rest.length === 1 && rest[0] === "status") {
+    return {
+      kind: "dispatch",
+      args: ["install", "--status"],
+    };
+  }
+
+  return {
+    kind: "dispatch",
+    args: ["install", ...rest],
+  };
 }
 
 function resolveSyncSlash(rest: readonly string[]): SlashDispatch {

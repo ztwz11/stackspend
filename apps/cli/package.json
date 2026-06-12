@@ -29,6 +29,7 @@
     "dist/apps/cli/src/**/*.d.ts",
     "dist/packages/**/*.js",
     "dist/packages/**/*.d.ts",
+    "scripts/postinstall.mjs",
     "README.md",
     "LICENSE"
   ],
@@ -39,6 +40,7 @@
     "dev": "node --import tsx src/index.ts",
     "build": "node ../../tools/scripts/build-cli.mjs",
     "prepack": "node ../../tools/scripts/build-cli.mjs",
+    "postinstall": "node scripts/postinstall.mjs",
     "pack:dry-run": "npm pack --dry-run",
     "test": "vitest run --passWithNoTests",
     "typecheck": "tsc -p tsconfig.json --noEmit",

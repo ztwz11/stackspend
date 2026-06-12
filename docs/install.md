@@ -36,6 +36,7 @@ Windows PowerShell:
 ```powershell
 npm install -g @stackspend/cli@alpha
 stackspend --version
+stackspend install --status
 stackspend modes
 stackspend doctor
 stackspend sync --provider mock
@@ -46,12 +47,21 @@ macOS zsh:
 ```bash
 npm install -g @stackspend/cli@alpha
 stackspend --version
+stackspend install --status
 stackspend modes
 stackspend doctor
 stackspend sync --provider mock
 ```
 
-`stackspend modes` should show the CLI, local web dashboard/runtime, and desktop tray/notifier surfaces. The npm CLI does not install the native desktop app yet.
+During a PowerShell, cmd, or shell install with an interactive TTY, npm `postinstall` asks which local surfaces to enable:
+
+- CLI
+- Web dashboard
+- HUD
+
+Press Enter to accept the recommended default, which selects all three. In CI or non-interactive npm installs, StackSpend writes that same all-selected profile automatically. Re-run `stackspend install` to change the profile later.
+
+`stackspend modes` should show the selected install profile plus the CLI, local web dashboard/runtime, and desktop tray/notifier surfaces. The npm CLI does not install the native desktop app yet.
 
 ## Install From Source On Windows
 

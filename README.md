@@ -106,6 +106,7 @@ npm install -g @stackspend/cli@alpha
 stackspend
 stackspend --version
 stackspend /version
+stackspend install --status
 stackspend modes
 stackspend /modes
 stackspend doctor
@@ -113,6 +114,14 @@ stackspend /doctor
 npx --package @stackspend/cli@alpha stackspend --version
 npx --package @stackspend/cli@alpha stackspend modes
 ```
+
+During a PowerShell, cmd, or shell install with an interactive TTY, the package asks which local surfaces to enable:
+
+- CLI
+- Web dashboard
+- HUD
+
+Press Enter to accept the recommended default, which selects all three. In CI or non-interactive npm installs, StackSpend writes that same all-selected profile automatically. Re-run `stackspend install` to change the local profile later.
 
 For local tarball review without publishing:
 
@@ -141,7 +150,7 @@ Alpha CLI requirements:
 - Environment variables only for secrets; do not create `.env` or commit live credentials.
 - `stackspend --version`, `stackspend doctor`, and `stackspend sync --provider mock` do not require live provider credentials.
 
-`stackspend modes` shows the three runtime surfaces after npm installation: CLI automation, local web dashboard/runtime, and desktop tray/notifier. On macOS, the shared runtime lock defaults to `~/Library/Application Support/StackSpend/runtime.json` so the npm CLI and the native tray can discover the same local runtime.
+`stackspend modes` shows the selected install profile and the three runtime surfaces after npm installation: CLI automation, local web dashboard/runtime, and desktop tray/notifier. On macOS, the shared runtime lock defaults to `~/Library/Application Support/StackSpend/runtime.json` so the npm CLI and the native tray can discover the same local runtime.
 
 ## CLI Commands
 
@@ -152,6 +161,7 @@ pnpm --filter @stackspend/cli dev
 pnpm --filter @stackspend/cli dev -- --help
 pnpm --filter @stackspend/cli dev -- --version
 pnpm --filter @stackspend/cli dev -- doctor
+pnpm --filter @stackspend/cli dev -- install --status
 pnpm --filter @stackspend/cli dev -- modes
 pnpm --filter @stackspend/cli dev -- init
 pnpm --filter @stackspend/cli dev -- sync --provider mock
@@ -165,6 +175,7 @@ Slash aliases are thin wrappers around the same commands:
 pnpm --filter @stackspend/cli dev -- /help
 pnpm --filter @stackspend/cli dev -- /version
 pnpm --filter @stackspend/cli dev -- /doctor
+pnpm --filter @stackspend/cli dev -- /install status
 pnpm --filter @stackspend/cli dev -- /modes
 pnpm --filter @stackspend/cli dev -- /init
 pnpm --filter @stackspend/cli dev -- /dashboard

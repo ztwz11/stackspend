@@ -46,8 +46,10 @@ describe("StackSpend CLI", () => {
     expect(stdout).toContain(`StackSpend ${CLI_VERSION}`);
     expect(stdout).toContain("Slash commands");
     expect(stdout).toContain("/doctor");
+    expect(stdout).toContain("/install");
     expect(stdout).toContain("/modes");
     expect(stdout).toContain("/sync mock");
+    expect(stdout).toContain("stackspend install");
     expect(stdout).toContain("stackspend modes");
     expect(stdout).toContain("stackspend sync --provider mock");
     expect(stdout).toContain("Home/help does not call provider APIs");
@@ -199,10 +201,12 @@ describe("StackSpend CLI", () => {
     expect(packageJson.bin?.stackspend).not.toBe("src/index.ts");
     expect(packageJson.scripts?.build).toBe("node ../../tools/scripts/build-cli.mjs");
     expect(packageJson.scripts?.prepack).toBe("node ../../tools/scripts/build-cli.mjs");
+    expect(packageJson.scripts?.postinstall).toBe("node scripts/postinstall.mjs");
     expect(files).toEqual(
       expect.arrayContaining([
         "dist/apps/cli/src/**/*.js",
         "dist/packages/**/*.js",
+        "scripts/postinstall.mjs",
         "README.md",
         "LICENSE",
       ]),
@@ -237,6 +241,7 @@ describe("StackSpend CLI", () => {
     const modes = await runCli(["/modes"], testContext(cwd));
     expect(modes.exitCode).toBe(0);
     expect(modes.stdout.join("\n")).toContain("StackSpend modes");
+    expect(modes.stdout.join("\n")).toContain("Install profile: CLI, Web dashboard, HUD");
 
     const init = await runCli(["/init"], testContext(cwd));
     expect(init.exitCode).toBe(0);
@@ -342,6 +347,7 @@ describe("StackSpend CLI", () => {
     expect(result.exitCode).toBe(0);
     expect(result.stderr).toEqual([]);
     expect(stdout).toContain("StackSpend modes");
+    expect(stdout).toContain("Install profile: CLI, Web dashboard, HUD");
     expect(stdout).toContain("npm install -g @stackspend/cli@alpha");
     expect(stdout).toContain("1. CLI automation");
     expect(stdout).toContain("2. Local web dashboard/runtime");
@@ -358,6 +364,32 @@ describe("StackSpend CLI", () => {
     expect(stdout).not.toContain(cwd);
     expect(stdout).not.toContain("sk-");
     expect(stdout).not.toContain("hooks.slack");
+  });
+
+  it("writes and reports the npm install component profile without secrets", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "stackspend-cli-"));
+    const profilePath = join(cwd, "install-profile.json");
+    const install = await runCli(["install", "--cli", "--hud"], testContext(cwd, {
+      STACKSPEND_INSTALL_PROFILE_PATH: profilePath,
+    }));
+    const status = await runCli(["install", "--status"], testContext(cwd, {
+      STACKSPEND_INSTALL_PROFILE_PATH: profilePath,
+    }));
+    const profile = JSON.parse(await readFile(profilePath, "utf8")) as {
+      selectedSurfaces?: string[];
+      localOnly?: boolean;
+      secretsReturned?: boolean;
+    };
+    const allOutput = [...install.stdout, ...install.stderr, ...status.stdout, ...status.stderr].join("\n");
+
+    expect(install.exitCode).toBe(0);
+    expect(status.exitCode).toBe(0);
+    expect(profile.selectedSurfaces).toEqual(["cli", "hud"]);
+    expect(profile.localOnly).toBe(true);
+    expect(profile.secretsReturned).toBe(false);
+    expect(install.stdout.join("\n")).toContain("Selected components: CLI, HUD");
+    expect(status.stdout.join("\n")).toContain("Recommended default: no");
+    expect(allOutput).not.toMatch(/sk-|hooks\.slack|FAKE_/i);
   });
 
   it("checks the default dashboard API and accepts the safe empty state", async () => {
