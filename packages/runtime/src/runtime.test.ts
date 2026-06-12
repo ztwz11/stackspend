@@ -45,19 +45,25 @@ describe("runtime helpers", () => {
     expect(serialized).not.toContain("hooks.slack.com");
   });
 
-  it("uses the macOS Application Support runtime lock by default on darwin", async () => {
-    if (process.platform !== "darwin") {
-      return;
-    }
-
-    const home = await mkdtemp(join(tmpdir(), "stackspend-runtime-home-"));
-    const lockPath = resolveRuntimeLockPath({
+  it("uses platform-native runtime lock paths on macOS and Windows", async () => {
+    const macLockPath = resolveRuntimeLockPath({
       env: {
-        HOME: home,
+        HOME: "/Users/tester",
       },
+      platform: "darwin",
+    });
+    const windowsLockPath = resolveRuntimeLockPath({
+      env: {
+        APPDATA: "C:\\Users\\tester\\AppData\\Roaming",
+        USERPROFILE: "C:\\Users\\tester",
+      },
+      platform: "win32",
     });
 
-    expect(lockPath).toBe(join(home, "Library", "Application Support", "StackSpend", "runtime.json"));
+    expect(macLockPath).toBe("/Users/tester/Library/Application Support/StackSpend/runtime.json");
+    expect(windowsLockPath).toContain("StackSpend");
+    expect(windowsLockPath).toContain("runtime.json");
+    expect(windowsLockPath).toContain("AppData");
   });
 
   it("does not accept non-loopback lock URLs", async () => {

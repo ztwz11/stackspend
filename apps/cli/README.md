@@ -129,7 +129,7 @@ Slash aliases are thin wrappers around the existing CLI commands. Home/help does
 
 The mode list includes the local install profile selected by npm `postinstall` or `stackspend install`.
 
-On macOS, the shared runtime lock defaults to `~/Library/Application Support/StackSpend/runtime.json` so a globally installed CLI and the desktop tray can discover the same local runtime. Set `STACKSPEND_RUNTIME_LOCK_PATH` only when you intentionally need an isolated runtime lock for testing.
+The shared runtime lock defaults to `%APPDATA%\StackSpend\runtime.json` on Windows and `~/Library/Application Support/StackSpend/runtime.json` on macOS so a globally installed CLI and the desktop tray can discover the same local runtime. Set `STACKSPEND_RUNTIME_LOCK_PATH` only when you intentionally need an isolated runtime lock for testing.
 
 ## Dashboard Check
 

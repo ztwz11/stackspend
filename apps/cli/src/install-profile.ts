@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, isAbsolute, join } from "node:path";
+import { dirname, isAbsolute, join, posix, win32 } from "node:path";
 
 export const INSTALL_SURFACES = ["cli", "web", "hud"] as const;
 export const DEFAULT_INSTALL_SURFACES: readonly InstallSurface[] = INSTALL_SURFACES;
@@ -23,6 +23,7 @@ export interface InstallProfileFileOptions {
   env?: Record<string, string | undefined>;
   now?: () => Date;
   path?: string;
+  platform?: NodeJS.Platform;
 }
 
 const INSTALL_PROFILE_ENV_KEY = "STACKSPEND_INSTALL_PROFILE_PATH";
@@ -39,7 +40,7 @@ export function resolveInstallProfilePath(options: InstallProfileFileOptions = {
     return resolveInstallPath(configuredPath, process.cwd());
   }
 
-  return defaultInstallProfilePath(env);
+  return defaultInstallProfilePath(env, options.platform ?? process.platform);
 }
 
 export async function readInstallProfileFile(
@@ -142,18 +143,18 @@ export function isInstallSurface(value: unknown): value is InstallSurface {
   return typeof value === "string" && INSTALL_SURFACES.includes(value as InstallSurface);
 }
 
-function defaultInstallProfilePath(env: Record<string, string | undefined>): string {
-  if (process.platform === "darwin") {
-    return join(resolveHomeDirectory(env), "Library", "Application Support", "StackSpend", "install-profile.json");
+function defaultInstallProfilePath(env: Record<string, string | undefined>, platform: NodeJS.Platform): string {
+  if (platform === "darwin") {
+    return joinForPlatform(platform, resolveHomeDirectory(env), "Library", "Application Support", "StackSpend", "install-profile.json");
   }
 
-  if (process.platform === "win32") {
-    return join(resolveWindowsAppDataDirectory(env), "StackSpend", "install-profile.json");
+  if (platform === "win32") {
+    return joinForPlatform(platform, resolveWindowsAppDataDirectory(env), "StackSpend", "install-profile.json");
   }
 
-  const configHome = trimToNull(env.XDG_CONFIG_HOME) ?? join(resolveHomeDirectory(env), ".config");
+  const configHome = trimToNull(env.XDG_CONFIG_HOME) ?? joinForPlatform(platform, resolveHomeDirectory(env), ".config");
 
-  return join(configHome, "stackspend", "install-profile.json");
+  return joinForPlatform(platform, configHome, "stackspend", "install-profile.json");
 }
 
 function resolveInstallPath(path: string, cwd: string): string {
@@ -161,7 +162,7 @@ function resolveInstallPath(path: string, cwd: string): string {
 }
 
 function resolveWindowsAppDataDirectory(env: Record<string, string | undefined>): string {
-  return trimToNull(env.APPDATA) ?? join(resolveHomeDirectory(env), "AppData", "Roaming");
+  return trimToNull(env.APPDATA) ?? win32.join(resolveHomeDirectory(env), "AppData", "Roaming");
 }
 
 function resolveHomeDirectory(env: Record<string, string | undefined>): string {
@@ -172,6 +173,10 @@ function trimToNull(value: string | undefined): string | null {
   const trimmed = value?.trim();
 
   return trimmed === undefined || trimmed.length === 0 ? null : trimmed;
+}
+
+function joinForPlatform(platform: NodeJS.Platform, ...segments: string[]): string {
+  return platform === "win32" ? win32.join(...segments) : posix.join(...segments);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

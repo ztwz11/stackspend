@@ -1,6 +1,6 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, isAbsolute, join } from "node:path";
+import { dirname, isAbsolute, join, posix, win32 } from "node:path";
 
 export interface LocalRuntime {
   pid: number;
@@ -14,6 +14,7 @@ export interface RuntimeLockOptions {
   cwd?: string;
   env?: Record<string, string | undefined>;
   lockPath?: string;
+  platform?: NodeJS.Platform;
 }
 
 export interface RuntimeHealthCheckOptions {
@@ -52,7 +53,7 @@ export function resolveRuntimeLockPath(options: RuntimeLockOptions = {}): string
     return resolveRuntimePath(configuredPath, options.cwd);
   }
 
-  return defaultRuntimeLockPath(options.env ?? process.env);
+  return defaultRuntimeLockPath(options.env ?? process.env, options.platform ?? process.platform);
 }
 
 export async function readRuntimeLock(options: RuntimeLockOptions = {}): Promise<LocalRuntime | null> {
@@ -197,22 +198,22 @@ function resolveRuntimePath(path: string, cwd = process.cwd()): string {
   return isAbsolute(path) ? path : join(cwd, path);
 }
 
-function defaultRuntimeLockPath(env: Record<string, string | undefined>): string {
-  if (process.platform === "darwin") {
-    return join(resolveHomeDirectory(env), "Library", "Application Support", "StackSpend", "runtime.json");
+function defaultRuntimeLockPath(env: Record<string, string | undefined>, platform: NodeJS.Platform): string {
+  if (platform === "darwin") {
+    return joinForPlatform(platform, resolveHomeDirectory(env), "Library", "Application Support", "StackSpend", "runtime.json");
   }
 
-  if (process.platform === "win32") {
-    return join(resolveWindowsAppDataDirectory(env), "StackSpend", "runtime.json");
+  if (platform === "win32") {
+    return joinForPlatform(platform, resolveWindowsAppDataDirectory(env), "StackSpend", "runtime.json");
   }
 
-  const configHome = trimToNull(env.XDG_CONFIG_HOME) ?? join(resolveHomeDirectory(env), ".config");
+  const configHome = trimToNull(env.XDG_CONFIG_HOME) ?? joinForPlatform(platform, resolveHomeDirectory(env), ".config");
 
-  return join(configHome, "stackspend", "runtime.json");
+  return joinForPlatform(platform, configHome, "stackspend", "runtime.json");
 }
 
 function resolveWindowsAppDataDirectory(env: Record<string, string | undefined>): string {
-  return trimToNull(env.APPDATA) ?? join(resolveHomeDirectory(env), "AppData", "Roaming");
+  return trimToNull(env.APPDATA) ?? win32.join(resolveHomeDirectory(env), "AppData", "Roaming");
 }
 
 function resolveHomeDirectory(env: Record<string, string | undefined>): string {
@@ -223,6 +224,10 @@ function trimToNull(value: string | undefined): string | null {
   const trimmed = value?.trim();
 
   return trimmed === undefined || trimmed.length === 0 ? null : trimmed;
+}
+
+function joinForPlatform(platform: NodeJS.Platform, ...segments: string[]): string {
+  return platform === "win32" ? win32.join(...segments) : posix.join(...segments);
 }
 
 function isProcessAlive(pid: number): boolean {

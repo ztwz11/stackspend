@@ -79,11 +79,7 @@ function startTrayProcess(trayMode) {
     });
   }
 
-  const executablePath = resolve(
-    repoRoot,
-    "apps/tray/src-tauri/target/release",
-    process.platform === "win32" ? "stackspend-tray.exe" : "stackspend-tray",
-  );
+  const executablePath = findBuiltTrayExecutable(process.platform);
 
   if (!existsSync(executablePath)) {
     console.error([
@@ -99,6 +95,33 @@ function startTrayProcess(trayMode) {
     command: executablePath,
     args: [],
   });
+}
+
+function findBuiltTrayExecutable(platform) {
+  const candidates = builtTrayExecutableCandidates(platform);
+
+  return candidates.find((candidate) => existsSync(candidate)) ?? candidates[0];
+}
+
+function builtTrayExecutableCandidates(platform) {
+  const releaseDir = resolve(repoRoot, "apps/tray/src-tauri/target/release");
+
+  if (platform === "win32") {
+    return [
+      resolve(releaseDir, "stackspend-tray.exe"),
+    ];
+  }
+
+  if (platform === "darwin") {
+    return [
+      resolve(releaseDir, "bundle/macos/StackSpend Tray.app/Contents/MacOS/StackSpend Tray"),
+      resolve(releaseDir, "stackspend-tray"),
+    ];
+  }
+
+  return [
+    resolve(releaseDir, "stackspend-tray"),
+  ];
 }
 
 function parseArgs(args) {

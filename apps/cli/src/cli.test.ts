@@ -352,6 +352,7 @@ describe("StackSpend CLI", () => {
     expect(stdout).toContain("1. CLI automation");
     expect(stdout).toContain("2. Local web dashboard/runtime");
     expect(stdout).toContain("3. Desktop tray/notifier");
+    expect(stdout).toContain("Windows/macOS target");
     expect(stdout).toContain("stackspend doctor");
     expect(stdout).toContain("stackspend serve");
     expect(stdout).toContain("stackspend desktop status");

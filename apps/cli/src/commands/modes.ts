@@ -42,7 +42,7 @@ export async function runModesCommand(args: readonly string[], context: CliExecu
   context.stdout("   Note: the full Next.js dashboard is run from the repo or a future bundled desktop app.");
   context.stdout("");
   context.stdout("3. Desktop tray/notifier");
-  context.stdout(`   Status: ${surfaceStatus("hud", selectedSurfaces)} macOS target is the thin Tauri tray shell; the native tray binary is not bundled in @stackspend/cli`);
+  context.stdout(`   Status: ${surfaceStatus("hud", selectedSurfaces)} Windows/macOS target is the thin Tauri tray shell; the native tray binary is not bundled in @stackspend/cli`);
   context.stdout("   Try: stackspend desktop status");
   context.stdout("   Try: stackspend notify once --dry-run");
   context.stdout("");

@@ -61,7 +61,7 @@ During a PowerShell, cmd, or shell install with an interactive TTY, npm `postins
 
 Press Enter to accept the recommended default, which selects all three. In CI or non-interactive npm installs, StackSpend writes that same all-selected profile automatically. Re-run `stackspend install` to change the profile later.
 
-`stackspend modes` should show the selected install profile plus the CLI, local web dashboard/runtime, and desktop tray/notifier surfaces. The npm CLI does not install the native desktop app yet.
+`stackspend modes` should show the selected install profile plus the CLI, local web dashboard/runtime, and desktop tray/notifier surfaces. The same source tree supports Windows and macOS; npm installs the cross-platform CLI, while native tray/HUD artifacts are built per OS. The npm CLI does not install the native desktop app yet.
 
 ## Install From Source On Windows
 

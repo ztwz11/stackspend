@@ -59,7 +59,9 @@ assert(JSON.stringify(config.bundle?.icon ?? []).includes("icons/tray.ico"), "Wi
 assert(JSON.stringify(config.bundle?.icon ?? []).includes("icons/tray.png"), "PNG tray icon must be configured.");
 
 const cargoToml = read("src-tauri/Cargo.toml");
-assert(cargoToml.includes('features = ["image-ico", "image-png", "tray-icon"]'), "Cargo.toml must enable Tauri tray/icon features.");
+for (const feature of ["image-ico", "image-png", "macos-private-api", "tray-icon"]) {
+  assert(cargoToml.includes(`"${feature}"`), `Cargo.toml must enable Tauri feature: ${feature}.`);
+}
 
 const mainRs = read("src-tauri/src/main.rs");
 assert(mainRs.includes("TrayIconBuilder"), "Rust entrypoint must build a tray icon.");
@@ -77,6 +79,10 @@ for (const endpoint of allowedEndpoints) {
 for (const forbidden of ["provider credential", "raw SQLite", "OPENAI_ADMIN_KEY", "CLOUDFLARE_API_TOKEN"]) {
   assert(!mainRs.includes(forbidden), `Rust tray entrypoint must not include ${forbidden}.`);
 }
+
+const runWebWithTray = readFileSync(resolve(repoRoot, "tools/scripts/run-web-with-tray.mjs"), "utf8");
+assert(runWebWithTray.includes("stackspend-tray.exe"), "Built tray launcher must support the Windows executable.");
+assert(runWebWithTray.includes("StackSpend Tray.app/Contents/MacOS/StackSpend Tray"), "Built tray launcher must support the macOS .app executable.");
 
 console.log("Tray native scaffold check passed.");
 

@@ -46,15 +46,24 @@ describe("StackSpend install profile", () => {
     expect(formatInstallSurfaces(["cli", "hud"])).toBe("CLI, HUD");
   });
 
-  it("resolves a Windows AppData-style profile path without using the repo cwd", () => {
-    const path = resolveInstallProfilePath({
+  it("resolves Windows and macOS profile paths without using the repo cwd", () => {
+    const windowsPath = resolveInstallProfilePath({
       env: {
         APPDATA: "C:\\Users\\tester\\AppData\\Roaming",
         USERPROFILE: "C:\\Users\\tester",
       },
+      platform: "win32",
+    });
+    const macPath = resolveInstallProfilePath({
+      env: {
+        HOME: "/Users/tester",
+      },
+      platform: "darwin",
     });
 
-    expect(path).toContain("StackSpend");
-    expect(path).toContain("install-profile.json");
+    expect(windowsPath).toContain("StackSpend");
+    expect(windowsPath).toContain("install-profile.json");
+    expect(windowsPath).toContain("AppData");
+    expect(macPath).toBe("/Users/tester/Library/Application Support/StackSpend/install-profile.json");
   });
 });

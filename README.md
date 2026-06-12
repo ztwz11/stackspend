@@ -150,7 +150,7 @@ Alpha CLI requirements:
 - Environment variables only for secrets; do not create `.env` or commit live credentials.
 - `stackspend --version`, `stackspend doctor`, and `stackspend sync --provider mock` do not require live provider credentials.
 
-`stackspend modes` shows the selected install profile and the three runtime surfaces after npm installation: CLI automation, local web dashboard/runtime, and desktop tray/notifier. On macOS, the shared runtime lock defaults to `~/Library/Application Support/StackSpend/runtime.json` so the npm CLI and the native tray can discover the same local runtime.
+`stackspend modes` shows the selected install profile and the three runtime surfaces after npm installation: CLI automation, local web dashboard/runtime, and desktop tray/notifier. The same source tree is used on Windows and macOS; local config paths and native desktop artifacts are selected per OS. The shared runtime lock defaults to `%APPDATA%\StackSpend\runtime.json` on Windows and `~/Library/Application Support/StackSpend/runtime.json` on macOS so the npm CLI and the native tray can discover the same local runtime.
 
 ## CLI Commands
 
