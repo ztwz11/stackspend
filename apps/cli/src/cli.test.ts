@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
@@ -369,7 +370,7 @@ describe("MoneySiren CLI", () => {
   it("writes and reports the npm install component profile without secrets", async () => {
     const cwd = await mkdtemp(join(tmpdir(), "moneysiren-cli-"));
     const profilePath = join(cwd, "install-profile.json");
-    const install = await runCli(["install", "--cli", "--hud"], testContext(cwd, {
+    const install = await runCli(["install", "--profile-only", "--cli", "--hud"], testContext(cwd, {
       MONEYSIREN_INSTALL_PROFILE_PATH: profilePath,
     }));
     const status = await runCli(["install", "--status"], testContext(cwd, {
@@ -388,7 +389,83 @@ describe("MoneySiren CLI", () => {
     expect(profile.localOnly).toBe(true);
     expect(profile.secretsReturned).toBe(false);
     expect(install.stdout.join("\n")).toContain("Selected components: CLI, HUD");
+    expect(install.stdout.join("\n")).toContain("Release assets: skipped (--profile-only).");
     expect(status.stdout.join("\n")).toContain("Recommended default: no");
+    expect(allOutput).not.toMatch(/sk-|hooks\.slack|FAKE_/i);
+  });
+
+  it("installs selected release assets from GitHub Releases without storing secrets", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "moneysiren-cli-"));
+    const installDir = join(cwd, "release-install");
+    const profilePath = join(cwd, "install-profile.json");
+    const webAsset = "moneysiren-web-runtime-v0.1.0-alpha.0.tar.gz";
+    const hudAsset = "MoneySiren_0.1.0-alpha.0_x64-setup.exe";
+    const webBytes = Buffer.from("fake web runtime");
+    const hudBytes = Buffer.from("fake hud binary");
+    const checksum = [
+      `${testSha256(webBytes)}  ${webAsset}`,
+      `${testSha256(hudBytes)}  ${hudAsset}`,
+      "",
+    ].join("\n");
+    const result = await runCli(
+      ["install", "--all", "--dir", installDir, "--tag", "v0.1.0-alpha.0"],
+      {
+        ...testContext(cwd, {
+          MONEYSIREN_INSTALL_PROFILE_PATH: profilePath,
+          MONEYSIREN_RELEASE_PLATFORM: "win32",
+        }),
+        fetch: async (input) => {
+          const url = String(input);
+
+          if (url.endsWith("/repos/ztwz11/moneysiren/releases/tags/v0.1.0-alpha.0")) {
+            return Response.json({
+              html_url: "https://github.com/ztwz11/moneysiren/releases/tag/v0.1.0-alpha.0",
+              assets: [
+                {
+                  name: webAsset,
+                  browser_download_url: `https://github.com/ztwz11/moneysiren/releases/download/v0.1.0-alpha.0/${webAsset}`,
+                },
+                {
+                  name: hudAsset,
+                  browser_download_url: `https://github.com/ztwz11/moneysiren/releases/download/v0.1.0-alpha.0/${hudAsset}`,
+                },
+                {
+                  name: "moneysiren-web-runtime-SHA256SUMS.txt",
+                  browser_download_url: "https://github.com/ztwz11/moneysiren/releases/download/v0.1.0-alpha.0/moneysiren-web-runtime-SHA256SUMS.txt",
+                },
+              ],
+            });
+          }
+
+          if (url.endsWith(webAsset)) {
+            return new Response(webBytes);
+          }
+
+          if (url.endsWith(hudAsset)) {
+            return new Response(hudBytes);
+          }
+
+          if (url.endsWith("SHA256SUMS.txt")) {
+            return new Response(checksum);
+          }
+
+          return new Response("missing", {
+            status: 404,
+            statusText: "Not Found",
+          });
+        },
+      },
+    );
+    const allOutput = [...result.stdout, ...result.stderr].join("\n");
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout.join("\n")).toContain("Release: ztwz11/moneysiren@v0.1.0-alpha.0");
+    expect(result.stdout.join("\n")).toContain(`Install directory: ${installDir}`);
+    expect(result.stdout.join("\n")).toContain(`Downloaded web: ${webAsset}`);
+    expect(result.stdout.join("\n")).toContain(`Downloaded hud: ${hudAsset}`);
+    expect(await readFile(join(installDir, webAsset), "utf8")).toBe(webBytes.toString("utf8"));
+    expect(await readFile(join(installDir, hudAsset), "utf8")).toBe(hudBytes.toString("utf8"));
+    expect(await readFile(join(installDir, "install-manifest.json"), "utf8")).not.toMatch(/sk-|hooks\.slack|FAKE_/i);
     expect(allOutput).not.toMatch(/sk-|hooks\.slack|FAKE_/i);
   });
 
@@ -1668,6 +1745,10 @@ async function fileExists(path: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+function testSha256(content: Buffer): string {
+  return createHash("sha256").update(content).digest("hex");
 }
 
 interface NodeSqliteDatabase {

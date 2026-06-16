@@ -20,6 +20,7 @@ moneysiren
 moneysiren --version
 moneysiren /version
 moneysiren install --status
+moneysiren install --all
 moneysiren modes
 moneysiren /modes
 moneysiren doctor
@@ -33,7 +34,7 @@ During a PowerShell, cmd, or shell install with an interactive TTY, `postinstall
 - Web dashboard
 - HUD
 
-Press Enter to accept the recommended default, which selects all three. In CI or non-interactive npm installs, MoneySiren writes that all-selected profile automatically. Re-run `moneysiren install` later to change the profile, or use `moneysiren install --status` to inspect it.
+Press Enter to accept the recommended default, which selects all three. In CI or non-interactive npm installs, MoneySiren writes that all-selected profile automatically. Run `moneysiren install --all` to download GitHub Release assets for the web runtime and HUD desktop shell. Use `moneysiren install --profile-only` to change only the local profile, or `moneysiren install --status` to inspect it.
 
 One-off execution:
 

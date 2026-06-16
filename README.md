@@ -198,6 +198,7 @@ After `@moneysiren/cli@alpha` is published:
 npm install -g @moneysiren/cli@alpha
 moneysiren --version
 moneysiren install --status
+moneysiren install --all
 moneysiren modes
 moneysiren doctor
 moneysiren sync --provider mock
@@ -218,7 +219,7 @@ During an interactive PowerShell, cmd, or shell install, the package asks which 
 - Web dashboard
 - HUD
 
-Press Enter to accept the recommended default, which selects all three. In CI or non-interactive npm installs, MoneySiren writes that same all-selected profile automatically. Re-run `moneysiren install` to change the local profile later.
+Press Enter to accept the recommended default, which selects all three. In CI or non-interactive npm installs, MoneySiren writes that same all-selected profile automatically. Run `moneysiren install --all` to download the matching GitHub Release assets for the web runtime and HUD desktop shell, or `moneysiren install --profile-only` to only change the local profile.
 
 The same source tree supports Windows and macOS. Local config paths and native desktop artifacts are selected per OS. The shared runtime lock defaults to `%APPDATA%\MoneySiren\runtime.json` on Windows and `~/Library/Application Support/MoneySiren/runtime.json` on macOS so the npm CLI and native tray can discover the same local runtime.
 
@@ -228,16 +229,23 @@ After a `desktop-release` GitHub Actions run publishes assets, users can review 
 
 ```bash
 npm install -g @moneysiren/cli@alpha
+moneysiren install --all
 moneysiren sync --provider mock
 ```
 
-Then download `moneysiren-web-runtime-*.tar.gz` from the GitHub Release, extract it, and start the local dashboard runtime:
+`moneysiren install --all` stores the selected release assets under the MoneySiren local application data directory by default. To install from a specific release tag or into a custom directory:
+
+```bash
+moneysiren install --all --tag v0.1.0-alpha.0 --dir ./moneysiren-release
+```
+
+Extract `moneysiren-web-runtime-*.tar.gz` from that install directory and start the local dashboard runtime:
 
 ```bash
 node start.mjs
 ```
 
-Finally install/open the Windows or macOS desktop artifact from the same Release. The desktop shell connects to `http://127.0.0.1:3000` for the dashboard and HUD. In this alpha, the native app does not yet embed or auto-start the web runtime, and desktop artifacts are unsigned.
+Finally install/open the Windows or macOS desktop artifact from the same install directory. The desktop shell connects to `http://127.0.0.1:3000` for the dashboard and HUD. In this alpha, the native app does not yet embed or auto-start the web runtime, and desktop artifacts are unsigned.
 
 For local tarball review without publishing:
 

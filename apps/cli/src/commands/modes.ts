@@ -36,17 +36,20 @@ export async function runModesCommand(args: readonly string[], context: CliExecu
   context.stdout("   Try: moneysiren sync --provider mock");
   context.stdout("");
   context.stdout("2. Local web dashboard/runtime");
-  context.stdout(`   Status: ${surfaceStatus("web", selectedSurfaces)} local API runtime is available from the npm CLI package`);
+  context.stdout(`   Status: ${surfaceStatus("web", selectedSurfaces)} GitHub Release web runtime archive is installed by the CLI`);
+  context.stdout("   Install: moneysiren install --web");
   context.stdout("   Try: moneysiren serve [--port <port>]");
   context.stdout("   Try: moneysiren dashboard check");
-  context.stdout("   Note: the full Next.js dashboard is run from the repo or a future bundled desktop app.");
+  context.stdout("   Note: the npm CLI starts the local API; full dashboard runtime ships as a release asset.");
   context.stdout("");
   context.stdout("3. Desktop tray/notifier");
-  context.stdout(`   Status: ${surfaceStatus("hud", selectedSurfaces)} Windows/macOS target is the thin Tauri tray shell; the native tray binary is not bundled in moneysiren`);
+  context.stdout(`   Status: ${surfaceStatus("hud", selectedSurfaces)} Windows/macOS target is the thin Tauri tray shell from GitHub Releases`);
+  context.stdout("   Install: moneysiren install --hud");
   context.stdout("   Try: moneysiren desktop status");
   context.stdout("   Try: moneysiren notify once --dry-run");
   context.stdout("");
-  context.stdout("Change selection: moneysiren install");
+  context.stdout("Install recommended set: moneysiren install --all");
+  context.stdout("Change selection only: moneysiren install --profile-only");
   return 0;
 }
 

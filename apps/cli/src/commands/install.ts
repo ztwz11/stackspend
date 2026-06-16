@@ -14,15 +14,30 @@ import {
   parseInstallSurfaceSelection,
   promptForInstallSurfaces,
 } from "../install-selector.js";
+import {
+  DEFAULT_RELEASE_REPOSITORY,
+  DEFAULT_RELEASE_TAG,
+  installReleaseAssets,
+  type ReleaseInstallResult,
+} from "../release-installer.js";
 
 const INSTALL_USAGE = [
-  "Usage: moneysiren install [--status|--all|--cli|--web|--hud|--no-cli|--no-web|--no-hud]",
+  "Usage: moneysiren install [--status|--all|--cli|--web|--hud|--no-cli|--no-web|--no-hud] [--profile-only] [--tag <tag>] [--repo <owner/name>] [--dir <path>]",
   "",
   "Components:",
   installSelectionHelp(),
   "",
   "Default: all components selected (recommended).",
+  `Release default: ${DEFAULT_RELEASE_REPOSITORY}@${DEFAULT_RELEASE_TAG}.`,
 ].join("\n");
+
+interface ParsedInstallArgs {
+  installDir?: string;
+  profileOnly: boolean;
+  releaseRepository?: string;
+  releaseTag?: string;
+  selectedSurfaces?: readonly InstallSurface[];
+}
 
 export async function runInstallCommand(args: readonly string[], context: CliExecutionContext): Promise<number> {
   if (args.includes("--help") || args.includes("-h")) {
@@ -41,7 +56,7 @@ export async function runInstallCommand(args: readonly string[], context: CliExe
     return 1;
   }
 
-  const selectedSurfaces = parsed ?? await selectedSurfacesFromPromptOrDefault(context);
+  const selectedSurfaces = parsed.selectedSurfaces ?? await selectedSurfacesFromPromptOrDefault(context);
   const profile = await writeInstallProfileFile({
     selectedSurfaces,
     source: "cli",
@@ -53,6 +68,11 @@ export async function runInstallCommand(args: readonly string[], context: CliExe
 
   context.stdout("MoneySiren install profile updated.");
   context.stdout(formatInstallSelectionLine(profile.selectedSurfaces));
+  await writeReleaseInstallResult({
+    context,
+    parsed,
+    selectedSurfaces: profile.selectedSurfaces,
+  });
   context.stdout("Secrets returned: false");
   return 0;
 }
@@ -83,23 +103,77 @@ async function selectedSurfacesFromPromptOrDefault(context: CliExecutionContext)
   });
 }
 
-function parseInstallArgs(args: readonly string[]): readonly InstallSurface[] | null | undefined {
+function parseInstallArgs(args: readonly string[]): ParsedInstallArgs | null {
   if (args.length === 0) {
-    return undefined;
+    return {
+      profileOnly: false,
+    };
   }
 
   if (args.length === 1) {
     const selected = parseInstallSurfaceSelection(args[0] ?? "");
 
     if (selected !== null) {
-      return selected;
+      return {
+        profileOnly: false,
+        selectedSurfaces: selected,
+      };
     }
   }
 
   let explicitIncludes = false;
+  let installDir: string | undefined;
+  let profileOnly = false;
+  let releaseRepository: string | undefined;
+  let releaseTag: string | undefined;
   const selected = new Set<InstallSurface>();
 
-  for (const arg of args) {
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+
+    if (arg === undefined) {
+      return null;
+    }
+
+    if (arg === "--profile-only") {
+      profileOnly = true;
+      continue;
+    }
+
+    if (arg === "--tag" || arg === "--repo" || arg === "--dir") {
+      const value = args[index + 1];
+
+      if (value === undefined || value.startsWith("--")) {
+        return null;
+      }
+
+      if (arg === "--tag") {
+        releaseTag = value;
+      } else if (arg === "--repo") {
+        releaseRepository = value;
+      } else {
+        installDir = value;
+      }
+
+      index += 1;
+      continue;
+    }
+
+    if (arg.startsWith("--tag=")) {
+      releaseTag = arg.slice("--tag=".length);
+      continue;
+    }
+
+    if (arg.startsWith("--repo=")) {
+      releaseRepository = arg.slice("--repo=".length);
+      continue;
+    }
+
+    if (arg.startsWith("--dir=")) {
+      installDir = arg.slice("--dir=".length);
+      continue;
+    }
+
     if (arg === "--all") {
       for (const surface of DEFAULT_INSTALL_SURFACES) {
         selected.add(surface);
@@ -148,10 +222,59 @@ function parseInstallArgs(args: readonly string[]): readonly InstallSurface[] | 
 
   const normalized = INSTALL_SURFACES.filter((surface) => selected.has(surface));
 
-  return normalized.length === 0 ? null : normalized;
+  if (normalized.length === 0 && explicitIncludes) {
+    return null;
+  }
+
+  return {
+    ...(installDir === undefined ? {} : { installDir }),
+    profileOnly,
+    ...(releaseRepository === undefined ? {} : { releaseRepository }),
+    ...(releaseTag === undefined ? {} : { releaseTag }),
+    ...(normalized.length === 0 ? {} : { selectedSurfaces: normalized }),
+  };
 }
 
 function isDefaultSelection(selectedSurfaces: readonly InstallSurface[]): boolean {
   return selectedSurfaces.length === INSTALL_SURFACES.length &&
     INSTALL_SURFACES.every((surface, index) => selectedSurfaces[index] === surface);
+}
+
+async function writeReleaseInstallResult(input: {
+  context: CliExecutionContext;
+  parsed: ParsedInstallArgs;
+  selectedSurfaces: readonly InstallSurface[];
+}): Promise<void> {
+  if (input.parsed.profileOnly) {
+    input.context.stdout("Release assets: skipped (--profile-only).");
+    return;
+  }
+
+  if (!input.selectedSurfaces.some((surface) => surface === "web" || surface === "hud")) {
+    input.context.stdout("Release assets: skipped (CLI-only selection).");
+    return;
+  }
+
+  const result = await installReleaseAssets({
+    env: input.context.env,
+    fetchImpl: input.context.fetch,
+    ...(input.parsed.installDir === undefined ? {} : { installDir: input.parsed.installDir }),
+    now: input.context.now,
+    ...(input.parsed.releaseRepository === undefined ? {} : { repository: input.parsed.releaseRepository }),
+    selectedSurfaces: input.selectedSurfaces,
+    ...(input.parsed.releaseTag === undefined ? {} : { tag: input.parsed.releaseTag }),
+  });
+
+  writeReleaseInstallSummary(input.context, result);
+}
+
+function writeReleaseInstallSummary(context: CliExecutionContext, result: ReleaseInstallResult): void {
+  context.stdout(`Release: ${result.repository}@${result.tag}`);
+  context.stdout(`Release URL: ${result.releaseUrl}`);
+  context.stdout(`Install directory: ${result.installDir}`);
+
+  for (const asset of result.assets) {
+    context.stdout(`Downloaded ${asset.surface}: ${asset.name}`);
+    context.stdout(`  SHA256 verified: ${asset.checksumVerified ? "yes" : "checksum unavailable"}`);
+  }
 }

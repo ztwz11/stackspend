@@ -37,6 +37,7 @@ Windows PowerShell:
 npm install -g @moneysiren/cli@alpha
 moneysiren --version
 moneysiren install --status
+moneysiren install --all
 moneysiren modes
 moneysiren doctor
 moneysiren sync --provider mock
@@ -48,6 +49,7 @@ macOS zsh:
 npm install -g @moneysiren/cli@alpha
 moneysiren --version
 moneysiren install --status
+moneysiren install --all
 moneysiren modes
 moneysiren doctor
 moneysiren sync --provider mock
@@ -59,7 +61,7 @@ During a PowerShell, cmd, or shell install with an interactive TTY, npm `postins
 - Web dashboard
 - HUD
 
-Press Enter to accept the recommended default, which selects all three. In CI or non-interactive npm installs, MoneySiren writes that same all-selected profile automatically. Re-run `moneysiren install` to change the profile later.
+Press Enter to accept the recommended default, which selects all three. In CI or non-interactive npm installs, MoneySiren writes that same all-selected profile automatically. Run `moneysiren install --all` to download the matching GitHub Release assets for the web runtime and HUD desktop shell, or `moneysiren install --profile-only` to only change the profile later.
 
 `moneysiren modes` should show the selected install profile plus the CLI, local web dashboard/runtime, and desktop tray/notifier surfaces. The same source tree supports Windows and macOS; npm installs the cross-platform CLI, while native tray/HUD artifacts are built per OS.
 
@@ -75,17 +77,23 @@ Install the CLI first:
 
 ```bash
 npm install -g @moneysiren/cli@alpha
-moneysiren install --status
+moneysiren install --all
 moneysiren sync --provider mock
 ```
 
-Download and extract the web runtime archive from the GitHub Release, then start it:
+`moneysiren install --all` downloads the web runtime archive and the current OS desktop/HUD artifact from GitHub Releases. By default, the files are stored in the MoneySiren local application data directory. To pin a release tag or choose a directory:
+
+```bash
+moneysiren install --all --tag v0.1.0-alpha.0 --dir ./moneysiren-release
+```
+
+Extract the downloaded web runtime archive, then start it:
 
 ```bash
 node start.mjs
 ```
 
-The web runtime listens at `http://127.0.0.1:3000` by default. Start the desktop installer/app after the web runtime is running; the native shell opens the dashboard and HUD from that local address.
+The web runtime listens at `http://127.0.0.1:3000` by default. Start the downloaded desktop installer/app after the web runtime is running; the native shell opens the dashboard and HUD from that local address.
 
 This alpha desktop shell does not yet embed or auto-start the web runtime. Windows and macOS may warn because these alpha artifacts are unsigned.
 
