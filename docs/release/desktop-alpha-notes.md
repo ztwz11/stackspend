@@ -12,7 +12,7 @@ This prerelease publishes source-free alpha artifacts for local review:
 1. Install the CLI from npm:
 
    ```bash
-   npm install -g moneysiren@alpha
+   npm install -g @moneysiren/cli@alpha
    ```
 
 2. Download and extract `moneysiren-web-runtime-*.tar.gz`, then start the local dashboard runtime:

@@ -192,10 +192,10 @@ Home/help never creates `.env`, prints secret values, calls provider APIs, or en
 
 ## NPM Alpha CLI Preview
 
-After `moneysiren@alpha` is published:
+After `@moneysiren/cli@alpha` is published:
 
 ```bash
-npm install -g moneysiren@alpha
+npm install -g @moneysiren/cli@alpha
 moneysiren --version
 moneysiren install --status
 moneysiren modes
@@ -227,7 +227,7 @@ The same source tree supports Windows and macOS. Local config paths and native d
 After a `desktop-release` GitHub Actions run publishes assets, users can review MoneySiren without cloning the repository:
 
 ```bash
-npm install -g moneysiren@alpha
+npm install -g @moneysiren/cli@alpha
 moneysiren sync --provider mock
 ```
 

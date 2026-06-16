@@ -15,7 +15,7 @@ MoneySiren is local-first. The CLI reads configuration and secrets from the proc
 After an alpha is published:
 
 ```bash
-npm install -g moneysiren@alpha
+npm install -g @moneysiren/cli@alpha
 moneysiren
 moneysiren --version
 moneysiren /version
@@ -38,14 +38,14 @@ Press Enter to accept the recommended default, which selects all three. In CI or
 One-off execution:
 
 ```bash
-npx --package moneysiren@alpha moneysiren
-npx --package moneysiren@alpha moneysiren --version
-npx --package moneysiren@alpha moneysiren /version
-npx --package moneysiren@alpha moneysiren modes
-npx --package moneysiren@alpha moneysiren doctor
-npx --package moneysiren@alpha moneysiren /doctor
-npx --package moneysiren@alpha moneysiren dashboard check
-npx --package moneysiren@alpha moneysiren sync --provider aws --profile <profile>
+npx --package @moneysiren/cli@alpha moneysiren
+npx --package @moneysiren/cli@alpha moneysiren --version
+npx --package @moneysiren/cli@alpha moneysiren /version
+npx --package @moneysiren/cli@alpha moneysiren modes
+npx --package @moneysiren/cli@alpha moneysiren doctor
+npx --package @moneysiren/cli@alpha moneysiren /doctor
+npx --package @moneysiren/cli@alpha moneysiren dashboard check
+npx --package @moneysiren/cli@alpha moneysiren sync --provider aws --profile <profile>
 ```
 
 `aws sso login --profile <profile>` refreshes AWS SSO credentials, but it does not set `AWS_PROFILE` in the current shell. Pass `--profile <profile>` or export `AWS_PROFILE` before live AWS sync.

@@ -347,7 +347,7 @@ describe("MoneySiren CLI", () => {
     expect(result.stderr).toEqual([]);
     expect(stdout).toContain("MoneySiren modes");
     expect(stdout).toContain("Install profile: CLI, Web dashboard, HUD");
-    expect(stdout).toContain("npm install -g moneysiren@alpha");
+    expect(stdout).toContain("npm install -g @moneysiren/cli@alpha");
     expect(stdout).toContain("1. CLI automation");
     expect(stdout).toContain("2. Local web dashboard/runtime");
     expect(stdout).toContain("3. Desktop tray/notifier");

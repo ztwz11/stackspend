@@ -29,12 +29,12 @@ Do not create `.env` files with live credentials. For v0.1, use process-local en
 
 ## Install The CLI From npm
 
-After `moneysiren@alpha` is published, install the CLI with npm.
+After `@moneysiren/cli@alpha` is published, install the CLI with npm.
 
 Windows PowerShell:
 
 ```powershell
-npm install -g moneysiren@alpha
+npm install -g @moneysiren/cli@alpha
 moneysiren --version
 moneysiren install --status
 moneysiren modes
@@ -45,7 +45,7 @@ moneysiren sync --provider mock
 macOS zsh:
 
 ```bash
-npm install -g moneysiren@alpha
+npm install -g @moneysiren/cli@alpha
 moneysiren --version
 moneysiren install --status
 moneysiren modes
@@ -74,7 +74,7 @@ GitHub Releases publish three source-free artifact types:
 Install the CLI first:
 
 ```bash
-npm install -g moneysiren@alpha
+npm install -g @moneysiren/cli@alpha
 moneysiren install --status
 moneysiren sync --provider mock
 ```
