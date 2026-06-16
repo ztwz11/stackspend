@@ -27,6 +27,8 @@ The npm alpha package is prepared as `@stackspend/cli`, but this repository work
 
 The screenshots below were regenerated from a fresh fixture-backed mock SQLite database. Fake environment labels only mark providers as connected for the UI; no live credentials, provider account identifiers, webhook URLs, or local Codex/Claude session data are included.
 
+### English
+
 Dashboard overview:
 
 ![StackSpend mock dashboard](docs/assets/install/stackspend-english-mock-dashboard.png)
@@ -42,6 +44,26 @@ Desktop HUD:
 Notification and HUD settings:
 
 ![StackSpend notification and HUD settings](docs/assets/install/stackspend-english-mock-hud-settings.png)
+
+### 한국어
+
+아래 스크린샷은 동일한 fixture 기반 목업 SQLite 데이터베이스에서 한국어 UI로 다시 캡처한 화면입니다. FAKE 환경 값은 로컬 UI에서 provider가 연결된 것처럼 표시하기 위한 라벨이며, 실제 credential, provider 계정 식별자, webhook URL, 로컬 Codex/Claude 세션 데이터는 포함하지 않습니다.
+
+대시보드 개요:
+
+![StackSpend 한국어 목업 대시보드](docs/assets/install/stackspend-korean-mock-dashboard.png)
+
+CLI 대시보드 항목 설정:
+
+![StackSpend 한국어 CLI 대시보드 항목 설정](docs/assets/install/stackspend-korean-mock-dashboard-settings.png)
+
+데스크톱 HUD:
+
+![StackSpend 한국어 목업 HUD](docs/assets/install/stackspend-korean-mock-hud.png)
+
+알림 및 HUD 설정:
+
+![StackSpend 한국어 알림 및 HUD 설정](docs/assets/install/stackspend-korean-mock-hud-settings.png)
 
 ## Provider Model
 

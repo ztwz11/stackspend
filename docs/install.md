@@ -240,6 +240,26 @@ Notification and HUD settings:
 
 ![StackSpend English notification and HUD settings](assets/install/stackspend-english-mock-hud-settings.png)
 
+## Korean Mock Screenshots
+
+The following screenshots use the same fixture-backed SQLite database and Korean UI routes. The fake environment values only mark providers as connected for the local UI; no live provider credentials, provider account identifiers, webhook URLs, or local Codex/Claude session data are included.
+
+Dashboard overview:
+
+![StackSpend Korean mock dashboard](assets/install/stackspend-korean-mock-dashboard.png)
+
+CLI dashboard field settings:
+
+![StackSpend Korean CLI dashboard field settings](assets/install/stackspend-korean-mock-dashboard-settings.png)
+
+Desktop HUD:
+
+![StackSpend Korean mock HUD](assets/install/stackspend-korean-mock-hud.png)
+
+Notification and HUD settings:
+
+![StackSpend Korean notification and HUD settings](assets/install/stackspend-korean-mock-hud-settings.png)
+
 ## Validation
 
 For a local source checkout, run:
