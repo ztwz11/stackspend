@@ -17,3 +17,13 @@ tmp/
 var/
 apps/tray/src-tauri/target/
 apps/tray/src-tauri/gen/
+
+# signing keys and release certificates with private material
+*.key
+*.pem
+*.p8
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.mobileprovision

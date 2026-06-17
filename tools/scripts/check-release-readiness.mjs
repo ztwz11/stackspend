@@ -274,6 +274,8 @@ function parseArgs(values) {
       parsed.dir = values[++index];
     } else if (value === "--max-bytes") {
       parsed.maxBytes = values[++index];
+    } else if (!value.startsWith("--") && parsed.tag === undefined) {
+      parsed.tag = value;
     } else {
       throw new Error(`Unknown argument: ${value}`);
     }

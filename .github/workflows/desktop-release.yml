@@ -20,6 +20,15 @@ on:
         required: true
         type: boolean
         default: true
+      desktop_targets:
+        description: "Desktop targets to build"
+        required: true
+        type: choice
+        options:
+          - all
+          - windows
+          - macos
+        default: all
 
 permissions:
   contents: write
@@ -89,35 +98,42 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        if: github.event_name != 'workflow_dispatch' || inputs.desktop_targets == 'all' || inputs.desktop_targets == matrix.name
         with:
           fetch-depth: 0
 
       - uses: pnpm/action-setup@v4
+        if: github.event_name != 'workflow_dispatch' || inputs.desktop_targets == 'all' || inputs.desktop_targets == matrix.name
         with:
           version: 11.5.0
 
       - uses: actions/setup-node@v4
+        if: github.event_name != 'workflow_dispatch' || inputs.desktop_targets == 'all' || inputs.desktop_targets == matrix.name
         with:
           node-version: 24
           cache: pnpm
 
       - name: Install Rust stable
+        if: github.event_name != 'workflow_dispatch' || inputs.desktop_targets == 'all' || inputs.desktop_targets == matrix.name
         shell: bash
         run: |
           rustup toolchain install stable --profile minimal
           rustup default stable
 
       - name: Install NSIS
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && (github.event_name != 'workflow_dispatch' || inputs.desktop_targets == 'all' || inputs.desktop_targets == matrix.name)
         shell: pwsh
         run: choco install nsis -y --no-progress
 
-      - run: pnpm install --frozen-lockfile
-      - run: npm run secret:scan:all
-      - run: npm run tray:native:check
+      - if: github.event_name != 'workflow_dispatch' || inputs.desktop_targets == 'all' || inputs.desktop_targets == matrix.name
+        run: pnpm install --frozen-lockfile
+      - if: github.event_name != 'workflow_dispatch' || inputs.desktop_targets == 'all' || inputs.desktop_targets == matrix.name
+        run: npm run secret:scan:all
+      - if: github.event_name != 'workflow_dispatch' || inputs.desktop_targets == 'all' || inputs.desktop_targets == matrix.name
+        run: npm run tray:native:check
 
       - name: Import Windows signing certificate
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && (github.event_name != 'workflow_dispatch' || inputs.desktop_targets == 'all' || inputs.desktop_targets == matrix.name)
         shell: pwsh
         env:
           WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
@@ -151,7 +167,7 @@ jobs:
           Remove-Item -LiteralPath $encodedCertificatePath,$certificatePath -Force
 
       - name: Import Apple Developer certificate
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && (github.event_name != 'workflow_dispatch' || inputs.desktop_targets == 'all' || inputs.desktop_targets == matrix.name)
         shell: bash
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
@@ -189,6 +205,7 @@ jobs:
           rm -f .tmp/codesign/apple-certificate.p12
 
       - name: Prepare Tauri signing config
+        if: github.event_name != 'workflow_dispatch' || inputs.desktop_targets == 'all' || inputs.desktop_targets == matrix.name
         shell: bash
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
@@ -203,6 +220,7 @@ jobs:
         run: node tools/scripts/prepare-tauri-signing-config.mjs --platform ${{ matrix.name }} --out apps/tray/.tmp/tauri-signing-${{ matrix.name }}.json
 
       - name: Build signed desktop bundle
+        if: github.event_name != 'workflow_dispatch' || inputs.desktop_targets == 'all' || inputs.desktop_targets == matrix.name
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -213,12 +231,12 @@ jobs:
         run: node tools/scripts/run-pnpm.mjs --filter @moneysiren/tray tauri:build --ci --config .tmp/tauri-signing-${{ matrix.name }}.json --bundles ${{ matrix.bundles }}
 
       - name: Delete Apple signing keychain
-        if: runner.os == 'macOS' && always()
+        if: runner.os == 'macOS' && always() && (github.event_name != 'workflow_dispatch' || inputs.desktop_targets == 'all' || inputs.desktop_targets == matrix.name)
         shell: bash
         run: security delete-keychain build.keychain || true
 
       - name: Collect Windows installer
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && (github.event_name != 'workflow_dispatch' || inputs.desktop_targets == 'all' || inputs.desktop_targets == matrix.name)
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -238,7 +256,7 @@ jobs:
             Set-Content dist\desktop-release\moneysiren-tray-windows-SHA256SUMS.txt
 
       - name: Verify Windows installer signature
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && (github.event_name != 'workflow_dispatch' || inputs.desktop_targets == 'all' || inputs.desktop_targets == matrix.name)
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -275,7 +293,7 @@ jobs:
             Set-Content -LiteralPath dist\desktop-release\moneysiren-tray-windows-SIGNATURE.json
 
       - name: Collect macOS app archive
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && (github.event_name != 'workflow_dispatch' || inputs.desktop_targets == 'all' || inputs.desktop_targets == matrix.name)
         shell: bash
         run: |
           set -euo pipefail
@@ -292,7 +310,7 @@ jobs:
           shasum -a 256 *.tar.gz > moneysiren-tray-macos-SHA256SUMS.txt
 
       - name: Verify macOS app signature and notarization
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && (github.event_name != 'workflow_dispatch' || inputs.desktop_targets == 'all' || inputs.desktop_targets == matrix.name)
         shell: bash
         run: |
           set -euo pipefail
@@ -307,6 +325,7 @@ jobs:
           spctl -a -vv -t exec "$app_path"
 
       - uses: actions/upload-artifact@v4
+        if: github.event_name != 'workflow_dispatch' || inputs.desktop_targets == 'all' || inputs.desktop_targets == matrix.name
         with:
           name: moneysiren-desktop-${{ matrix.name }}
           path: dist/desktop-release/*
@@ -334,19 +353,39 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DISPATCH_TAG: ${{ inputs.tag }}
           DISPATCH_PRERELEASE: ${{ inputs.prerelease }}
+          DISPATCH_DESKTOP_TARGETS: ${{ inputs.desktop_targets }}
         run: |
           set -euo pipefail
           tag="${GITHUB_REF_NAME}"
           prerelease_flag="--prerelease"
+          desktop_targets="all"
 
           if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
             tag="${DISPATCH_TAG}"
+            desktop_targets="${DISPATCH_DESKTOP_TARGETS}"
             if [ "${DISPATCH_PRERELEASE}" != "true" ]; then
               prerelease_flag=""
             fi
           fi
 
           if gh release view "$tag" >/dev/null 2>&1; then
+            if [ "$desktop_targets" = "windows" ]; then
+              while IFS= read -r asset_name; do
+                case "$asset_name" in
+                  *macos*|moneysiren-tray-macos-SHA256SUMS.txt)
+                    gh release delete-asset "$tag" "$asset_name" -y || true
+                    ;;
+                esac
+              done < <(gh release view "$tag" --json assets --jq '.assets[].name')
+            elif [ "$desktop_targets" = "macos" ]; then
+              while IFS= read -r asset_name; do
+                case "$asset_name" in
+                  MoneySiren.Tray*.exe|MoneySiren.Tray*.msi|moneysiren-tray-windows-SHA256SUMS.txt|moneysiren-tray-windows-SIGNATURE.json)
+                    gh release delete-asset "$tag" "$asset_name" -y || true
+                    ;;
+                esac
+              done < <(gh release view "$tag" --json assets --jq '.assets[].name')
+            fi
             gh release upload "$tag" dist/release-assets/* --clobber
           else
             gh release create "$tag" dist/release-assets/* \

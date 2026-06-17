@@ -83,7 +83,11 @@ const SENSITIVE_PATH_PATTERNS = [
   },
   {
     name: "private key or certificate material",
-    pattern: /\.(?:pem|key|p12|pfx)$/,
+    pattern: /\.(?:pem|key|p8|p12|pfx|jks|keystore|mobileprovision)$/,
+  },
+  {
+    name: "encoded signing certificate material",
+    pattern: /(^|\/).*(?:certificate|codesign|code-signing|signing).*\.(?:base64|b64)\.txt$/i,
   },
 ];
 

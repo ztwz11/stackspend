@@ -6,7 +6,7 @@ MoneySiren is a local-first cloud, SaaS, and AI usage dashboard. The alpha has t
 - Local web dashboard through Next.js.
 - Desktop tray/notifier and HUD through the native Tauri shell.
 
-The npm alpha installs the CLI surface. GitHub Releases can publish source-free alpha artifacts for the built web dashboard runtime and unsigned native desktop tray/HUD shell.
+The npm alpha installs the CLI surface. GitHub Releases can publish source-free alpha artifacts for the built web dashboard runtime and signed native desktop tray/HUD shell when maintainer signing credentials are configured.
 
 ## Requirements
 
@@ -70,8 +70,8 @@ Press Enter to accept the recommended default, which selects all three. In CI or
 GitHub Releases publish three source-free artifact types:
 
 - `moneysiren-web-runtime-*.tar.gz`: the built local Next.js dashboard runtime.
-- Windows installer: unsigned Tauri NSIS `.exe`.
-- macOS app archive: unsigned Tauri `.app` inside `.tar.gz`.
+- Windows installer: signed Tauri NSIS `.exe` when release signing credentials are configured.
+- macOS app archive: signed and notarized Tauri `.app` inside `.tar.gz` when Apple release signing credentials are configured.
 
 Install the CLI first:
 
@@ -95,7 +95,7 @@ node start.mjs
 
 The web runtime listens at `http://127.0.0.1:3000` by default. Start the downloaded desktop installer/app after the web runtime is running; the native shell opens the dashboard and HUD from that local address.
 
-This alpha desktop shell does not yet embed or auto-start the web runtime. Windows and macOS may warn because these alpha artifacts are unsigned.
+This alpha desktop shell does not yet embed or auto-start the web runtime. Windows and macOS may warn when using older unsigned alpha artifacts or local unsigned builds.
 
 ## Install From Source On Windows
 
@@ -262,6 +262,34 @@ The `desktop-release` GitHub Actions workflow builds source-free alpha assets fo
 - macOS `.app` archive from the macOS runner.
 - Web runtime archive from the Linux runner.
 
+Before creating a public desktop release, configure signing secrets outside the repository. Windows needs a trusted code-signing PFX/P12 certificate; self-signed certificates are useful only for local smoke tests and do not fix public Windows publisher trust warnings.
+
+Prepare the Windows certificate payload without printing it to the terminal:
+
+```bash
+npm run release:signing:encode-windows -- "<path-to-windows-code-signing.pfx>"
+```
+
+Set GitHub repository secrets:
+
+- `WINDOWS_CERTIFICATE`: contents of `.tmp/codesign/windows-certificate.base64.txt`.
+- `WINDOWS_CERTIFICATE_PASSWORD`: the PFX/P12 password.
+
+Then verify the local signing inputs:
+
+PowerShell:
+
+```powershell
+$env:WINDOWS_CERTIFICATE_PASSWORD = "<pfx-or-p12-password>"
+npm run release:signing:check -- windows
+```
+
+Bash/zsh:
+
+```bash
+WINDOWS_CERTIFICATE_PASSWORD="<pfx-or-p12-password>" npm run release:signing:check -- windows
+```
+
 Create or update a prerelease from a tag:
 
 ```bash
@@ -269,7 +297,7 @@ git tag v0.1.0-alpha.0
 git push origin v0.1.0-alpha.0
 ```
 
-Or run the workflow manually from GitHub Actions with a release tag. The workflow uploads SHA256 checksum files next to the release artifacts.
+Or run the workflow manually from GitHub Actions with a release tag. If only one signing identity is ready, set `desktop_targets` to `windows` or `macos`; skipped desktop assets are removed from the updated GitHub Release so stale unsigned desktop artifacts do not remain published. The workflow uploads SHA256 checksum files and Windows signature metadata next to the release artifacts.
 
 ## English Mock Screenshots
 
