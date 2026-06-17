@@ -97,6 +97,8 @@ The web runtime listens at `http://127.0.0.1:3000` by default. Start the downloa
 
 This alpha desktop shell does not yet embed or auto-start the web runtime. Windows and macOS may warn when using older unsigned alpha artifacts or local unsigned builds.
 
+MoneySiren is prepared to use the SignPath Foundation program for open-source Windows code signing. When a Windows Release artifact is signed through the SignPath Foundation, the GitHub Release notes and this install guide will identify that signature path so users can distinguish signed desktop artifacts from local unsigned builds.
+
 ## Install From Source On Windows
 
 Install prerequisites:
