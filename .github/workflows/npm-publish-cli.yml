@@ -1,0 +1,58 @@
+name: npm-publish-cli
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "npm dist-tag"
+        required: true
+        default: "alpha"
+        type: choice
+        options:
+          - alpha
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: publish-cli
+    runs-on: ubuntu-latest
+    env:
+      NPM_CONFIG_CACHE: ${{ github.workspace }}/.tmp/npm-cache
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.5.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - name: Verify npm token is configured
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
+            echo "Missing NPM_TOKEN repository secret." >&2
+            exit 1
+          fi
+
+      - run: pnpm install --frozen-lockfile
+      - run: npm run secret:scan:all
+      - run: node tools/scripts/run-pnpm.mjs --filter @moneysiren/cli test -- cli.test.ts release-installer.test.ts
+      - run: node tools/scripts/run-pnpm.mjs --filter @moneysiren/cli typecheck
+      - run: npm run publish:cli:dry-run
+
+      - name: Publish CLI to npm
+        working-directory: apps/cli
+        shell: bash
+        run: npm publish --tag "${{ inputs.tag }}" --access public

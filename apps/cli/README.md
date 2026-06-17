@@ -105,6 +105,8 @@ npm run publish:cli:alpha
 
 The dry run checks the full secret scan, package metadata, npm registry version availability, and tarball contents. The publish command requires `npm login` in the local terminal and publishes this package with the `alpha` tag and public access.
 
+If npm requires passkey or browser approval, complete the URL printed by npm and rerun the publish command. For CI publishing, add a granular npm token with publish access and bypass 2FA enabled as the `NPM_TOKEN` GitHub repository secret, then run the `npm-publish-cli` workflow manually.
+
 ## Slash Home
 
 Running `moneysiren` without subcommands prints a readable slash-command home guide. In a TTY it may enter a minimal line-based slash prompt; in CI or non-TTY package review it prints the guide and exits `0`.

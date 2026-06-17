@@ -77,9 +77,10 @@ run(npmBin, getPublishArgs({ dryRun: false }), {
   cwd: cliRoot,
   failureMessage: [
     "npm publish failed.",
-    "Publishing now requires either account 2FA or a granular access token with bypass 2FA enabled.",
-    "If you use account 2FA, retry with `npm run publish:cli:alpha -- --otp=123456` using the current authenticator code.",
-    "If you use automation, create a granular npm token with publish access and bypass 2FA enabled, then set it only in your shell or CI secret store.",
+    "Publishing requires npm account 2FA approval, npm web/passkey authentication, or a granular access token with bypass 2FA enabled.",
+    "If npm printed an authentication URL, open it in the browser, complete the approval, and rerun this command.",
+    "If your account has an authenticator OTP, retry with `npm run publish:cli:alpha -- --otp=123456` using the current code.",
+    "For CI, create a granular npm token with publish access and bypass 2FA enabled, then store it only as `NPM_TOKEN` in GitHub Secrets or your shell.",
   ].join("\n"),
 });
 
