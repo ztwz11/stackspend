@@ -179,6 +179,7 @@ describe("MoneySiren CLI", () => {
 
   it("declares a public alpha npm package with a built JavaScript bin and scoped files", async () => {
     const packageJson = JSON.parse(await readFile(CLI_PACKAGE_JSON_PATH, "utf8")) as {
+      version?: string;
       private?: boolean;
       license?: string;
       packageManager?: string;
@@ -192,6 +193,7 @@ describe("MoneySiren CLI", () => {
     const files = packageJson.files ?? [];
 
     expect(packageJson.private).toBe(false);
+    expect(packageJson.version).toBe(CLI_VERSION);
     expect(packageJson.license).toBe("MIT");
     expect(packageJson.packageManager).toBe("pnpm@11.5.0");
     expect(packageJson.engines?.node).toBe(">=20.11.0");
@@ -392,6 +394,16 @@ describe("MoneySiren CLI", () => {
     expect(install.stdout.join("\n")).toContain("Release assets: skipped (--profile-only).");
     expect(status.stdout.join("\n")).toContain("Recommended default: no");
     expect(allOutput).not.toMatch(/sk-|hooks\.slack|FAKE_/i);
+  });
+
+  it("prints the pinned install release default separately from the CLI package version", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "moneysiren-cli-"));
+    const result = await runCli(["install", "--help"], testContext(cwd));
+    const stdout = result.stdout.join("\n");
+
+    expect(result.exitCode).toBe(0);
+    expect(CLI_VERSION).toBe("0.1.0-alpha.1");
+    expect(stdout).toContain("Release default: ztwz11/moneysiren@v0.1.0-alpha.0.");
   });
 
   it("installs selected release assets from GitHub Releases without storing secrets", async () => {

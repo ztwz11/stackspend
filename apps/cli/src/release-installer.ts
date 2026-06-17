@@ -5,12 +5,12 @@ import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, posix, resolve, win32 } from "node:path";
 import { promisify } from "node:util";
 import type { InstallSurface } from "./install-profile.js";
-import { CLI_VERSION } from "./version.js";
 
 const execFileAsync = promisify(execFile);
 
 export const DEFAULT_RELEASE_REPOSITORY = "ztwz11/moneysiren";
-export const DEFAULT_RELEASE_TAG = `v${CLI_VERSION}`;
+// The npm CLI can patch faster than desktop assets; keep this pinned until a signed release supersedes it.
+export const DEFAULT_RELEASE_TAG = "v0.1.0-alpha.0";
 
 export interface ReleaseInstallOptions {
   env?: Record<string, string | undefined>;
