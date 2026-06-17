@@ -399,7 +399,7 @@ describe("MoneySiren CLI", () => {
     const installDir = join(cwd, "release-install");
     const profilePath = join(cwd, "install-profile.json");
     const webAsset = "moneysiren-web-runtime-v0.1.0-alpha.0.tar.gz";
-    const hudAsset = "MoneySiren_0.1.0-alpha.0_x64-setup.exe";
+    const hudAsset = "MoneySiren.Tray-macos-ARM64.tar.gz";
     const webBytes = Buffer.from("fake web runtime");
     const hudBytes = Buffer.from("fake hud binary");
     const checksum = [
@@ -412,7 +412,7 @@ describe("MoneySiren CLI", () => {
       {
         ...testContext(cwd, {
           MONEYSIREN_INSTALL_PROFILE_PATH: profilePath,
-          MONEYSIREN_RELEASE_PLATFORM: "win32",
+          MONEYSIREN_RELEASE_PLATFORM: "darwin",
         }),
         fetch: async (input) => {
           const url = String(input);
@@ -467,6 +467,60 @@ describe("MoneySiren CLI", () => {
     expect(await readFile(join(installDir, hudAsset), "utf8")).toBe(hudBytes.toString("utf8"));
     expect(await readFile(join(installDir, "install-manifest.json"), "utf8")).not.toMatch(/sk-|hooks\.slack|FAKE_/i);
     expect(allOutput).not.toMatch(/sk-|hooks\.slack|FAKE_/i);
+  });
+
+  it("does not persist the install profile when release asset installation fails", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "moneysiren-cli-"));
+    const installDir = join(cwd, "release-install");
+    const profilePath = join(cwd, "install-profile.json");
+    const hudAsset = "MoneySiren.Tray_0.1.0-alpha.0_x64-setup.exe";
+    const hudBytes = Buffer.from("fake hud binary");
+
+    const result = await runCli(
+      ["install", "--hud", "--dir", installDir, "--tag", "v0.1.0-alpha.0"],
+      {
+        ...testContext(cwd, {
+          MONEYSIREN_INSTALL_PROFILE_PATH: profilePath,
+          MONEYSIREN_RELEASE_PLATFORM: "win32",
+        }),
+        fetch: async (input) => {
+          const url = String(input);
+
+          if (url.endsWith("/repos/ztwz11/moneysiren/releases/tags/v0.1.0-alpha.0")) {
+            return Response.json({
+              html_url: "https://github.com/ztwz11/moneysiren/releases/tag/v0.1.0-alpha.0",
+              assets: [
+                {
+                  name: hudAsset,
+                  browser_download_url: `https://github.com/ztwz11/moneysiren/releases/download/v0.1.0-alpha.0/${hudAsset}`,
+                },
+                {
+                  name: "moneysiren-tray-windows-SHA256SUMS.txt",
+                  browser_download_url: "https://github.com/ztwz11/moneysiren/releases/download/v0.1.0-alpha.0/moneysiren-tray-windows-SHA256SUMS.txt",
+                },
+              ],
+            });
+          }
+
+          if (url.endsWith(hudAsset)) {
+            return new Response(hudBytes);
+          }
+
+          if (url.endsWith("SHA256SUMS.txt")) {
+            return new Response(`${testSha256(hudBytes)}  other-installer.exe\n`);
+          }
+
+          return new Response("missing", {
+            status: 404,
+            statusText: "Not Found",
+          });
+        },
+      },
+    );
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr.join("\n")).toContain(`SHA256 checksum entry missing for ${hudAsset}.`);
+    await expect(readFile(profilePath, "utf8")).rejects.toThrow();
   });
 
   it("checks the default dashboard API and accepts the safe empty state", async () => {

@@ -57,6 +57,11 @@ export async function runInstallCommand(args: readonly string[], context: CliExe
   }
 
   const selectedSurfaces = parsed.selectedSurfaces ?? await selectedSurfacesFromPromptOrDefault(context);
+  const releaseResult = await installReleaseAssetsForSelection({
+    context,
+    parsed,
+    selectedSurfaces,
+  });
   const profile = await writeInstallProfileFile({
     selectedSurfaces,
     source: "cli",
@@ -68,11 +73,7 @@ export async function runInstallCommand(args: readonly string[], context: CliExe
 
   context.stdout("MoneySiren install profile updated.");
   context.stdout(formatInstallSelectionLine(profile.selectedSurfaces));
-  await writeReleaseInstallResult({
-    context,
-    parsed,
-    selectedSurfaces: profile.selectedSurfaces,
-  });
+  writeReleaseInstallResult(context, releaseResult);
   context.stdout("Secrets returned: false");
   return 0;
 }
@@ -240,22 +241,20 @@ function isDefaultSelection(selectedSurfaces: readonly InstallSurface[]): boolea
     INSTALL_SURFACES.every((surface, index) => selectedSurfaces[index] === surface);
 }
 
-async function writeReleaseInstallResult(input: {
+async function installReleaseAssetsForSelection(input: {
   context: CliExecutionContext;
   parsed: ParsedInstallArgs;
   selectedSurfaces: readonly InstallSurface[];
-}): Promise<void> {
+}): Promise<ReleaseInstallResult | "profile-only" | "cli-only"> {
   if (input.parsed.profileOnly) {
-    input.context.stdout("Release assets: skipped (--profile-only).");
-    return;
+    return "profile-only";
   }
 
   if (!input.selectedSurfaces.some((surface) => surface === "web" || surface === "hud")) {
-    input.context.stdout("Release assets: skipped (CLI-only selection).");
-    return;
+    return "cli-only";
   }
 
-  const result = await installReleaseAssets({
+  return installReleaseAssets({
     env: input.context.env,
     fetchImpl: input.context.fetch,
     ...(input.parsed.installDir === undefined ? {} : { installDir: input.parsed.installDir }),
@@ -264,8 +263,23 @@ async function writeReleaseInstallResult(input: {
     selectedSurfaces: input.selectedSurfaces,
     ...(input.parsed.releaseTag === undefined ? {} : { tag: input.parsed.releaseTag }),
   });
+}
 
-  writeReleaseInstallSummary(input.context, result);
+function writeReleaseInstallResult(
+  context: CliExecutionContext,
+  result: ReleaseInstallResult | "profile-only" | "cli-only",
+): void {
+  if (result === "profile-only") {
+    context.stdout("Release assets: skipped (--profile-only).");
+    return;
+  }
+
+  if (result === "cli-only") {
+    context.stdout("Release assets: skipped (CLI-only selection).");
+    return;
+  }
+
+  writeReleaseInstallSummary(context, result);
 }
 
 function writeReleaseInstallSummary(context: CliExecutionContext, result: ReleaseInstallResult): void {
@@ -276,5 +290,6 @@ function writeReleaseInstallSummary(context: CliExecutionContext, result: Releas
   for (const asset of result.assets) {
     context.stdout(`Downloaded ${asset.surface}: ${asset.name}`);
     context.stdout(`  SHA256 verified: ${asset.checksumVerified ? "yes" : "checksum unavailable"}`);
+    context.stdout(`  Signature verified: ${asset.signatureVerified ? "yes" : "not required"}`);
   }
 }

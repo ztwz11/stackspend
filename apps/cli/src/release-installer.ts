@@ -1,9 +1,13 @@
 import { createHash } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { mkdir, unlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, posix, resolve, win32 } from "node:path";
+import { promisify } from "node:util";
 import type { InstallSurface } from "./install-profile.js";
 import { CLI_VERSION } from "./version.js";
+
+const execFileAsync = promisify(execFile);
 
 export const DEFAULT_RELEASE_REPOSITORY = "ztwz11/moneysiren";
 export const DEFAULT_RELEASE_TAG = `v${CLI_VERSION}`;
@@ -16,7 +20,9 @@ export interface ReleaseInstallOptions {
   platform?: NodeJS.Platform;
   repository?: string;
   selectedSurfaces: readonly InstallSurface[];
+  signatureVerifier?: ReleaseAssetSignatureVerifier;
   tag?: string;
+  trustedWindowsSignerThumbprints?: readonly string[];
 }
 
 export interface ReleaseInstallResult {
@@ -34,6 +40,25 @@ export interface InstalledReleaseAsset {
   size: number;
   sha256: string;
   checksumVerified: boolean;
+  signatureVerified: boolean;
+}
+
+export interface ReleaseAssetSignatureVerifier {
+  verify(input: ReleaseAssetSignatureVerificationInput): Promise<ReleaseAssetSignatureVerificationResult>;
+}
+
+export interface ReleaseAssetSignatureVerificationInput {
+  assetName: string;
+  expectedSignerThumbprints?: readonly string[];
+  path: string;
+  platform: NodeJS.Platform;
+  surface: Exclude<InstallSurface, "cli">;
+}
+
+export interface ReleaseAssetSignatureVerificationResult {
+  verified: boolean;
+  status: string;
+  message: string;
 }
 
 interface GitHubRelease {
@@ -52,6 +77,7 @@ const RELEASE_REPOSITORY_ENV_KEY = "MONEYSIREN_RELEASE_REPOSITORY";
 const RELEASE_TAG_ENV_KEY = "MONEYSIREN_RELEASE_TAG";
 const RELEASE_INSTALL_DIR_ENV_KEY = "MONEYSIREN_RELEASE_INSTALL_DIR";
 const RELEASE_PLATFORM_ENV_KEY = "MONEYSIREN_RELEASE_PLATFORM";
+const WINDOWS_SIGNER_THUMBPRINTS_ENV_KEY = "MONEYSIREN_WINDOWS_SIGNER_THUMBPRINTS";
 
 export async function installReleaseAssets(options: ReleaseInstallOptions): Promise<ReleaseInstallResult> {
   const env = options.env ?? process.env;
@@ -107,6 +133,31 @@ export async function installReleaseAssets(options: ReleaseInstallOptions): Prom
     const outputPath = join(installDir, sanitizeAssetFileName(asset.name));
 
     await writeFile(outputPath, downloaded);
+    let signature: ReleaseAssetSignatureVerificationResult;
+    try {
+      signature = await verifyReleaseAssetSignature({
+        assetName: asset.name,
+        env,
+        fetchImpl: options.fetchImpl,
+        path: outputPath,
+        platform,
+        releaseAssets,
+        surface,
+        ...(options.signatureVerifier === undefined ? {} : { signatureVerifier: options.signatureVerifier }),
+        ...(options.trustedWindowsSignerThumbprints === undefined
+          ? {}
+          : { trustedWindowsSignerThumbprints: options.trustedWindowsSignerThumbprints }),
+      });
+    } catch (error) {
+      await unlink(outputPath).catch(() => undefined);
+      throw error;
+    }
+
+    if (!signature.verified) {
+      await unlink(outputPath).catch(() => undefined);
+      throw new Error(`Release asset signature verification failed for ${asset.name}: ${signature.status} ${signature.message}`.trim());
+    }
+
     installedAssets.push({
       surface,
       name: asset.name,
@@ -114,6 +165,7 @@ export async function installReleaseAssets(options: ReleaseInstallOptions): Prom
       size: downloaded.byteLength,
       sha256,
       checksumVerified: checksum !== null,
+      signatureVerified: signature.status !== "not-required",
     });
   }
 
@@ -131,6 +183,7 @@ export async function installReleaseAssets(options: ReleaseInstallOptions): Prom
       size: asset.size,
       sha256: asset.sha256,
       checksumVerified: asset.checksumVerified,
+      signatureVerified: asset.signatureVerified,
     })),
   }, null, 2)}\n`, "utf8");
 
@@ -323,6 +376,183 @@ function parseChecksumFile(content: string, assetName: string): string | null {
 
 function sha256Hex(content: Buffer): string {
   return createHash("sha256").update(content).digest("hex");
+}
+
+async function verifyReleaseAssetSignature(input: {
+  assetName: string;
+  env: Record<string, string | undefined>;
+  fetchImpl: typeof fetch;
+  path: string;
+  platform: NodeJS.Platform;
+  releaseAssets: readonly GitHubReleaseAsset[];
+  signatureVerifier?: ReleaseAssetSignatureVerifier;
+  surface: Exclude<InstallSurface, "cli">;
+  trustedWindowsSignerThumbprints?: readonly string[];
+}): Promise<ReleaseAssetSignatureVerificationResult> {
+  const verifier = input.signatureVerifier ?? defaultReleaseAssetSignatureVerifier;
+  const expectedSignerThumbprints = await findExpectedSignerThumbprints({
+    assetName: input.assetName,
+    env: input.env,
+    fetchImpl: input.fetchImpl,
+    platform: input.platform,
+    releaseAssets: input.releaseAssets,
+    surface: input.surface,
+    ...(input.trustedWindowsSignerThumbprints === undefined
+      ? {}
+      : { trustedWindowsSignerThumbprints: input.trustedWindowsSignerThumbprints }),
+  });
+
+  return verifier.verify({
+    assetName: input.assetName,
+    ...(expectedSignerThumbprints === null ? {} : { expectedSignerThumbprints }),
+    path: input.path,
+    platform: input.platform,
+    surface: input.surface,
+  });
+}
+
+const defaultReleaseAssetSignatureVerifier: ReleaseAssetSignatureVerifier = {
+  async verify(input) {
+    if (input.surface !== "hud" || input.platform !== "win32") {
+      return {
+        verified: true,
+        status: "not-required",
+        message: "No platform signature check is required for this release asset.",
+      };
+    }
+
+    if (!/\.(exe|msi)$/i.test(input.assetName)) {
+      return {
+        verified: false,
+        status: "unsupported",
+        message: "Windows HUD release assets must be .exe or .msi installers.",
+      };
+    }
+
+    if (input.expectedSignerThumbprints === undefined || input.expectedSignerThumbprints.length === 0) {
+      return {
+        verified: false,
+        status: "missing-signature-metadata",
+        message: `Windows HUD release assets require ${WINDOWS_SIGNER_THUMBPRINTS_ENV_KEY} or moneysiren-tray-windows-SIGNATURE.json metadata.`,
+      };
+    }
+
+    return verifyWindowsAuthenticodeSignature(input.path, input.expectedSignerThumbprints);
+  },
+};
+
+async function findExpectedSignerThumbprints(input: {
+  assetName: string;
+  env: Record<string, string | undefined>;
+  fetchImpl: typeof fetch;
+  platform: NodeJS.Platform;
+  releaseAssets: readonly GitHubReleaseAsset[];
+  surface: Exclude<InstallSurface, "cli">;
+  trustedWindowsSignerThumbprints?: readonly string[];
+}): Promise<readonly string[] | null> {
+  if (input.surface !== "hud" || input.platform !== "win32") {
+    return null;
+  }
+
+  const trustedThumbprints = normalizeThumbprintList([
+    ...(input.trustedWindowsSignerThumbprints ?? []),
+    ...parseThumbprintEnv(input.env[WINDOWS_SIGNER_THUMBPRINTS_ENV_KEY]),
+  ]);
+
+  if (trustedThumbprints.length > 0) {
+    return trustedThumbprints;
+  }
+
+  const metadataAsset = input.releaseAssets.find((asset) =>
+    /^moneysiren-tray-windows-SIGNATURE\.json$/i.test(asset.name)
+  );
+
+  if (metadataAsset === undefined) {
+    return null;
+  }
+
+  const metadata = JSON.parse((await downloadAsset(input.fetchImpl, metadataAsset.browser_download_url)).toString("utf8")) as unknown;
+  const entries = Array.isArray(metadata) ? metadata : [metadata];
+
+  for (const entry of entries) {
+    if (!isRecord(entry) || entry.assetName !== input.assetName || typeof entry.signerThumbprint !== "string") {
+      continue;
+    }
+
+    return [normalizeThumbprint(entry.signerThumbprint)];
+  }
+
+  return null;
+}
+
+async function verifyWindowsAuthenticodeSignature(
+  path: string,
+  expectedSignerThumbprints: readonly string[],
+): Promise<ReleaseAssetSignatureVerificationResult> {
+  try {
+    const { stdout } = await execFileAsync("powershell.exe", [
+      "-NoProfile",
+      "-NonInteractive",
+      "-Command",
+      [
+        "$signature = Get-AuthenticodeSignature -LiteralPath $args[0]",
+        "$status = [string]$signature.Status",
+        "$message = [string]$signature.StatusMessage",
+        "if ($signature.Status -ne 'Valid' -or $null -eq $signature.SignerCertificate) {",
+        "  Write-Output ($status + \"|\" + $message)",
+        "  exit 1",
+        "}",
+        "Write-Output ($status + \"|\" + $signature.SignerCertificate.Thumbprint + \"|\" + $signature.SignerCertificate.Subject)",
+      ].join("; "),
+      path,
+    ], {
+      windowsHide: true,
+      timeout: 30_000,
+    });
+
+    const [status, signerThumbprint, ...messageParts] = stdout.trim().split("|");
+    const normalizedSignerThumbprint = normalizeThumbprint(signerThumbprint ?? "");
+    const normalizedExpectedSignerThumbprints = expectedSignerThumbprints.map(normalizeThumbprint);
+
+    if (!normalizedExpectedSignerThumbprints.includes(normalizedSignerThumbprint)) {
+      return {
+        verified: false,
+        status: "signer-mismatch",
+        message: `Expected signer ${normalizedExpectedSignerThumbprints.join(", ")}, got ${normalizedSignerThumbprint || "unknown"}.`,
+      };
+    }
+
+    return {
+      verified: true,
+      status: status ?? "Valid",
+      message: messageParts.join("|"),
+    };
+  } catch (error) {
+    const output = isRecord(error) && typeof error.stdout === "string" ? error.stdout.trim() : "";
+    const [status, ...messageParts] = output.split("|");
+
+    return {
+      verified: false,
+      status: status && status.length > 0 ? status : "Unknown",
+      message: messageParts.join("|") || (error instanceof Error ? error.message : String(error)),
+    };
+  }
+}
+
+function normalizeThumbprint(value: string): string {
+  return value.replaceAll(/\s/g, "").toUpperCase();
+}
+
+function normalizeThumbprintList(values: readonly string[]): readonly string[] {
+  return Array.from(new Set(values.map(normalizeThumbprint).filter((value) => value.length > 0)));
+}
+
+function parseThumbprintEnv(value: string | undefined): readonly string[] {
+  if (value === undefined) {
+    return [];
+  }
+
+  return value.split(/[,\s;]+/).map((part) => part.trim()).filter((part) => part.length > 0);
 }
 
 function sanitizeAssetFileName(name: string): string {
