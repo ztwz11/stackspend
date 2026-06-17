@@ -519,7 +519,10 @@ describe("MoneySiren CLI", () => {
     );
 
     expect(result.exitCode).toBe(1);
-    expect(result.stderr.join("\n")).toContain(`SHA256 checksum entry missing for ${hudAsset}.`);
+    expect(result.stderr.join("\n")).toContain(`Release asset installation failed: SHA256 checksum entry missing for ${hudAsset}.`);
+    expect(result.stderr.join("\n")).toContain("The selected HUD desktop artifact must be present, checksummed, and signed before MoneySiren will install it.");
+    expect(result.stderr.join("\n")).toContain("For now, use `moneysiren install --web` to install only the web runtime, or retry after a signed desktop release is published.");
+    expect(result.stderr.join("\n")).toContain("Install profile was not changed.");
     await expect(readFile(profilePath, "utf8")).rejects.toThrow();
   });
 

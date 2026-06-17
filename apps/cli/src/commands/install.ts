@@ -57,11 +57,16 @@ export async function runInstallCommand(args: readonly string[], context: CliExe
   }
 
   const selectedSurfaces = parsed.selectedSurfaces ?? await selectedSurfacesFromPromptOrDefault(context);
-  const releaseResult = await installReleaseAssetsForSelection({
+  const releaseResult = await installReleaseAssetsForSelectionSafely({
     context,
     parsed,
     selectedSurfaces,
   });
+
+  if (releaseResult === "failed") {
+    return 1;
+  }
+
   const profile = await writeInstallProfileFile({
     selectedSurfaces,
     source: "cli",
@@ -263,6 +268,26 @@ async function installReleaseAssetsForSelection(input: {
     selectedSurfaces: input.selectedSurfaces,
     ...(input.parsed.releaseTag === undefined ? {} : { tag: input.parsed.releaseTag }),
   });
+}
+
+async function installReleaseAssetsForSelectionSafely(input: {
+  context: CliExecutionContext;
+  parsed: ParsedInstallArgs;
+  selectedSurfaces: readonly InstallSurface[];
+}): Promise<ReleaseInstallResult | "profile-only" | "cli-only" | "failed"> {
+  try {
+    return await installReleaseAssetsForSelection(input);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+
+    input.context.stderr(`Release asset installation failed: ${message}`);
+    if (input.selectedSurfaces.includes("hud")) {
+      input.context.stderr("The selected HUD desktop artifact must be present, checksummed, and signed before MoneySiren will install it.");
+      input.context.stderr("For now, use `moneysiren install --web` to install only the web runtime, or retry after a signed desktop release is published.");
+    }
+    input.context.stderr("Install profile was not changed.");
+    return "failed";
+  }
 }
 
 function writeReleaseInstallResult(
