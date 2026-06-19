@@ -35,7 +35,7 @@ describe("provider environment route", () => {
       },
       body: JSON.stringify({
         entries: {
-          OPENAI_ADMIN_KEY: "sk-admin-secret-value",
+          OPENAI_ADMIN_KEY: "fake-openai-admin-key-value",
         },
       }),
     }));
@@ -43,14 +43,14 @@ describe("provider environment route", () => {
 
     expect(response.status).toBe(200);
     expect(setProviderEnvGloballyMock).toHaveBeenCalledWith({
-      OPENAI_ADMIN_KEY: "sk-admin-secret-value",
+      OPENAI_ADMIN_KEY: "fake-openai-admin-key-value",
     });
     expect(payload).toMatchObject({
       localOnly: true,
       secretsReturned: false,
       keys: ["OPENAI_ADMIN_KEY"],
     });
-    expect(JSON.stringify(payload)).not.toContain("sk-admin-secret-value");
+    expect(JSON.stringify(payload)).not.toContain("fake-openai-admin-key-value");
   });
 
   it("rejects provider env persistence without CSRF", async () => {
@@ -63,7 +63,7 @@ describe("provider environment route", () => {
       },
       body: JSON.stringify({
         entries: {
-          OPENAI_ADMIN_KEY: "sk-admin-secret-value",
+          OPENAI_ADMIN_KEY: "fake-openai-admin-key-value",
         },
       }),
     }));

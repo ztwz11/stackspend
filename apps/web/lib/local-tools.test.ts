@@ -176,7 +176,7 @@ describe("local tool status", () => {
     };
     const calls: Array<{ file: string; args: readonly string[]; direct: boolean | undefined; timeout: number }> = [];
     const result = await setProviderEnvGlobally({
-      OPENAI_ADMIN_KEY: "sk-admin-secret-value",
+      OPENAI_ADMIN_KEY: "fake-openai-admin-key-value",
       CLOUDFLARE_ACCOUNT_IDS: "account-123",
     }, {
       env,
@@ -213,14 +213,14 @@ describe("local tool status", () => {
       },
       {
         file: "C:\\Windows\\System32\\setx.exe",
-        args: ["OPENAI_ADMIN_KEY", "sk-admin-secret-value"],
+        args: ["OPENAI_ADMIN_KEY", "fake-openai-admin-key-value"],
         direct: true,
         timeout: 10_000,
       },
     ]);
-    expect(env.OPENAI_ADMIN_KEY).toBe("sk-admin-secret-value");
+    expect(env.OPENAI_ADMIN_KEY).toBe("fake-openai-admin-key-value");
     expect(env.CLOUDFLARE_ACCOUNT_IDS).toBe("account-123");
-    expect(JSON.stringify(result)).not.toContain("sk-admin-secret-value");
+    expect(JSON.stringify(result)).not.toContain("fake-openai-admin-key-value");
     expect(JSON.stringify(result)).not.toContain("account-123");
   });
 
