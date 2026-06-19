@@ -212,5 +212,6 @@ function emptyStatusLineUsage() {
     totalCacheTokens: null,
     totalReasoningTokens: null,
     totalTokens: null,
+    usageResetCredits: [],
   };
 }

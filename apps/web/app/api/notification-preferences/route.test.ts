@@ -81,6 +81,18 @@ describe("notification preference route", () => {
         desktopEnabled: true,
         dashboard: {
           localCliMetricKeys: ["last_request_tokens", "unknown", "total_tokens", "last_request_tokens"],
+          widgetLayouts: {
+            today: [
+              { widgetKey: "today_rail", visible: false, size: "full" },
+              { widgetKey: "today_main", visible: true, size: "wide" },
+            ],
+          },
+          budget: {
+            monthlyBudgetMinor: 150000,
+            currency: "usd",
+            warningPercent: 75,
+            criticalPercent: 95,
+          },
         },
         hud: {
           alwaysOnTop: false,
@@ -102,6 +114,18 @@ describe("notification preference route", () => {
         desktopEnabled: true,
         dashboard: {
           localCliMetricKeys: ["last_request_tokens", "total_tokens"],
+          widgetLayouts: {
+            today: [
+              { widgetKey: "today_rail", visible: false, size: "full" },
+              { widgetKey: "today_main", visible: true, size: "wide" },
+            ],
+          },
+          budget: {
+            monthlyBudgetMinor: 150000,
+            currency: "USD",
+            warningPercent: 75,
+            criticalPercent: 95,
+          },
         },
         hud: {
           alwaysOnTop: false,

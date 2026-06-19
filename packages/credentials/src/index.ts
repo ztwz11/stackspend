@@ -23,7 +23,10 @@ export const CREDENTIAL_PROVIDERS = [
   "datadog",
   "sentry",
   "codex-cli",
+  "codex-app",
   "claude-cli",
+  "claude-app",
+  "antigravity",
 ] as const;
 export const CREDENTIAL_SCOPES = ["read-only", "emergency"] as const;
 

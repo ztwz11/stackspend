@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Check, Minus, Pin, PinOff, RefreshCw, Save, Settings, X } from "lucide-react";
 import type { Locale } from "../lib/i18n";
 import type { NotificationPreferences } from "./NotificationSettingsModel";
+import { withAppLoading } from "./AppLoadingOverlay";
 
 type SaveState = "idle" | "saving" | "saved" | "error";
 type HudWindowAction = "close" | "minimize";
@@ -23,6 +24,7 @@ interface HudWindowControlsProps {
     save: string;
     saved: string;
     settings: string;
+    toolLoadingPreparingView: string;
   };
   locale: Locale;
 }
@@ -227,21 +229,23 @@ export function HudWindowControls({ initialPreferences, labels, locale }: HudWin
   );
 
   async function saveHudSettings() {
-    setSaveState("saving");
+    await withAppLoading(labels.toolLoadingPreparingView, async () => {
+      setSaveState("saving");
 
-    try {
-      const savedPreferences = await saveHudPreferences(initialPreferences, {
-        alwaysOnTop: draftAlwaysOnTop,
-        fontScale: draftFontScale,
-        opacity: draftOpacity,
-      });
-      void applyAlwaysOnTop(savedPreferences.hud.alwaysOnTop);
-      router.refresh();
-      setSaveState("saved");
-    } catch (error) {
-      console.error("MoneySiren HUD settings save failed.", error);
-      setSaveState("error");
-    }
+      try {
+        const savedPreferences = await saveHudPreferences(initialPreferences, {
+          alwaysOnTop: draftAlwaysOnTop,
+          fontScale: draftFontScale,
+          opacity: draftOpacity,
+        });
+        void applyAlwaysOnTop(savedPreferences.hud.alwaysOnTop);
+        router.refresh();
+        setSaveState("saved");
+      } catch (error) {
+        console.error("MoneySiren HUD settings save failed.", error);
+        setSaveState("error");
+      }
+    });
   }
 
   async function handleWindowAction(action: HudWindowAction): Promise<void> {

@@ -79,7 +79,10 @@ function loadProviders(env: MoneySirenEnv): ProviderConfigMap {
     datadog: loadProviderConfig("datadog", env),
     sentry: loadProviderConfig("sentry", env),
     "codex-cli": loadProviderConfig("codex-cli", env),
+    "codex-app": loadProviderConfig("codex-app", env),
     "claude-cli": loadProviderConfig("claude-cli", env),
+    "claude-app": loadProviderConfig("claude-app", env),
+    antigravity: loadProviderConfig("antigravity", env),
   };
 }
 

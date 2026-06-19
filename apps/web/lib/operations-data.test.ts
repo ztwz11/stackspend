@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { DEFAULT_NOTIFICATION_PREFERENCES } from "../../../packages/view-model/src/index";
 import type { DashboardSnapshot } from "./dashboard-data";
 import { buildOperationsDashboard, resolveDashboardTimezone } from "./operations-data";
 
@@ -119,9 +120,144 @@ describe("operations dashboard data", () => {
       canonicalFreshness: "fresh",
       liveFreshness: "stale",
       liveGranularity: "current_period",
+      todayLiveAmountMinor: 2000,
+      todayLiveIncluded: false,
+    });
+    expect(dashboard.visibleConnections.find((connection) => connection.providerKey === "aws")).toMatchObject({
+      todayLiveAmountMinor: 2000,
       todayLiveIncluded: false,
     });
     expect(JSON.stringify(dashboard)).not.toContain("fake-profile");
+  });
+
+  it("calculates budget risk from local monthly budget preferences", () => {
+    const dashboard = buildOperationsDashboard(BASE_DASHBOARD, {
+      env: {
+        AWS_PROFILE: "fake-profile",
+      },
+      now: new Date("2026-06-05T03:00:00.000Z"),
+      timezone: "Asia/Seoul",
+      notificationPreferences: {
+        ...DEFAULT_NOTIFICATION_PREFERENCES,
+        dashboard: {
+          ...DEFAULT_NOTIFICATION_PREFERENCES.dashboard,
+          budget: {
+            monthlyBudgetMinor: 7000,
+            currency: "USD",
+            warningPercent: 80,
+            criticalPercent: 100,
+          },
+        },
+      },
+    });
+
+    expect(dashboard.summary.monthForecastAmountMinor).toBe(7975);
+    expect(dashboard.summary.budget).toMatchObject({
+      monthlyBudgetMinor: 7000,
+      usagePercent: 114,
+      riskLevel: "critical",
+      status: "critical",
+    });
+  });
+
+  it("uses the canonical current-period amount when AWS live cache is not checked yet", () => {
+    const dashboard = buildOperationsDashboard(BASE_DASHBOARD, {
+      env: {
+        AWS_PROFILE: "fake-profile",
+      },
+      now: new Date("2026-06-05T03:00:00.000Z"),
+      timezone: "Asia/Seoul",
+      liveToday: {
+        generatedAt: "2026-06-05T03:00:00.000Z",
+        ttlSeconds: 60,
+        cacheState: "empty",
+        providers: [
+          {
+            providerKey: "aws",
+            connectionId: "env",
+            connectionLabel: "Environment",
+            checkedAt: null,
+            expiresAt: null,
+            ttlSeconds: 60,
+            freshness: "stale",
+            liveGranularity: "current_period",
+            confidence: "none",
+            provisional: true,
+            todayLiveAmountMinor: null,
+            currency: "USD",
+            included: false,
+            status: "not_checked",
+          },
+        ],
+      },
+    });
+
+    expect(dashboard.summary.todayLiveAmountMinor).toBeNull();
+    expect(dashboard.providers.find((provider) => provider.providerKey === "aws")).toMatchObject({
+      todayLiveAmountMinor: 2000,
+      todayLiveIncluded: false,
+    });
+    expect(dashboard.visibleConnections.find((connection) => connection.providerKey === "aws")).toMatchObject({
+      todayLiveAmountMinor: 2000,
+      todayLiveIncluded: false,
+    });
+  });
+
+  it("converts cost fields with the selected display currency exchange rate", () => {
+    const dashboard = buildOperationsDashboard(BASE_DASHBOARD, {
+      env: {
+        AWS_PROFILE: "fake-profile",
+      },
+      now: new Date("2026-06-05T03:00:00.000Z"),
+      timezone: "Asia/Seoul",
+      exchangeRate: {
+        sourceCurrency: "USD",
+        requestedCurrency: "KRW",
+        displayCurrency: "KRW",
+        rate: 1515.42,
+        rateDate: "2026-06-05",
+        fetchedAt: "2026-06-05T03:00:00.000Z",
+        source: "frankfurter",
+        status: "live",
+      },
+      notificationPreferences: {
+        ...DEFAULT_NOTIFICATION_PREFERENCES,
+        dashboard: {
+          ...DEFAULT_NOTIFICATION_PREFERENCES.dashboard,
+          budget: {
+            monthlyBudgetMinor: 10_000_000,
+            currency: "KRW",
+            warningPercent: 80,
+            criticalPercent: 100,
+          },
+        },
+      },
+    });
+    const aws = dashboard.providers.find((provider) => provider.providerKey === "aws");
+
+    expect(dashboard.summary.currency).toBe("KRW");
+    expect(dashboard.summary.exchangeRate).toMatchObject({
+      sourceCurrency: "USD",
+      displayCurrency: "KRW",
+      rate: 1515.42,
+      status: "live",
+    });
+    expect(dashboard.summary.monthForecastAmountMinor).toBe(Math.round(7975 * 1515.42));
+    expect(dashboard.summary.budget.usagePercent).toBe(121);
+    expect(aws).toMatchObject({
+      currency: "KRW",
+      confirmedAmountMinor: Math.round(1100 * 1515.42),
+      todayLiveAmountMinor: Math.round(2000 * 1515.42),
+      todayLiveIncluded: false,
+    });
+    expect(aws?.serviceCostBreakdown[0]).toMatchObject({
+      currency: "KRW",
+      amountMinor: Math.round(712 * 1515.42),
+    });
+    expect(dashboard.usageTrend[0]).toMatchObject({
+      unit: "KRW",
+      value: 10.46 * 1515.42,
+    });
   });
 
   it("includes only fresh safe live-today provider values in the overview total", () => {
@@ -202,6 +338,56 @@ describe("operations dashboard data", () => {
       ]),
     });
     expect(JSON.stringify(dashboard)).not.toContain("FAKE_OPENAI_ADMIN_KEY_FOR_TESTS");
+  });
+
+  it("exposes excluded AWS current-period live values without adding them to the live total", () => {
+    const dashboard = buildOperationsDashboard(BASE_DASHBOARD, {
+      env: {
+        AWS_PROFILE: "fake-profile",
+      },
+      now: new Date("2026-06-05T03:00:00.000Z"),
+      timezone: "Asia/Seoul",
+      liveToday: {
+        generatedAt: "2026-06-05T03:00:00.000Z",
+        ttlSeconds: 60,
+        cacheState: "fresh",
+        providers: [
+          {
+            providerKey: "aws",
+            connectionId: "env",
+            connectionLabel: "Environment",
+            checkedAt: "2026-06-05T03:00:00.000Z",
+            expiresAt: "2026-06-05T03:01:00.000Z",
+            ttlSeconds: 60,
+            freshness: "live",
+            liveGranularity: "current_period",
+            confidence: "medium",
+            provisional: true,
+            todayLiveAmountMinor: 987,
+            currency: "USD",
+            included: false,
+            status: "ok",
+            message: "AWS Cost Explorer exposes the current billing period, not exact current-day cost.",
+          },
+        ],
+      },
+    });
+
+    expect(dashboard.summary.todayLiveAmountMinor).toBeNull();
+    expect(dashboard.summary.todayLiveIncludedProviderCount).toBe(0);
+    expect(dashboard.summary.todayLiveExcludedProviderCount).toBe(1);
+    expect(dashboard.summary.monthForecastAmountMinor).toBe(7975);
+    expect(dashboard.providers.find((provider) => provider.providerKey === "aws")).toMatchObject({
+      liveFreshness: "live",
+      liveConfidence: "medium",
+      todayLiveAmountMinor: 987,
+      todayLiveIncluded: false,
+    });
+    expect(dashboard.visibleConnections.find((connection) => connection.providerKey === "aws")).toMatchObject({
+      todayLiveAmountMinor: 987,
+      todayLiveIncluded: false,
+    });
+    expect(JSON.stringify(dashboard)).not.toContain("fake-profile");
   });
 
   it("keeps overview totals aggregate while exposing AWS service cost details", () => {

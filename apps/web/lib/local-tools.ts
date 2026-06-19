@@ -1,7 +1,7 @@
-import { execFile } from "node:child_process";
-import { readdir, readFile, stat } from "node:fs/promises";
+import { execFile, spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join, win32 } from "node:path";
+import { dirname, join, win32 } from "node:path";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
@@ -9,10 +9,15 @@ const AWS_CLI_TIMEOUT_MS = 10_000;
 const AWS_PROFILE_PERSIST_TIMEOUT_MS = 10_000;
 const GCLOUD_CLI_TIMEOUT_MS = 10_000;
 const LOCAL_CLI_TIMEOUT_MS = 3_000;
+const CODEX_APP_SERVER_TIMEOUT_MS = 8_000;
+const CODEX_APP_SERVER_CACHE_MS = 30_000;
+const CODEX_RESET_CREDIT_DEFAULT_TTL_DAYS = 30;
+const CODEX_RESET_CREDIT_OBSERVATION_FILE = "codex-reset-credit-observations.json";
 const MAX_LOCAL_USAGE_FILES = 400;
 const LOCAL_AI_CLI_STATUS_CACHE_MS = 5_000;
 const AWS_PROFILE_NAME_PATTERN = /^[A-Za-z0-9_.:@+=,-]{1,80}$/;
 const WINDOWS_PATH_DELIMITER = ";";
+const DEFAULT_LOCAL_AI_PROVIDER_KEYS = ["codex-cli", "codex-app", "claude-cli", "claude-app", "antigravity"] as const;
 
 export const AWS_CLI_INSTALL_URL = "https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html";
 export const AWS_CLI_SSO_URL = "https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-sso.html";
@@ -26,7 +31,7 @@ export type AwsCredentialChainSource = "AWS_PROFILE" | "access_key_env" | "none"
 export type GcloudCliState = "installed" | "missing" | "error";
 export type GcpLocalSetupState = "configured" | "missing";
 export type GcpAdcSource = "GOOGLE_APPLICATION_CREDENTIALS" | "application_default_credentials" | "none";
-export type LocalAiCliProviderKey = "codex-cli" | "claude-cli";
+export type LocalAiCliProviderKey = "codex-cli" | "codex-app" | "claude-cli" | "claude-app" | "antigravity";
 export type LocalCliState = "installed" | "missing" | "error";
 
 export interface AwsLocalSetupStatus {
@@ -132,9 +137,9 @@ export interface LocalAiCliProviderStatus {
 }
 
 export interface LocalCliUsageSummary {
-  source: "codex_sessions" | "claude_projects" | "not_found";
+  source: "codex_sessions" | "codex_app_sessions" | "claude_projects" | "claude_app" | "antigravity_app" | "not_found";
   period: "current_month";
-  providerKind: "codex" | "claude";
+  providerKind: "codex" | "claude" | "antigravity";
   sessionCount: number;
   turnCount: number;
   toolCallCount: number;
@@ -150,6 +155,40 @@ export interface LocalCliUsageSummary {
   topModels: readonly string[];
   statusLine: LocalCliStatusLineUsage;
   message: string;
+}
+
+export interface LocalCliUsageResetCredit {
+  label: string | null;
+  expiresAt: string | null;
+  estimatedEarliestExpiryUtc?: string | null;
+  estimatedLatestExpiryUtc?: string | null;
+  observedFromUtc?: string | null;
+  observedToUtc?: string | null;
+  status?: CodexResetCreditObservationStatus;
+  isExact?: boolean;
+}
+
+export type CodexResetCreditObservationStatus = "estimated" | "initial_existing" | "removed_unknown";
+
+export interface CodexResetCreditObservation {
+  id: string;
+  previousCount: number;
+  currentCount: number;
+  observedFromUtc: string;
+  observedToUtc: string;
+  estimatedEarliestExpiryUtc: string | null;
+  estimatedLatestExpiryUtc: string | null;
+  status: CodexResetCreditObservationStatus;
+  isExact: false;
+  removedAtUtc?: string;
+}
+
+export interface CodexResetCreditObservationStore {
+  version: 1;
+  updatedAtUtc: string;
+  lastObservedAtUtc: string | null;
+  lastCount: number | null;
+  observations: readonly CodexResetCreditObservation[];
 }
 
 export interface LocalCliStatusLineUsage {
@@ -176,6 +215,7 @@ export interface LocalCliStatusLineUsage {
   totalCacheTokens: number | null;
   totalReasoningTokens: number | null;
   totalTokens: number | null;
+  usageResetCredits: readonly LocalCliUsageResetCredit[];
 }
 
 export interface ReadLocalAiCliStatusOptions {
@@ -206,6 +246,7 @@ export function buildWindowsLocalToolPath(
   nodeExecutable: string,
 ): string {
   return appendUniqueWindowsPathSegments(currentPath, [
+    win32.dirname(windowsSystemExecutable("cmd.exe", env)),
     trimToNull(nodeExecutable) === null ? null : win32.dirname(nodeExecutable),
     trimToNull(env.NVM_SYMLINK),
     trimToNull(env.NVM_HOME),
@@ -222,8 +263,11 @@ export function buildWindowsLocalToolPath(
     joinIfBase(env.USERPROFILE, ".bun", "bin"),
     joinIfBase(env.LOCALAPPDATA, "Microsoft", "WindowsApps"),
     joinIfBase(env["ProgramFiles"], "Amazon", "AWSCLIV2"),
+    win32.join("C:\\Program Files", "Amazon", "AWSCLIV2"),
     joinIfBase(env["ProgramFiles"], "Google", "Cloud SDK", "google-cloud-sdk", "bin"),
     joinIfBase(env["ProgramFiles(x86)"], "Google", "Cloud SDK", "google-cloud-sdk", "bin"),
+    win32.join("C:\\Program Files", "Google", "Cloud SDK", "google-cloud-sdk", "bin"),
+    win32.join("C:\\Program Files (x86)", "Google", "Cloud SDK", "google-cloud-sdk", "bin"),
   ]);
 }
 
@@ -231,6 +275,11 @@ let localAiCliStatusCache: {
   expiresAt: number;
   key: string;
   payload: LocalAiCliStatusPayload;
+} | null = null;
+let codexAppServerRateLimitCache: {
+  expiresAt: number;
+  key: string;
+  promise: Promise<LocalCliStatusLineUsage | null>;
 } | null = null;
 
 export async function readAwsLocalSetupStatus(
@@ -358,10 +407,12 @@ export async function readLocalAiCliStatus(
   const now = options.now ?? (() => new Date());
   const runCommand = options.runCommand ?? defaultRunCommand;
   const homeDir = options.homeDir ?? readHomeDir(env);
-  const providerKeys = options.providerKeys ?? (["codex-cli", "claude-cli"] as const);
+  const providerKeys = options.providerKeys ?? DEFAULT_LOCAL_AI_PROVIDER_KEYS;
   const cacheKey = localAiCliStatusCacheKey(env, homeDir, providerKeys);
   const cacheTtlMs = options.cacheTtlMs ?? LOCAL_AI_CLI_STATUS_CACHE_MS;
   const cacheNow = now().getTime();
+  const allowCodexAppServerProbe = options.runCommand === undefined &&
+    trimToNull(env.MONEYSIREN_CODEX_APP_SERVER_USAGE_DISABLED) !== "1";
 
   if (options.runCommand === undefined && cacheTtlMs > 0 && localAiCliStatusCache?.key === cacheKey && localAiCliStatusCache.expiresAt > cacheNow) {
     return localAiCliStatusCache.payload;
@@ -377,6 +428,7 @@ export async function readLocalAiCliStatus(
         homeDir,
         now: now(),
         runCommand,
+        allowCodexAppServerProbe,
       })
     )),
   };
@@ -399,14 +451,15 @@ async function readLocalAiCliProviderStatus(
     homeDir: string;
     now: Date;
     runCommand: LocalCommandRunner;
+    allowCodexAppServerProbe: boolean;
   },
 ): Promise<LocalAiCliProviderStatus> {
   const definition = localCliDefinition(providerKey);
   const [cli, usage] = await Promise.all([
-    readLocalCliStatus(definition.command, definition.versionPattern, context.runCommand),
-    providerKey === "codex-cli"
-      ? readCodexCliUsage(context)
-      : readClaudeCliUsage(context),
+    definition.surface === "cli"
+      ? readLocalCliStatus(definition.command, definition.versionPattern, context.runCommand)
+      : readLocalAppStatus(definition.appDataDir(context.env, context.homeDir), definition.versionFiles, context.homeDir),
+    readLocalProviderUsage(providerKey, context),
   ]);
 
   return {
@@ -427,10 +480,24 @@ function localAiCliStatusCacheKey(
     claudeConfigDir: trimToNull(env.CLAUDE_CONFIG_DIR),
     claudeFiveHourLimit: trimToNull(env.MONEYSIREN_CLAUDE_FIVE_HOUR_TOKEN_LIMIT),
     claudeWeeklyLimit: trimToNull(env.MONEYSIREN_CLAUDE_WEEKLY_TOKEN_LIMIT),
+    codexUsageResetCredits: trimToNull(env.MONEYSIREN_CODEX_USAGE_RESET_CREDITS),
+    codexUsageResetCreditExpiresAt: trimToNull(env.MONEYSIREN_CODEX_USAGE_RESET_CREDIT_EXPIRES_AT),
+    codexAppUsageResetCredits: trimToNull(env.MONEYSIREN_CODEX_APP_USAGE_RESET_CREDITS),
+    codexAppUsageResetCreditExpiresAt: trimToNull(env.MONEYSIREN_CODEX_APP_USAGE_RESET_CREDIT_EXPIRES_AT),
+    codexAppServerUsageDisabled: trimToNull(env.MONEYSIREN_CODEX_APP_SERVER_USAGE_DISABLED),
+    codexResetCreditObservationsPath: trimToNull(env.MONEYSIREN_CODEX_RESET_CREDIT_OBSERVATIONS_PATH),
+    codexResetCreditTtlDays: trimToNull(env.MONEYSIREN_CODEX_RESET_CREDIT_TTL_DAYS),
+    codexAppDataDir: trimToNull(env.MONEYSIREN_CODEX_APP_DATA_DIR),
+    codexAppSessionsDir: trimToNull(env.MONEYSIREN_CODEX_APP_SESSIONS_DIR),
     codexHome: trimToNull(env.CODEX_HOME),
     codexSessionsDir: trimToNull(env.MONEYSIREN_CODEX_SESSIONS_DIR),
     codexFiveHourLimit: trimToNull(env.MONEYSIREN_CODEX_FIVE_HOUR_TOKEN_LIMIT),
     codexWeeklyLimit: trimToNull(env.MONEYSIREN_CODEX_WEEKLY_TOKEN_LIMIT),
+    claudeAppDataDir: trimToNull(env.MONEYSIREN_CLAUDE_APP_DATA_DIR),
+    claudeAppProjectsDir: trimToNull(env.MONEYSIREN_CLAUDE_APP_PROJECTS_DIR),
+    antigravityDataDir: trimToNull(env.MONEYSIREN_ANTIGRAVITY_DATA_DIR),
+    appData: trimToNull(env.APPDATA),
+    localAppData: trimToNull(env.LOCALAPPDATA),
     homeDir,
     providerKeys: [...providerKeys].sort(),
   });
@@ -470,30 +537,174 @@ async function readLocalCliStatus(
   }
 }
 
-function localCliDefinition(providerKey: LocalAiCliProviderKey): {
+type LocalToolDefinition = {
   command: string;
   displayName: string;
+  surface: "cli";
   versionPattern: RegExp;
-} {
+} | {
+  command: string;
+  displayName: string;
+  surface: "app";
+  appDataDir: (env: Record<string, string | undefined>, homeDir: string) => string;
+  versionFiles: readonly string[];
+};
+
+function localCliDefinition(providerKey: LocalAiCliProviderKey): LocalToolDefinition {
   if (providerKey === "codex-cli") {
     return {
       command: "codex",
       displayName: "Codex CLI",
+      surface: "cli",
       versionPattern: /codex(?:-cli)?\s+([^\s]+)/i,
     };
   }
 
+  if (providerKey === "codex-app") {
+    return {
+      command: "Codex App",
+      displayName: "Codex App",
+      surface: "app",
+      appDataDir: codexAppDataDir,
+      versionFiles: ["Last Version"],
+    };
+  }
+
+  if (providerKey === "claude-cli") {
+    return {
+      command: "claude",
+      displayName: "Claude CLI",
+      surface: "cli",
+      versionPattern: /(?:claude(?: code)?|claude-code)\s+([^\s]+)/i,
+    };
+  }
+
+  if (providerKey === "claude-app") {
+    return {
+      command: "Claude App",
+      displayName: "Claude App",
+      surface: "app",
+      appDataDir: claudeAppDataDir,
+      versionFiles: ["Last Version"],
+    };
+  }
+
   return {
-    command: "claude",
-    displayName: "Claude CLI",
-    versionPattern: /(?:claude(?: code)?|claude-code)\s+([^\s]+)/i,
+    command: "Antigravity",
+    displayName: "Antigravity",
+    surface: "app",
+    appDataDir: antigravityAppDataDir,
+    versionFiles: ["Last Version"],
   };
+}
+
+async function readLocalProviderUsage(
+  providerKey: LocalAiCliProviderKey,
+  context: {
+    env: Record<string, string | undefined>;
+    homeDir: string;
+    now: Date;
+    allowCodexAppServerProbe: boolean;
+  },
+): Promise<LocalCliUsageSummary> {
+  if (providerKey === "codex-cli") {
+    return readCodexCliUsage(context);
+  }
+
+  if (providerKey === "codex-app") {
+    return readCodexAppUsage(context);
+  }
+
+  if (providerKey === "claude-cli") {
+    return readClaudeCliUsage(context);
+  }
+
+  if (providerKey === "claude-app") {
+    return readClaudeAppUsage(context);
+  }
+
+  return readLocalAppUsage({
+    source: "antigravity_app",
+    providerKind: "antigravity",
+    appDir: antigravityAppDataDir(context.env, context.homeDir),
+    homeDir: context.homeDir,
+    message: "Antigravity local usage metadata is not available yet.",
+  });
+}
+
+async function readLocalAppStatus(
+  appDir: string,
+  versionFiles: readonly string[],
+  homeDir: string,
+): Promise<LocalAiCliProviderStatus["cli"]> {
+  try {
+    const appStat = await stat(appDir);
+
+    if (!appStat.isDirectory()) {
+      return {
+        state: "missing",
+        version: null,
+        detail: null,
+      };
+    }
+
+    return {
+      state: "installed",
+      version: await readLocalAppVersion(appDir, versionFiles),
+      detail: localPathHint(appDir, homeDir),
+    };
+  } catch {
+    return {
+      state: "missing",
+      version: null,
+      detail: null,
+    };
+  }
+}
+
+async function readLocalAppVersion(appDir: string, versionFiles: readonly string[]): Promise<string | null> {
+  for (const fileName of versionFiles) {
+    try {
+      const content = await readFile(join(appDir, fileName), "utf8");
+      const version = trimToNull(content.split(/\r?\n/, 1)[0]);
+
+      if (version !== null) {
+        return version;
+      }
+    } catch {
+      // Version metadata is optional.
+    }
+  }
+
+  return null;
+}
+
+function codexAppDataDir(env: Record<string, string | undefined>, homeDir: string): string {
+  return trimToNull(env.MONEYSIREN_CODEX_APP_DATA_DIR) ??
+    joinIfBase(env.APPDATA, "Codex", "web", "Codex") ??
+    joinIfBase(env.USERPROFILE, "AppData", "Roaming", "Codex", "web", "Codex") ??
+    join(homeDir, "Library", "Application Support", "Codex");
+}
+
+function claudeAppDataDir(env: Record<string, string | undefined>, homeDir: string): string {
+  return trimToNull(env.MONEYSIREN_CLAUDE_APP_DATA_DIR) ??
+    joinIfBase(env.APPDATA, "Claude") ??
+    joinIfBase(env.USERPROFILE, "AppData", "Roaming", "Claude") ??
+    join(homeDir, "Library", "Application Support", "Claude");
+}
+
+function antigravityAppDataDir(env: Record<string, string | undefined>, homeDir: string): string {
+  return trimToNull(env.MONEYSIREN_ANTIGRAVITY_DATA_DIR) ??
+    joinIfBase(env.APPDATA, "Antigravity") ??
+    joinIfBase(env.USERPROFILE, "AppData", "Roaming", "Antigravity") ??
+    join(homeDir, "Library", "Application Support", "Antigravity");
 }
 
 async function readCodexCliUsage(context: {
   env: Record<string, string | undefined>;
   homeDir: string;
   now: Date;
+  allowCodexAppServerProbe: boolean;
 }): Promise<LocalCliUsageSummary> {
   const sessionsRoot = trimToNull(context.env.MONEYSIREN_CODEX_SESSIONS_DIR) ??
     join(trimToNull(context.env.CODEX_HOME) ?? join(context.homeDir, ".codex"), "sessions");
@@ -503,16 +714,570 @@ async function readCodexCliUsage(context: {
     searchedPathHint: localPathHint(sessionsRoot, context.homeDir),
     now: context.now,
     providerKind: "codex",
+    providerKey: "codex-cli",
     source: "codex_sessions",
     missingMessage: "Codex session logs were not found.",
+    includeFile: async (path) => await detectCodexSessionSurface(path) !== "app",
   });
 
-  return result.logFileCount === 0
-    ? result
-    : {
-        ...result,
-        message: "Codex CLI usage is estimated from local session status metadata.",
-      };
+  return enrichCodexUsageWithAppServer(
+    result.logFileCount === 0
+      ? result
+      : {
+          ...result,
+          message: "Codex CLI usage is estimated from local session status metadata.",
+        },
+    context,
+  );
+}
+
+async function readCodexAppUsage(context: {
+  env: Record<string, string | undefined>;
+  homeDir: string;
+  now: Date;
+  allowCodexAppServerProbe: boolean;
+}): Promise<LocalCliUsageSummary> {
+  const sessionsRoot = trimToNull(context.env.MONEYSIREN_CODEX_APP_SESSIONS_DIR) ??
+    trimToNull(context.env.MONEYSIREN_CODEX_SESSIONS_DIR) ??
+    join(trimToNull(context.env.CODEX_HOME) ?? join(context.homeDir, ".codex"), "sessions");
+  const appResult = await readJsonlUsageFiles({
+    env: context.env,
+    root: sessionsRoot,
+    searchedPathHint: localPathHint(sessionsRoot, context.homeDir),
+    now: context.now,
+    providerKind: "codex",
+    providerKey: "codex-app",
+    source: "codex_app_sessions",
+    missingMessage: "Codex App session logs were not found.",
+    includeFile: async (path) => await detectCodexSessionSurface(path) === "app",
+  });
+
+  if (appResult.logFileCount > 0) {
+    return enrichCodexUsageWithAppServer({
+      ...appResult,
+      message: "Codex App usage is estimated from local app session metadata.",
+    }, context);
+  }
+
+  const sharedResult = await readJsonlUsageFiles({
+    env: context.env,
+    root: sessionsRoot,
+    searchedPathHint: localPathHint(sessionsRoot, context.homeDir),
+    now: context.now,
+    providerKind: "codex",
+    providerKey: "codex-app",
+    source: "codex_app_sessions",
+    missingMessage: "Codex App session logs were not found.",
+  });
+
+  return enrichCodexUsageWithAppServer(
+    sharedResult.logFileCount === 0
+      ? sharedResult
+      : {
+          ...sharedResult,
+          message: "Codex App usage is estimated from shared local session metadata.",
+        },
+    context,
+  );
+}
+
+async function enrichCodexUsageWithAppServer(
+  usage: LocalCliUsageSummary,
+  context: {
+    env: Record<string, string | undefined>;
+    homeDir: string;
+    now: Date;
+    allowCodexAppServerProbe: boolean;
+  },
+): Promise<LocalCliUsageSummary> {
+  if (!context.allowCodexAppServerProbe) {
+    return usage;
+  }
+
+  const appServerStatusLine = await readCodexAppServerRateLimitStatus(context);
+
+  if (appServerStatusLine === null) {
+    return usage;
+  }
+
+  return {
+    ...usage,
+    statusLine: finalizeStatusLineUsage(mergeStatusLineUsage(usage.statusLine, appServerStatusLine)),
+    message: usage.logFileCount === 0
+      ? "Codex live rate-limit metadata was read from local app-server; local session logs were not found."
+      : `${usage.message} Live rate-limit metadata was read from local Codex app-server.`,
+  };
+}
+
+async function readCodexAppServerRateLimitStatus(context: {
+  env: Record<string, string | undefined>;
+  homeDir: string;
+  now: Date;
+}): Promise<LocalCliStatusLineUsage | null> {
+  const cacheKey = JSON.stringify({
+    codexHome: trimToNull(context.env.CODEX_HOME),
+    homeDir: context.homeDir,
+  });
+  const cacheNow = context.now.getTime();
+
+  if (codexAppServerRateLimitCache?.key === cacheKey && codexAppServerRateLimitCache.expiresAt > cacheNow) {
+    return codexAppServerRateLimitCache.promise;
+  }
+
+  const promise = readCodexAppServerRateLimitStatusUncached(context)
+    .catch(() => null);
+
+  codexAppServerRateLimitCache = {
+    expiresAt: cacheNow + CODEX_APP_SERVER_CACHE_MS,
+    key: cacheKey,
+    promise,
+  };
+
+  return promise;
+}
+
+function readCodexAppServerRateLimitStatusUncached(context: {
+  env: Record<string, string | undefined>;
+  homeDir: string;
+  now: Date;
+}): Promise<LocalCliStatusLineUsage | null> {
+  return new Promise((resolve) => {
+    const childEnv = childProcessEnv(context.env);
+    const child = spawnLocalCommand("codex", ["app-server", "--stdio"], childEnv);
+    let finished = false;
+    let stdoutBuffer = "";
+
+    const finish = (statusLine: LocalCliStatusLineUsage | null) => {
+      if (finished) {
+        return;
+      }
+
+      finished = true;
+      clearTimeout(timer);
+      try {
+        child.kill();
+      } catch {
+        // The process may have already exited.
+      }
+      resolve(statusLine);
+    };
+
+    const timer = setTimeout(() => finish(null), CODEX_APP_SERVER_TIMEOUT_MS);
+
+    child.on("error", () => finish(null));
+    child.on("close", () => finish(null));
+    child.stderr.on("data", () => undefined);
+    child.stdout.on("data", (chunk: Buffer) => {
+      stdoutBuffer += chunk.toString("utf8");
+      let newlineIndex = stdoutBuffer.indexOf("\n");
+
+      while (newlineIndex >= 0) {
+        const line = stdoutBuffer.slice(0, newlineIndex).trim();
+        stdoutBuffer = stdoutBuffer.slice(newlineIndex + 1);
+
+        if (line.length > 0) {
+          try {
+            const message = JSON.parse(line) as unknown;
+            const record = asRecord(message);
+
+            if (record?.id === 2) {
+              const result = asRecord(record.result);
+              if (result === null) {
+                finish(null);
+                return;
+              }
+
+              void statusLineFromCodexAppServerRateLimits(result, context)
+                .then(finish)
+                .catch(() => finish(null));
+              return;
+            }
+          } catch {
+            // Ignore non-JSON diagnostic lines without surfacing local details.
+          }
+        }
+
+        newlineIndex = stdoutBuffer.indexOf("\n");
+      }
+    });
+
+    const initialize = {
+      method: "initialize",
+      id: 1,
+      params: {
+        clientInfo: {
+          name: "moneysiren",
+          title: "MoneySiren",
+          version: "0.1.0-alpha.0",
+        },
+      },
+    };
+    child.stdin.write(`${JSON.stringify(initialize)}\n`);
+    child.stdin.write(`${JSON.stringify({ method: "initialized", params: {} })}\n`);
+    child.stdin.write(`${JSON.stringify({ method: "account/rateLimits/read", id: 2 })}\n`);
+  });
+}
+
+async function statusLineFromCodexAppServerRateLimits(
+  response: Record<string, unknown>,
+  context: {
+    env: Record<string, string | undefined>;
+    homeDir: string;
+    now: Date;
+  },
+): Promise<LocalCliStatusLineUsage | null> {
+  const accumulator = createUsageAccumulator("codex", context.env, context.now, "codex-cli");
+  applyCodexAppServerRateLimits(response, accumulator);
+  await applyCodexResetCreditObservationEstimates(response, accumulator, context);
+
+  const statusLine = finalizeStatusLineUsage(accumulator.statusLine);
+  const hasRateLimitMetadata = statusLine.fiveHourLimitPercent !== null ||
+    statusLine.weeklyLimitPercent !== null ||
+    statusLine.fiveHourResetAt !== null ||
+    statusLine.weeklyResetAt !== null ||
+    statusLine.usageResetCredits.length > 0;
+
+  return hasRateLimitMetadata ? statusLine : null;
+}
+
+async function applyCodexResetCreditObservationEstimates(
+  response: Record<string, unknown>,
+  accumulator: UsageAccumulator,
+  context: {
+    env: Record<string, string | undefined>;
+    homeDir: string;
+    now: Date;
+  },
+): Promise<void> {
+  const currentCount = readCodexResetCreditCount(response.rateLimitResetCredits ?? response.rate_limit_reset_credits);
+
+  if (currentCount === null) {
+    return;
+  }
+
+  const path = codexResetCreditObservationPath(context.env);
+  const store = await readCodexResetCreditObservationStore(path);
+  const nextStore = reconcileCodexResetCreditObservations(store, currentCount, context.now.toISOString(), {
+    ttlDays: readConfiguredCodexResetCreditTtlDays(context.env),
+  });
+  await writeCodexResetCreditObservationStore(path, nextStore);
+
+  const estimatedCredits = codexResetCreditsFromObservationStore(nextStore, currentCount);
+
+  accumulator.statusLine.usageResetCredits = estimatedCredits;
+}
+
+function readCodexResetCreditCount(value: unknown): number | null {
+  const record = asRecord(value);
+
+  if (record === null) {
+    return null;
+  }
+
+  const count = readNumber(record.availableCount ?? record.available_count);
+
+  return count === null ? null : Math.max(0, Math.floor(count));
+}
+
+async function readCodexResetCreditObservationStore(path: string): Promise<CodexResetCreditObservationStore> {
+  try {
+    return parseCodexResetCreditObservationStore(JSON.parse(await readFile(path, "utf8")) as unknown);
+  } catch {
+    return emptyCodexResetCreditObservationStore();
+  }
+}
+
+async function writeCodexResetCreditObservationStore(
+  path: string,
+  store: CodexResetCreditObservationStore,
+): Promise<void> {
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, `${JSON.stringify(store, null, 2)}\n`, "utf8");
+}
+
+function parseCodexResetCreditObservationStore(value: unknown): CodexResetCreditObservationStore {
+  const record = asRecord(value);
+
+  if (record === null) {
+    return emptyCodexResetCreditObservationStore();
+  }
+
+  return {
+    version: 1,
+    updatedAtUtc: readIsoString(record.updatedAtUtc) ?? new Date(0).toISOString(),
+    lastObservedAtUtc: readIsoString(record.lastObservedAtUtc),
+    lastCount: readNonNegativeInteger(record.lastCount),
+    observations: Array.isArray(record.observations)
+      ? record.observations.flatMap(parseCodexResetCreditObservation)
+      : [],
+  };
+}
+
+function parseCodexResetCreditObservation(value: unknown): CodexResetCreditObservation[] {
+  const record = asRecord(value);
+
+  if (record === null) {
+    return [];
+  }
+
+  const id = trimToNull(stringValue(record.id) ?? undefined);
+  const previousCount = readNonNegativeInteger(record.previousCount);
+  const currentCount = readNonNegativeInteger(record.currentCount);
+  const observedFromUtc = readIsoString(record.observedFromUtc);
+  const observedToUtc = readIsoString(record.observedToUtc);
+  const status = parseCodexResetCreditObservationStatus(record.status);
+  const removedAtUtc = readIsoString(record.removedAtUtc);
+
+  if (id === null || previousCount === null || currentCount === null || observedFromUtc === null || observedToUtc === null || status === null) {
+    return [];
+  }
+
+  return [{
+    id,
+    previousCount,
+    currentCount,
+    observedFromUtc,
+    observedToUtc,
+    estimatedEarliestExpiryUtc: readIsoString(record.estimatedEarliestExpiryUtc),
+    estimatedLatestExpiryUtc: readIsoString(record.estimatedLatestExpiryUtc),
+    status,
+    isExact: false,
+    ...(removedAtUtc === null ? {} : { removedAtUtc }),
+  }];
+}
+
+function parseCodexResetCreditObservationStatus(value: unknown): CodexResetCreditObservationStatus | null {
+  return value === "estimated" || value === "initial_existing" || value === "removed_unknown"
+    ? value
+    : null;
+}
+
+function emptyCodexResetCreditObservationStore(): CodexResetCreditObservationStore {
+  return {
+    version: 1,
+    updatedAtUtc: new Date(0).toISOString(),
+    lastObservedAtUtc: null,
+    lastCount: null,
+    observations: [],
+  };
+}
+
+function codexResetCreditObservationPath(env: Record<string, string | undefined>): string {
+  return trimToNull(env.MONEYSIREN_CODEX_RESET_CREDIT_OBSERVATIONS_PATH) ??
+    join(process.cwd(), ".moneysiren", CODEX_RESET_CREDIT_OBSERVATION_FILE);
+}
+
+function readConfiguredCodexResetCreditTtlDays(env: Record<string, string | undefined>): number {
+  return readPositiveNumber(env.MONEYSIREN_CODEX_RESET_CREDIT_TTL_DAYS) ?? CODEX_RESET_CREDIT_DEFAULT_TTL_DAYS;
+}
+
+function applyCodexAppServerRateLimits(response: Record<string, unknown>, accumulator: UsageAccumulator): void {
+  const rateLimitsByLimitId = asRecord(response.rateLimitsByLimitId) ?? asRecord(response.rate_limits_by_limit_id);
+  const codexRateLimits = asRecord(rateLimitsByLimitId?.codex) ??
+    asRecord(response.rateLimits) ??
+    asRecord(response.rate_limits);
+
+  applyUsageResetCredits(
+    response.rateLimitResetCredits ?? response.rate_limit_reset_credits,
+    accumulator,
+    null,
+  );
+  applyWindowedRateLimit(asRecord(codexRateLimits?.primary), accumulator, null);
+  applyWindowedRateLimit(asRecord(codexRateLimits?.secondary), accumulator, null);
+}
+
+function mergeStatusLineUsage(
+  localStatusLine: LocalCliStatusLineUsage,
+  appServerStatusLine: LocalCliStatusLineUsage,
+): LocalCliStatusLineUsage {
+  const appServerHasRateLimitMetadata = appServerStatusLine.fiveHourLimitPercent !== null ||
+    appServerStatusLine.fiveHourResetAt !== null ||
+    appServerStatusLine.weeklyLimitPercent !== null ||
+    appServerStatusLine.weeklyResetAt !== null ||
+    appServerStatusLine.usageResetCredits.length > 0;
+
+  return {
+    ...localStatusLine,
+    fiveHourLimitPercent: appServerStatusLine.fiveHourLimitPercent ?? localStatusLine.fiveHourLimitPercent,
+    fiveHourResetAt: appServerStatusLine.fiveHourResetAt ?? localStatusLine.fiveHourResetAt,
+    weeklyLimitPercent: appServerStatusLine.weeklyLimitPercent ?? localStatusLine.weeklyLimitPercent,
+    weeklyResetAt: appServerStatusLine.weeklyResetAt ?? localStatusLine.weeklyResetAt,
+    usageResetCredits: appServerHasRateLimitMetadata
+      ? appServerStatusLine.usageResetCredits
+      : localStatusLine.usageResetCredits,
+  };
+}
+
+export function reconcileCodexResetCreditObservations(
+  store: CodexResetCreditObservationStore,
+  currentCount: number,
+  observedAtUtc: string,
+  options: {
+    ttlDays?: number;
+  } = {},
+): CodexResetCreditObservationStore {
+  const normalizedCurrentCount = Math.max(0, Math.floor(currentCount));
+  const ttlDays = readPositiveNumber(options.ttlDays) ?? CODEX_RESET_CREDIT_DEFAULT_TTL_DAYS;
+  const previousCount = store.lastCount;
+  const observedFromUtc = store.lastObservedAtUtc ?? observedAtUtc;
+  const observations = [...store.observations.map((observation) => ({ ...observation }))];
+
+  if (previousCount === null) {
+    for (let index = 0; index < normalizedCurrentCount; index += 1) {
+      observations.push(createCodexResetCreditObservation({
+        previousCount: normalizedCurrentCount,
+        currentCount: normalizedCurrentCount,
+        observedFromUtc: observedAtUtc,
+        observedToUtc: observedAtUtc,
+        estimatedEarliestExpiryUtc: null,
+        estimatedLatestExpiryUtc: null,
+        status: "initial_existing",
+        index,
+      }));
+    }
+  } else if (normalizedCurrentCount > previousCount) {
+    const addedCount = normalizedCurrentCount - previousCount;
+    const estimatedEarliestExpiryUtc = addDaysIso(observedFromUtc, ttlDays);
+    const estimatedLatestExpiryUtc = addDaysIso(observedAtUtc, ttlDays);
+
+    for (let index = 0; index < addedCount; index += 1) {
+      observations.push(createCodexResetCreditObservation({
+        previousCount,
+        currentCount: normalizedCurrentCount,
+        observedFromUtc,
+        observedToUtc: observedAtUtc,
+        estimatedEarliestExpiryUtc,
+        estimatedLatestExpiryUtc,
+        status: "estimated",
+        index,
+      }));
+    }
+  } else if (normalizedCurrentCount < previousCount) {
+    const removedCount = previousCount - normalizedCurrentCount;
+    const removable = activeCodexResetCreditObservations(observations)
+      .sort(compareCodexResetCreditObservationsForRemoval)
+      .slice(0, removedCount);
+    const removableIds = new Set(removable.map((observation) => observation.id));
+
+    for (const observation of observations) {
+      if (removableIds.has(observation.id)) {
+        observation.status = "removed_unknown";
+        observation.removedAtUtc = observedAtUtc;
+      }
+    }
+  }
+
+  return {
+    version: 1,
+    updatedAtUtc: observedAtUtc,
+    lastObservedAtUtc: observedAtUtc,
+    lastCount: normalizedCurrentCount,
+    observations: observations.slice(-500),
+  };
+}
+
+function activeCodexResetCreditObservations(
+  observations: readonly CodexResetCreditObservation[],
+): CodexResetCreditObservation[] {
+  return observations
+    .filter((observation) => observation.status !== "removed_unknown")
+    .map((observation) => ({ ...observation }));
+}
+
+function codexResetCreditsFromObservationStore(
+  store: CodexResetCreditObservationStore,
+  currentCount: number,
+): LocalCliUsageResetCredit[] {
+  const active = activeCodexResetCreditObservations(store.observations)
+    .sort(compareCodexResetCreditObservationsForDisplay)
+    .slice(0, Math.max(0, Math.floor(currentCount)));
+
+  return active.map((observation) => ({
+    label: observation.status === "estimated" ? "estimated" : null,
+    expiresAt: observation.estimatedEarliestExpiryUtc,
+    estimatedEarliestExpiryUtc: observation.estimatedEarliestExpiryUtc,
+    estimatedLatestExpiryUtc: observation.estimatedLatestExpiryUtc,
+    observedFromUtc: observation.observedFromUtc,
+    observedToUtc: observation.observedToUtc,
+    status: observation.status,
+    isExact: false,
+  }));
+}
+
+function createCodexResetCreditObservation(options: {
+  previousCount: number;
+  currentCount: number;
+  observedFromUtc: string;
+  observedToUtc: string;
+  estimatedEarliestExpiryUtc: string | null;
+  estimatedLatestExpiryUtc: string | null;
+  status: CodexResetCreditObservationStatus;
+  index: number;
+}): CodexResetCreditObservation {
+  return {
+    id: [
+      "codex-reset-credit",
+      options.status,
+      options.observedFromUtc,
+      options.observedToUtc,
+      String(options.previousCount),
+      String(options.currentCount),
+      String(options.index),
+    ].join(":"),
+    previousCount: options.previousCount,
+    currentCount: options.currentCount,
+    observedFromUtc: options.observedFromUtc,
+    observedToUtc: options.observedToUtc,
+    estimatedEarliestExpiryUtc: options.estimatedEarliestExpiryUtc,
+    estimatedLatestExpiryUtc: options.estimatedLatestExpiryUtc,
+    status: options.status,
+    isExact: false,
+  };
+}
+
+function compareCodexResetCreditObservationsForDisplay(
+  left: CodexResetCreditObservation,
+  right: CodexResetCreditObservation,
+): number {
+  return compareNullableIso(left.estimatedEarliestExpiryUtc, right.estimatedEarliestExpiryUtc) ||
+    left.observedToUtc.localeCompare(right.observedToUtc);
+}
+
+function compareCodexResetCreditObservationsForRemoval(
+  left: CodexResetCreditObservation,
+  right: CodexResetCreditObservation,
+): number {
+  return compareNullableIso(left.estimatedEarliestExpiryUtc, right.estimatedEarliestExpiryUtc) ||
+    left.observedToUtc.localeCompare(right.observedToUtc);
+}
+
+function compareNullableIso(left: string | null, right: string | null): number {
+  if (left === null && right === null) {
+    return 0;
+  }
+
+  if (left === null) {
+    return 1;
+  }
+
+  if (right === null) {
+    return -1;
+  }
+
+  return left.localeCompare(right);
+}
+
+function addDaysIso(value: string, days: number): string {
+  const timestamp = Date.parse(value);
+  const base = Number.isFinite(timestamp) ? timestamp : Date.now();
+
+  return new Date(base + days * 24 * 60 * 60 * 1000).toISOString();
+}
+
+function readPositiveNumber(value: unknown): number | null {
+  const numberValue = readNumber(value);
+
+  return numberValue !== null && numberValue > 0 ? numberValue : null;
 }
 
 async function readClaudeCliUsage(context: {
@@ -528,6 +1293,7 @@ async function readClaudeCliUsage(context: {
     searchedPathHint: localPathHint(projectsRoot, context.homeDir),
     now: context.now,
     providerKind: "claude",
+    providerKey: "claude-cli",
     source: "claude_projects",
     missingMessage: "Claude Code project logs were not found.",
   });
@@ -540,22 +1306,104 @@ async function readClaudeCliUsage(context: {
       };
 }
 
+async function readClaudeAppUsage(context: {
+  env: Record<string, string | undefined>;
+  homeDir: string;
+  now: Date;
+}): Promise<LocalCliUsageSummary> {
+  const appProjectsRoot = trimToNull(context.env.MONEYSIREN_CLAUDE_APP_PROJECTS_DIR) ??
+    join(claudeAppDataDir(context.env, context.homeDir), "projects");
+  const appResult = await readJsonlUsageFiles({
+    env: context.env,
+    root: appProjectsRoot,
+    searchedPathHint: localPathHint(appProjectsRoot, context.homeDir),
+    now: context.now,
+    providerKind: "claude",
+    providerKey: "claude-app",
+    source: "claude_app",
+    missingMessage: "Claude App project logs were not found.",
+  });
+
+  if (appResult.logFileCount > 0) {
+    return {
+      ...appResult,
+      message: "Claude App usage is estimated from local app project logs.",
+    };
+  }
+
+  const claudeHome = trimToNull(context.env.CLAUDE_CONFIG_DIR) ?? join(context.homeDir, ".claude");
+  const sharedProjectsRoot = join(claudeHome, "projects");
+  const sharedResult = await readJsonlUsageFiles({
+    env: context.env,
+    root: sharedProjectsRoot,
+    searchedPathHint: localPathHint(sharedProjectsRoot, context.homeDir),
+    now: context.now,
+    providerKind: "claude",
+    providerKey: "claude-app",
+    source: "claude_app",
+    missingMessage: "Claude App project logs were not found.",
+  });
+
+  return sharedResult.logFileCount === 0
+    ? sharedResult
+    : {
+        ...sharedResult,
+        message: "Claude App usage is estimated from shared local project logs.",
+      };
+}
+
+async function readLocalAppUsage(options: {
+  source: LocalCliUsageSummary["source"];
+  providerKind: LocalCliUsageSummary["providerKind"];
+  appDir: string;
+  homeDir: string;
+  message: string;
+}): Promise<LocalCliUsageSummary> {
+  try {
+    const appStat = await stat(options.appDir);
+
+    if (appStat.isDirectory()) {
+      return emptyLocalCliUsage(
+        options.source,
+        options.providerKind,
+        options.message,
+        localPathHint(options.appDir, options.homeDir),
+      );
+    }
+  } catch {
+    // Missing app data is represented as a no-usage local provider.
+  }
+
+  return emptyLocalCliUsage(
+    options.source,
+    options.providerKind,
+    "Local app data was not found.",
+    localPathHint(options.appDir, options.homeDir),
+  );
+}
+
 async function readJsonlUsageFiles(options: {
   env: Record<string, string | undefined>;
   root: string;
   searchedPathHint: string;
   now: Date;
   providerKind: LocalCliUsageSummary["providerKind"];
+  providerKey?: LocalAiCliProviderKey;
   source: LocalCliUsageSummary["source"];
   missingMessage: string;
+  includeFile?: (path: string) => Promise<boolean>;
 }): Promise<LocalCliUsageSummary> {
   const periodStart = new Date(Date.UTC(options.now.getUTCFullYear(), options.now.getUTCMonth(), 1));
   const files = (await listJsonlFiles(options.root, periodStart))
     .sort((left, right) => right.modifiedAt.getTime() - left.modifiedAt.getTime())
     .slice(0, MAX_LOCAL_USAGE_FILES);
-  const accumulator = createUsageAccumulator(options.providerKind, options.env, options.now);
+  const accumulator = createUsageAccumulator(options.providerKind, options.env, options.now, options.providerKey);
 
   for (const file of files) {
+    if (options.includeFile !== undefined && !(await options.includeFile(file.path))) {
+      continue;
+    }
+
     accumulator.logFileCount += 1;
     accumulator.sessionIds.add(file.path);
     accumulator.latestActivityAt = latestIsoValue(accumulator.latestActivityAt, file.modifiedAt.toISOString());
@@ -563,7 +1411,13 @@ async function readJsonlUsageFiles(options: {
   }
 
   if (accumulator.logFileCount === 0) {
-    return emptyLocalCliUsage(options.source, options.missingMessage, options.searchedPathHint);
+    return emptyLocalCliUsage(
+      options.source,
+      options.providerKind,
+      options.missingMessage,
+      options.searchedPathHint,
+      finalizeStatusLineUsage(accumulator.statusLine),
+    );
   }
 
   return {
@@ -586,6 +1440,44 @@ async function readJsonlUsageFiles(options: {
     statusLine: finalizeStatusLineUsage(accumulator.statusLine),
     message: "Local CLI usage was estimated from local logs.",
   };
+}
+
+async function detectCodexSessionSurface(path: string): Promise<"app" | "cli" | "unknown"> {
+  let content = "";
+
+  try {
+    content = await readFile(path, "utf8");
+  } catch {
+    return "unknown";
+  }
+
+  for (const line of content.split(/\r?\n/)) {
+    const trimmed = line.trim();
+
+    if (trimmed.length === 0) {
+      continue;
+    }
+
+    try {
+      const value = JSON.parse(trimmed) as unknown;
+      const record = asRecord(value);
+      const payload = asRecord(record?.payload);
+      const originator = stringValue(payload?.originator ?? record?.originator)?.toLowerCase() ?? "";
+      const source = stringValue(payload?.source ?? record?.source)?.toLowerCase() ?? "";
+
+      if (originator.includes("desktop") || originator.includes("app")) {
+        return "app";
+      }
+
+      if (originator.includes("cli") || source === "cli") {
+        return "cli";
+      }
+    } catch {
+      // Some local session files include non-JSON control lines; skip them without exposing content.
+    }
+  }
+
+  return "unknown";
 }
 
 async function readJsonlUsageFile(path: string, accumulator: UsageAccumulator): Promise<void> {
@@ -845,6 +1737,32 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
+function stringValue(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function readBoolean(value: unknown): boolean | null {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalizedValue = value.trim().toLowerCase();
+
+  if (normalizedValue === "true") {
+    return true;
+  }
+
+  if (normalizedValue === "false") {
+    return false;
+  }
+
+  return null;
+}
+
 function readNumber(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) {
     return value;
@@ -863,6 +1781,18 @@ function readNumber(value: unknown): number | null {
   const numberValue = Number(normalizedValue);
 
   return Number.isFinite(numberValue) ? numberValue : null;
+}
+
+function readNonNegativeInteger(value: unknown): number | null {
+  const numberValue = readNumber(value);
+
+  return numberValue === null || numberValue < 0 ? null : Math.floor(numberValue);
+}
+
+function readIsoString(value: unknown): string | null {
+  const date = readTimestampValue(value);
+
+  return date === null ? null : date.toISOString();
 }
 
 function readCacheTokens(usage: Record<string, unknown>): number | null {
@@ -1030,14 +1960,185 @@ function applyWindowedRateLimits(
   observedAt: number | null,
 ): void {
   const payload = asRecord(record.payload);
-  const rateLimits = asRecord(payload?.rate_limits) ?? asRecord(record.rate_limits);
+  const result = asRecord(record.result);
+  const payloadResult = asRecord(payload?.result);
+  const rateLimits = asRecord(payload?.rate_limits) ??
+    asRecord(payload?.rateLimits) ??
+    asRecord(payloadResult?.rate_limits) ??
+    asRecord(payloadResult?.rateLimits) ??
+    asRecord(result?.rate_limits) ??
+    asRecord(result?.rateLimits) ??
+    asRecord(record.rate_limits) ??
+    asRecord(record.rateLimits);
 
   if (rateLimits === null) {
+    applyUsageResetCredits(
+      payload?.rate_limit_reset_credits ??
+        payload?.rateLimitResetCredits ??
+        payloadResult?.rate_limit_reset_credits ??
+        payloadResult?.rateLimitResetCredits ??
+        result?.rate_limit_reset_credits ??
+        result?.rateLimitResetCredits ??
+        record.rate_limit_reset_credits ??
+        record.rateLimitResetCredits,
+      accumulator,
+      observedAt,
+    );
     return;
   }
 
+  applyUsageResetCredits(
+    rateLimits.credits ??
+      rateLimits.reset_credits ??
+      rateLimits.resetCredits ??
+      rateLimits.usage_reset_credits ??
+      rateLimits.usageResetCredits ??
+      payload?.rate_limit_reset_credits ??
+      payload?.rateLimitResetCredits ??
+      payloadResult?.rate_limit_reset_credits ??
+      payloadResult?.rateLimitResetCredits ??
+      result?.rate_limit_reset_credits ??
+      result?.rateLimitResetCredits ??
+      record.rate_limit_reset_credits ??
+      record.rateLimitResetCredits,
+    accumulator,
+    observedAt,
+  );
   applyWindowedRateLimit(asRecord(rateLimits.primary), accumulator, observedAt);
   applyWindowedRateLimit(asRecord(rateLimits.secondary), accumulator, observedAt);
+}
+
+function applyUsageResetCredits(
+  value: unknown,
+  accumulator: UsageAccumulator,
+  observedAt: number | null,
+): void {
+  const credits = readUsageResetCredits(value);
+
+  if (credits.length === 0 || !shouldApplyUsageResetCreditMetadata(accumulator, observedAt)) {
+    return;
+  }
+
+  accumulator.statusLine.usageResetCredits = credits;
+  noteUsageResetCreditMetadata(accumulator, observedAt);
+}
+
+function readUsageResetCredits(value: unknown, depth = 0): LocalCliUsageResetCredit[] {
+  if (value === null || value === undefined || depth > 3) {
+    return [];
+  }
+
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => readUsageResetCreditItem(item, depth + 1));
+  }
+
+  const record = asRecord(value);
+
+  if (record === null) {
+    return [];
+  }
+
+  const nestedCredits = [
+    record.items,
+    record.credits,
+    record.reset_credits,
+    record.resetCredits,
+    record.grants,
+    record.entitlements,
+  ].flatMap((item) => readUsageResetCredits(item, depth + 1));
+
+  if (nestedCredits.length > 0) {
+    return nestedCredits;
+  }
+
+  if (readBoolean(record.unlimited) === true || readBoolean(record.has_credits) === false || readBoolean(record.hasCredits) === false) {
+    return [];
+  }
+
+  const count = Math.floor(readNumber(
+    record.available_count ??
+      record.availableCount ??
+      record.count ??
+      record.quantity ??
+      record.balance ??
+      record.remaining ??
+      record.available,
+  ) ?? 0);
+  const expiresAt = readUsageResetCreditExpiry(record);
+
+  if (count <= 0) {
+    return [];
+  }
+
+  return Array.from({ length: count }, () => ({
+    label: readUsageResetCreditLabel(record),
+    expiresAt,
+  }));
+}
+
+function readUsageResetCreditItem(value: unknown, depth: number): LocalCliUsageResetCredit[] {
+  const record = asRecord(value);
+
+  if (record === null) {
+    return readUsageResetCredits(value, depth);
+  }
+
+  if (
+    readBoolean(record.used) === true ||
+    readBoolean(record.consumed) === true ||
+    readBoolean(record.available) === false ||
+    readBoolean(record.active) === false
+  ) {
+    return [];
+  }
+
+  const nested = readUsageResetCredits(value, depth);
+
+  if (nested.length > 0) {
+    return nested;
+  }
+
+  return [{
+    label: readUsageResetCreditLabel(record),
+    expiresAt: readUsageResetCreditExpiry(record),
+  }];
+}
+
+function readUsageResetCreditLabel(record: Record<string, unknown>): string | null {
+  return trimToNull(stringValue(record.label ?? record.name ?? record.type ?? record.id) ?? undefined);
+}
+
+function readUsageResetCreditExpiry(record: Record<string, unknown>): string | null {
+  const expiresAt = readTimestampValue(
+    record.expires_at ??
+      record.expiresAt ??
+      record.expiration_at ??
+      record.expirationAt ??
+      record.valid_until ??
+      record.validUntil ??
+      record.expires_on ??
+      record.expiresOn,
+  );
+
+  return expiresAt === null ? null : expiresAt.toISOString();
+}
+
+function shouldApplyUsageResetCreditMetadata(
+  accumulator: UsageAccumulator,
+  observedAt: number | null,
+): boolean {
+  if (observedAt === null) {
+    return true;
+  }
+
+  return accumulator.usageResetCreditMetadataObservedAt === null ||
+    observedAt >= accumulator.usageResetCreditMetadataObservedAt;
+}
+
+function noteUsageResetCreditMetadata(accumulator: UsageAccumulator, observedAt: number | null): void {
+  if (observedAt !== null) {
+    accumulator.usageResetCreditMetadataObservedAt = observedAt;
+  }
 }
 
 function applyWindowedRateLimit(
@@ -1049,7 +2150,12 @@ function applyWindowedRateLimit(
     return;
   }
 
-  const window = usageLimitWindowFromMinutes(readNumber(rateLimit.window_minutes ?? rateLimit.windowMinutes));
+  const window = usageLimitWindowFromMinutes(readNumber(
+    rateLimit.window_minutes ??
+      rateLimit.windowMinutes ??
+      rateLimit.window_duration_mins ??
+      rateLimit.windowDurationMins,
+  ));
 
   if (window === null) {
     return;
@@ -1057,16 +2163,34 @@ function applyWindowedRateLimit(
 
   const usedPercent = readNumber(
     rateLimit.used_percent ??
+      rateLimit.usedPercent ??
       rateLimit.used_percentage ??
       rateLimit.percent ??
       rateLimit.percentage,
   );
+  const remainingPercent = readNumber(
+    rateLimit.remaining_percent ??
+      rateLimit.remainingPercent ??
+      rateLimit.remaining_percentage ??
+      rateLimit.percent_remaining ??
+      rateLimit.percentRemaining ??
+      rateLimit.percentage_remaining ??
+      rateLimit.left_percent ??
+      rateLimit.left_percentage,
+  );
 
   if (usedPercent !== null && usedPercent >= 0) {
     setUsageLimitPercent(accumulator, window, usedPercent, observedAt);
+  } else if (remainingPercent !== null && remainingPercent >= 0) {
+    setUsageLimitPercent(accumulator, window, usedPercentFromRemainingPercent(remainingPercent), observedAt);
   }
 
-  const resetAt = readTimestampValue(rateLimit.resets_at ?? rateLimit.reset_at ?? rateLimit.resetAt);
+  const resetAt = readTimestampValue(
+    rateLimit.resets_at ??
+      rateLimit.resetsAt ??
+      rateLimit.reset_at ??
+      rateLimit.resetAt,
+  );
 
   if (resetAt !== null) {
     setUsageLimitResetAt(accumulator, window, resetAt.toISOString(), observedAt);
@@ -1156,7 +2280,14 @@ function applyUsageLimitMetadata(
       leafKey.includes("percentage") ||
       leafKey.includes("pct")
     ) {
-      setUsageLimitPercent(accumulator, window, numericValue, observedAt);
+      setUsageLimitPercent(
+        accumulator,
+        window,
+        isRemainingUsageLimitPercentPath(normalizedPath, leafKey)
+          ? usedPercentFromRemainingPercent(numericValue)
+          : numericValue,
+        observedAt,
+      );
       return;
     }
 
@@ -1214,6 +2345,19 @@ function setUsageLimitPercent(
 
   statusLine.weeklyLimitPercent = observedAt === null ? maxNullable(statusLine.weeklyLimitPercent, value) : value;
   noteUsageLimitMetadata(accumulator, window, observedAt);
+}
+
+function isRemainingUsageLimitPercentPath(normalizedPath: string, leafKey: string): boolean {
+  return leafKey.includes("remaining") ||
+    leafKey.includes("left") ||
+    leafKey.includes("available") ||
+    normalizedPath.includes("remaining") ||
+    normalizedPath.includes("left") ||
+    normalizedPath.includes("available");
+}
+
+function usedPercentFromRemainingPercent(value: number): number {
+  return Math.max(100 - value, 0);
 }
 
 function setUsageLimitTokenLimit(
@@ -1374,6 +2518,7 @@ interface UsageAccumulator {
   latestActivityAt: string | null;
   statusLine: MutableLocalCliStatusLineUsage;
   limitMetadataObservedAt: Record<"fiveHour" | "weekly", number | null>;
+  usageResetCreditMetadataObservedAt: number | null;
 }
 
 type MutableLocalCliStatusLineUsage = LocalCliStatusLineUsage;
@@ -1382,17 +2527,23 @@ function createUsageAccumulator(
   providerKind: LocalCliUsageSummary["providerKind"],
   env: Record<string, string | undefined>,
   now: Date,
+  providerKey?: LocalAiCliProviderKey,
 ): UsageAccumulator {
   const statusLine = emptyStatusLineUsage();
-  const fiveHourLimit = readConfiguredTokenLimit(
-    env[providerKind === "codex" ? "MONEYSIREN_CODEX_FIVE_HOUR_TOKEN_LIMIT" : "MONEYSIREN_CLAUDE_FIVE_HOUR_TOKEN_LIMIT"],
-  );
-  const weeklyLimit = readConfiguredTokenLimit(
-    env[providerKind === "codex" ? "MONEYSIREN_CODEX_WEEKLY_TOKEN_LIMIT" : "MONEYSIREN_CLAUDE_WEEKLY_TOKEN_LIMIT"],
-  );
+  const fiveHourLimit = providerKind === "codex"
+    ? readConfiguredTokenLimit(env.MONEYSIREN_CODEX_FIVE_HOUR_TOKEN_LIMIT)
+    : providerKind === "claude"
+      ? readConfiguredTokenLimit(env.MONEYSIREN_CLAUDE_FIVE_HOUR_TOKEN_LIMIT)
+      : null;
+  const weeklyLimit = providerKind === "codex"
+    ? readConfiguredTokenLimit(env.MONEYSIREN_CODEX_WEEKLY_TOKEN_LIMIT)
+    : providerKind === "claude"
+      ? readConfiguredTokenLimit(env.MONEYSIREN_CLAUDE_WEEKLY_TOKEN_LIMIT)
+      : null;
 
   statusLine.fiveHourLimitTokens = fiveHourLimit;
   statusLine.weeklyLimitTokens = weeklyLimit;
+  statusLine.usageResetCredits = readConfiguredUsageResetCredits(providerKind, providerKey, env);
 
   return {
     sessionIds: new Set(),
@@ -1414,6 +2565,7 @@ function createUsageAccumulator(
       fiveHour: null,
       weekly: null,
     },
+    usageResetCreditMetadataObservedAt: null,
   };
 }
 
@@ -1423,15 +2575,63 @@ function readConfiguredTokenLimit(value: unknown): number | null {
   return numberValue !== null && numberValue > 0 ? numberValue : null;
 }
 
+function readConfiguredUsageResetCredits(
+  providerKind: LocalCliUsageSummary["providerKind"],
+  providerKey: LocalAiCliProviderKey | undefined,
+  env: Record<string, string | undefined>,
+): readonly LocalCliUsageResetCredit[] {
+  if (providerKind !== "codex") {
+    return [];
+  }
+
+  const appSpecific = providerKey === "codex-app";
+  const count = readConfiguredTokenLimit(
+    appSpecific
+      ? env.MONEYSIREN_CODEX_APP_USAGE_RESET_CREDITS ?? env.MONEYSIREN_CODEX_USAGE_RESET_CREDITS
+      : env.MONEYSIREN_CODEX_USAGE_RESET_CREDITS,
+  );
+
+  if (count === null) {
+    return [];
+  }
+
+  const expiresAtValues = readConfiguredUsageResetCreditExpiries(
+    appSpecific
+      ? env.MONEYSIREN_CODEX_APP_USAGE_RESET_CREDIT_EXPIRES_AT ?? env.MONEYSIREN_CODEX_USAGE_RESET_CREDIT_EXPIRES_AT
+      : env.MONEYSIREN_CODEX_USAGE_RESET_CREDIT_EXPIRES_AT,
+  );
+
+  return Array.from({ length: Math.floor(count) }, (_item, index) => ({
+    label: null,
+    expiresAt: expiresAtValues[index] ?? expiresAtValues[0] ?? null,
+  }));
+}
+
+function readConfiguredUsageResetCreditExpiries(value: string | undefined): string[] {
+  const trimmed = trimToNull(value);
+
+  if (trimmed === null) {
+    return [];
+  }
+
+  return trimmed
+    .split(/[;,]/)
+    .map((item) => readTimestampValue(item.trim()))
+    .filter((item): item is Date => item !== null)
+    .map((item) => item.toISOString());
+}
+
 function emptyLocalCliUsage(
   source: LocalCliUsageSummary["source"],
+  providerKind: LocalCliUsageSummary["providerKind"],
   message: string,
   searchedPathHint: string,
+  statusLine: LocalCliStatusLineUsage = emptyStatusLineUsage(),
 ): LocalCliUsageSummary {
   return {
     source,
     period: "current_month",
-    providerKind: source === "codex_sessions" ? "codex" : "claude",
+    providerKind,
     sessionCount: 0,
     turnCount: 0,
     toolCallCount: 0,
@@ -1445,7 +2645,7 @@ function emptyLocalCliUsage(
     searchedPathHint,
     latestActivityAt: null,
     topModels: [],
-    statusLine: emptyStatusLineUsage(),
+    statusLine,
     message,
   };
 }
@@ -1475,6 +2675,7 @@ function emptyStatusLineUsage(): LocalCliStatusLineUsage {
     totalCacheTokens: null,
     totalReasoningTokens: null,
     totalTokens: null,
+    usageResetCredits: [],
   };
 }
 
@@ -1747,7 +2948,7 @@ async function defaultRunCommand(
 
     const commandLine = [file, ...args].map(windowsShellQuote).join(" ");
 
-    return execFileAsync("cmd.exe", ["/d", "/c", commandLine], {
+    return execFileAsync(windowsSystemExecutable("cmd.exe", process.env), ["/d", "/c", commandLine], {
       env: buildWindowsLocalToolEnv(),
       timeout: options.timeout,
       windowsHide: options.windowsHide,
@@ -1758,6 +2959,42 @@ async function defaultRunCommand(
     timeout: options.timeout,
     windowsHide: options.windowsHide,
   });
+}
+
+function spawnLocalCommand(
+  file: string,
+  args: readonly string[],
+  env: NodeJS.ProcessEnv,
+): ChildProcessWithoutNullStreams {
+  if (process.platform === "win32") {
+    const commandLine = [file, ...args].map(windowsShellQuote).join(" ");
+
+    return spawn(windowsSystemExecutable("cmd.exe", env), ["/d", "/c", commandLine], {
+      env,
+      stdio: ["pipe", "pipe", "pipe"],
+      windowsHide: true,
+    });
+  }
+
+  return spawn(file, [...args], {
+    env,
+    stdio: ["pipe", "pipe", "pipe"],
+    windowsHide: true,
+  });
+}
+
+function childProcessEnv(env: Record<string, string | undefined>): NodeJS.ProcessEnv {
+  const childEnv: NodeJS.ProcessEnv = process.platform === "win32"
+    ? buildWindowsLocalToolEnv()
+    : { ...process.env };
+
+  for (const [key, value] of Object.entries(env)) {
+    if (value !== undefined) {
+      childEnv[key] = value;
+    }
+  }
+
+  return childEnv;
 }
 
 function normalizeCommandOutput(stdout: string | undefined, stderr: string | undefined): string {

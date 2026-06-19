@@ -107,6 +107,7 @@ describe("shared view model", () => {
       "stale_connection_count",
       "openai_today_tokens",
       "codex_five_hour_percent",
+      "codex_reset_credit_expiry",
     ]);
     expect(tray.items.map((item) => item.id)).toEqual([
       "status",
@@ -116,6 +117,7 @@ describe("shared view model", () => {
       "widget-stale_connection_count",
       "widget-openai_today_tokens",
       "widget-codex_five_hour_percent",
+      "widget-codex_reset_credit_expiry",
       "separator-widgets",
       "show-hud",
       "open-dashboard",
@@ -213,6 +215,51 @@ describe("shared view model", () => {
     ]);
   });
 
+  it("surfaces conservative Codex reset credit expiry estimates in notifications", () => {
+    const overview = buildOperationsOverview(STORE_WITH_SENSITIVE_VALUES, {
+      generatedAt: NOW.toISOString(),
+    });
+    const todayLive = buildTodayLiveView(STORE_WITH_SENSITIVE_VALUES, {
+      generatedAt: NOW.toISOString(),
+      now: NOW,
+      timezone: "UTC",
+      liveProviders: [
+        {
+          providerKey: "codex-cli",
+          displayName: "Codex CLI",
+          checkedAt: NOW.toISOString(),
+          freshness: "live",
+          confidence: "low",
+          todayLiveAmountMinor: null,
+          currency: "USD",
+          included: false,
+          metrics: [
+            {
+              key: "usage_reset_credit_estimate",
+              value: 1,
+              unit: "count",
+              resetAt: "2026-06-12T02:00:00.000Z",
+            },
+          ],
+        },
+      ],
+    });
+    const digest = buildNotificationDigest(overview, todayLive, {
+      ...DEFAULT_NOTIFICATION_PREFERENCES,
+      selectedWidgets: ["codex_reset_credit_expiry"],
+    });
+
+    expect(digest.items).toEqual([
+      expect.objectContaining({
+        widgetKey: "codex_reset_credit_expiry",
+        severity: "warning",
+        value: "May expire within 3 days",
+        freshness: "live",
+        confidence: "low",
+      }),
+    ]);
+  });
+
   it("normalizes compact HUD display preferences", () => {
     expect(parseNotificationPreferences({}).hud).toEqual(DEFAULT_NOTIFICATION_PREFERENCES.hud);
     expect(parseNotificationPreferences({
@@ -260,11 +307,32 @@ describe("shared view model", () => {
       },
     }).dashboard).toEqual({
       localCliMetricKeys: ["last_request_tokens", "total_tokens"],
+      budget: DEFAULT_NOTIFICATION_PREFERENCES.dashboard.budget,
+      widgetLayouts: DEFAULT_NOTIFICATION_PREFERENCES.dashboard.widgetLayouts,
     });
     expect(parseNotificationPreferences({
       dashboard: {
         localCliMetricKeys: [],
       },
     }).dashboard).toEqual(DEFAULT_NOTIFICATION_PREFERENCES.dashboard);
+    expect(parseNotificationPreferences({
+      dashboard: {
+        widgetLayouts: {
+          overview: [
+            { widgetKey: "overview_trend", visible: false, size: "wide" },
+            { widgetKey: "unknown", visible: true, size: "full" },
+            { widgetKey: "overview_meta", visible: true, size: "invalid" },
+            { widgetKey: "overview_trend", visible: true, size: "compact" },
+          ],
+        },
+      },
+    }).dashboard.widgetLayouts.overview).toEqual([
+      { widgetKey: "overview_trend", visible: false, size: "wide" },
+      { widgetKey: "overview_meta", visible: true, size: "normal" },
+      { widgetKey: "overview_metrics", visible: true, size: "full" },
+      { widgetKey: "overview_grouping", visible: true, size: "normal" },
+      { widgetKey: "overview_services", visible: true, size: "full" },
+      { widgetKey: "overview_insights", visible: true, size: "normal" },
+    ]);
   });
 });

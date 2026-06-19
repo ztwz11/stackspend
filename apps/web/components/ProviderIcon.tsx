@@ -19,7 +19,10 @@ const providerIconAssets: Record<string, string> = {
   datadog: "datadog.svg",
   sentry: "sentry.svg",
   "codex-cli": "openai.svg",
+  "codex-app": "openai.svg",
   "claude-cli": "anthropic-claude.svg",
+  "claude-app": "anthropic-claude.svg",
+  antigravity: "google-gemini-vertex-ai.svg",
 };
 
 export function ProviderIcon({

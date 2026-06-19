@@ -130,6 +130,7 @@ export function todayLiveViewFromSnapshot(snapshot: LiveTodaySnapshot): TodayLiv
         key: metric.key,
         value: metric.value,
         unit: metric.unit,
+        ...(metric.resetAt === undefined ? {} : { resetAt: metric.resetAt }),
       })) ?? [],
     })),
   });

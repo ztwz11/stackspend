@@ -3,6 +3,7 @@
 import { ExternalLink, Gauge, RefreshCw, Terminal } from "lucide-react";
 import { useEffect, useState, useTransition, type FormEvent } from "react";
 import { findAvailableProvider, type ProviderKey } from "../lib/provider-catalog";
+import { withAppLoading } from "./AppLoadingOverlay";
 
 interface CredentialControlLabels {
   savedConnections: string;
@@ -72,6 +73,8 @@ interface CredentialControlLabels {
   localCliWeeklyWindow: string;
   localCliRemaining: string;
   localCliResetAt: string;
+  localCliUsageResetCredits: string;
+  localCliUsageResetCredit: string;
   localCliLearnMore: string;
   localCliLastRequest: string;
   localCliSessionTokens: string;
@@ -144,8 +147,10 @@ interface LocalAiCliStatusPayload {
   providers: readonly LocalAiCliProviderStatusPayload[];
 }
 
+type LocalAiProviderKey = "codex-cli" | "codex-app" | "claude-cli" | "claude-app" | "antigravity";
+
 interface LocalAiCliProviderStatusPayload {
-  providerKey: "codex-cli" | "claude-cli";
+  providerKey: LocalAiProviderKey;
   displayName: string;
   command: string;
   cli: {
@@ -192,6 +197,7 @@ interface LocalAiCliProviderStatusPayload {
       totalCacheTokens: number | null;
       totalReasoningTokens: number | null;
       totalTokens: number | null;
+      usageResetCredits: readonly { label: string | null; expiresAt: string | null }[];
     };
     message: string;
   };
@@ -243,23 +249,29 @@ export function CredentialControls({
                 onClick={() => {
                   setError(null);
                   startTransition(async () => {
-                    const session = await createSessionOrThrow(labels.credentialDeleteError);
-                    const response = await fetch(
-                      `/api/connections/${providerKey}/credentials?connectionId=${encodeURIComponent(connection.connectionId)}`,
-                      {
-                        method: "DELETE",
-                        headers: {
-                          "x-moneysiren-csrf": session.csrfToken,
-                        },
-                      },
-                    );
+                    await withAppLoading(labels.toolLoadingPreparingView, async () => {
+                      try {
+                        const session = await createSessionOrThrow(labels.credentialDeleteError);
+                        const response = await fetch(
+                          `/api/connections/${providerKey}/credentials?connectionId=${encodeURIComponent(connection.connectionId)}`,
+                          {
+                            method: "DELETE",
+                            headers: {
+                              "x-moneysiren-csrf": session.csrfToken,
+                            },
+                          },
+                        );
 
-                    if (response.ok) {
-                      window.location.reload();
-                      return;
-                    }
+                        if (response.ok) {
+                          window.location.reload();
+                          return;
+                        }
 
-                    setError(await responseError(response, labels.credentialDeleteError));
+                        setError(await responseError(response, labels.credentialDeleteError));
+                      } catch (caught) {
+                        setError(caught instanceof Error ? caught.message : labels.credentialDeleteError);
+                      }
+                    });
                   });
                 }}
                 type="button"
@@ -294,7 +306,7 @@ function LocalCliSetupPanel({
   providerKey,
 }: {
   labels: CredentialControlLabels;
-  providerKey: "codex-cli" | "claude-cli";
+  providerKey: LocalAiProviderKey;
 }) {
   const [provider, setProvider] = useState<LocalAiCliProviderStatusPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -500,8 +512,12 @@ function useToolLoadingProgress(active: boolean, tasks: readonly string[]): { pe
   return progress;
 }
 
-function isLocalAiCliProvider(providerKey: ProviderKey): providerKey is "codex-cli" | "claude-cli" {
-  return providerKey === "codex-cli" || providerKey === "claude-cli";
+function isLocalAiCliProvider(providerKey: ProviderKey): providerKey is LocalAiProviderKey {
+  return providerKey === "codex-cli" ||
+    providerKey === "codex-app" ||
+    providerKey === "claude-cli" ||
+    providerKey === "claude-app" ||
+    providerKey === "antigravity";
 }
 
 function localCliUsageRows(
@@ -519,53 +535,32 @@ function localCliUsageRows(
   rows.push({
     label: labels.localCliContextWindow,
     value: formatTokenWindow(statusLine.contextWindowTokens, statusLine.contextWindowLimit, statusLine.contextWindowPercent),
-    meta: provider.providerKey === "codex-cli" ? labels.localCliLastRequest : labels.localCliCurrentUsage,
+    meta: labels.localCliCurrentUsage,
   });
 
-  if (provider.providerKey === "codex-cli") {
-    rows.push({
-      label: labels.localCliLastRequest,
-      value: formatTokens(statusLine.lastTotalTokens),
-      meta: tokenParts([
-        ["in", statusLine.lastInputTokens],
-        ["out", statusLine.lastOutputTokens],
-        ["cache", statusLine.lastCacheTokens],
-      ]),
-    });
-    rows.push({
-      label: labels.localCliSessionTokens,
-      value: formatTokens(statusLine.totalTokens ?? usage.totalTokens),
-      meta: tokenParts([
-        ["in", statusLine.totalInputTokens ?? usage.inputTokens],
-        ["out", statusLine.totalOutputTokens ?? usage.outputTokens],
-        ["cache", statusLine.totalCacheTokens ?? usage.cacheTokens],
-      ]),
-    });
-    rows.push({
-      label: labels.localCliReasoning,
-      value: formatTokens(statusLine.totalReasoningTokens ?? usage.reasoningOutputTokens),
-      meta: `${labels.localCliLastRequest}: ${formatTokens(statusLine.lastReasoningTokens)}`,
-    });
-  } else {
-    rows.push({
-      label: labels.localCliCurrentUsage,
-      value: tokenParts([
-        ["in", statusLine.lastInputTokens],
-        ["out", statusLine.lastOutputTokens],
-        ["cache", statusLine.lastCacheTokens],
-      ]),
-      meta: labels.localCliStatusLine,
-    });
-    rows.push({
-      label: labels.localCliSessionTokens,
-      value: formatTokens(statusLine.totalTokens ?? usage.totalTokens),
-      meta: tokenParts([
-        ["in", statusLine.totalInputTokens ?? usage.inputTokens],
-        ["out", statusLine.totalOutputTokens ?? usage.outputTokens],
-        ["cache", statusLine.totalCacheTokens ?? usage.cacheTokens],
-      ]),
-    });
-  }
+  rows.push({
+    label: labels.localCliLastRequest,
+    value: formatTokens(statusLine.lastTotalTokens),
+    meta: tokenParts([
+      ["in", statusLine.lastInputTokens],
+      ["out", statusLine.lastOutputTokens],
+      ["cache", statusLine.lastCacheTokens],
+    ]),
+  });
+  rows.push({
+    label: labels.localCliSessionTokens,
+    value: formatTokens(statusLine.totalTokens ?? usage.totalTokens),
+    meta: tokenParts([
+      ["in", statusLine.totalInputTokens ?? usage.inputTokens],
+      ["out", statusLine.totalOutputTokens ?? usage.outputTokens],
+      ["cache", statusLine.totalCacheTokens ?? usage.cacheTokens],
+    ]),
+  });
+  rows.push({
+    label: labels.localCliReasoning,
+    value: formatTokens(statusLine.totalReasoningTokens ?? usage.reasoningOutputTokens),
+    meta: `${labels.localCliLastRequest}: ${formatTokens(statusLine.lastReasoningTokens)}`,
+  });
 
   rows.push({
     label: labels.localCliLogFiles,
@@ -586,7 +581,7 @@ function localCliRemainingRows(
 
   const statusLine = provider.usage.statusLine;
 
-  return [
+  const rows: Array<{ label: string; percent: string; resetAt: string }> = [
     {
       label: labels.localCliFiveHourWindow,
       percent: formatRemainingPercent(
@@ -606,6 +601,37 @@ function localCliRemainingRows(
       resetAt: formatResetAt(statusLine.weeklyResetAt),
     },
   ];
+
+  if (statusLine.usageResetCredits.length > 0) {
+    rows.push({
+      label: labels.localCliUsageResetCredits,
+      percent: formatResetCreditCount(statusLine.usageResetCredits.length),
+      resetAt: formatResetAt(earliestResetCreditExpiry(statusLine.usageResetCredits)),
+    });
+  } else if (isCodexLocalProvider(provider.providerKey)) {
+    rows.push({
+      label: labels.localCliUsageResetCredits,
+      percent: "-",
+      resetAt: "-",
+    });
+  }
+
+  return rows;
+}
+
+function isCodexLocalProvider(providerKey: LocalAiProviderKey): boolean {
+  return providerKey === "codex-cli" || providerKey === "codex-app";
+}
+
+function earliestResetCreditExpiry(credits: readonly { expiresAt: string | null }[]): string | null {
+  return credits
+    .map((credit) => credit.expiresAt)
+    .filter((expiresAt): expiresAt is string => expiresAt !== null)
+    .sort((left, right) => left.localeCompare(right))[0] ?? null;
+}
+
+function formatResetCreditCount(count: number): string {
+  return new Intl.NumberFormat().format(count);
 }
 
 function formatTokenWindow(tokens: number | null, limit: number | null, percent: number | null): string {
@@ -757,37 +783,40 @@ function AwsSetupPanel({ labels }: { labels: CredentialControlLabels }) {
 
   async function saveProfileGlobally(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setSavingProfile(true);
-    setProfileSaveError(null);
-    setProfileSaveMessage(null);
 
-    try {
-      const session = await createSessionOrThrow(labels.awsProfilePersistError);
-      const response = await fetch("/api/local-tools/aws/profile", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-moneysiren-csrf": session.csrfToken,
-        },
-        body: JSON.stringify({
-          profileName,
-        }),
-      });
+    await withAppLoading(labels.toolLoadingPreparingView, async () => {
+      setSavingProfile(true);
+      setProfileSaveError(null);
+      setProfileSaveMessage(null);
 
-      if (!response.ok) {
-        setProfileSaveError(await responseError(response, labels.awsProfilePersistError));
-        return;
+      try {
+        const session = await createSessionOrThrow(labels.awsProfilePersistError);
+        const response = await fetch("/api/local-tools/aws/profile", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-moneysiren-csrf": session.csrfToken,
+          },
+          body: JSON.stringify({
+            profileName,
+          }),
+        });
+
+        if (!response.ok) {
+          setProfileSaveError(await responseError(response, labels.awsProfilePersistError));
+          return;
+        }
+
+        const payload = await response.json() as AwsProfilePersistPayload;
+        setProfileName(payload.profileName);
+        setProfileSaveMessage(`${labels.awsProfilePersistSuccess} ${payload.restartHint}`);
+        await refreshStatus();
+      } catch (caught) {
+        setProfileSaveError(caught instanceof Error ? caught.message : labels.awsProfilePersistError);
+      } finally {
+        setSavingProfile(false);
       }
-
-      const payload = await response.json() as AwsProfilePersistPayload;
-      setProfileName(payload.profileName);
-      setProfileSaveMessage(`${labels.awsProfilePersistSuccess} ${payload.restartHint}`);
-      await refreshStatus();
-    } catch (caught) {
-      setProfileSaveError(caught instanceof Error ? caught.message : labels.awsProfilePersistError);
-    } finally {
-      setSavingProfile(false);
-    }
+    });
   }
 
   const cliState = status?.awsCli.state ?? null;

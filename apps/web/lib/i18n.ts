@@ -31,6 +31,11 @@ export interface Messages {
     overviewTitle: string;
     overviewSubtitle: string;
     monthForecast: string;
+    monthlyBudget: string;
+    budgetUsage: string;
+    budgetNotSet: string;
+    budgetRisk: string;
+    confirmedCoverage: string;
     confirmedThroughYesterday: string;
     todayLive: string;
     providersNeedingAttention: string;
@@ -100,6 +105,9 @@ export interface Messages {
     weeklyTokens: string;
     fiveHourRemainingTokens: string;
     weeklyRemainingTokens: string;
+    usageResetCredits: string;
+    usageResetCredit: string;
+    usageResetCreditEstimate: string;
     lastRequestTokens: string;
     totalTokens: string;
     reasoningTokens: string;
@@ -250,6 +258,8 @@ export interface Messages {
     localCliWeeklyWindow: string;
     localCliRemaining: string;
     localCliResetAt: string;
+    localCliUsageResetCredits: string;
+    localCliUsageResetCredit: string;
     localCliLearnMore: string;
     localCliDashboardTitle: string;
     localCliDashboardSubtitle: string;
@@ -258,6 +268,27 @@ export interface Messages {
     dashboardDisplayPrefsSaved: string;
     dashboardDisplayPrefsSaveError: string;
     dashboardDisplayPrefsLoadError: string;
+    dashboardWidgetsTitle: string;
+    dashboardWidgetsSubtitle: string;
+    dashboardWidgetScreen: string;
+    dashboardWidgetSelection: string;
+    dashboardWidgetSize: string;
+    dashboardWidgetMoveUp: string;
+    dashboardWidgetMoveDown: string;
+    dashboardWidgetCompact: string;
+    dashboardWidgetNormal: string;
+    dashboardWidgetWide: string;
+    dashboardWidgetFull: string;
+    budgetTitle: string;
+    budgetSubtitle: string;
+    monthlyBudgetLimit: string;
+    budgetCurrency: string;
+    budgetWarningPercent: string;
+    budgetCriticalPercent: string;
+    saveBudget: string;
+    budgetPrefsSaved: string;
+    budgetPrefsSaveError: string;
+    budgetPrefsLoadError: string;
     localCliLastRequest: string;
     localCliSessionTokens: string;
     localCliCurrentUsage: string;
@@ -285,6 +316,7 @@ export interface Messages {
     claude_weekly_percent: string;
     codex_five_hour_percent: string;
     codex_weekly_percent: string;
+    codex_reset_credit_expiry: string;
     supabase_usage_health: string;
     cloudflare_month_to_date: string;
   };
@@ -335,6 +367,11 @@ export const messages = {
       overviewTitle: "Dashboard",
       overviewSubtitle: "Month forecast first, with today's live data kept provisional.",
       monthForecast: "Month forecast",
+      monthlyBudget: "Monthly budget",
+      budgetUsage: "Budget usage",
+      budgetNotSet: "No budget set",
+      budgetRisk: "Budget risk",
+      confirmedCoverage: "Confirmed coverage",
       confirmedThroughYesterday: "Confirmed through yesterday",
       todayLive: "Today live",
       providersNeedingAttention: "Providers needing attention",
@@ -404,6 +441,9 @@ export const messages = {
       weeklyTokens: "Weekly tokens",
       fiveHourRemainingTokens: "5-hour remaining",
       weeklyRemainingTokens: "Weekly remaining",
+      usageResetCredits: "Usage reset credits",
+      usageResetCredit: "Usage reset credit",
+      usageResetCreditEstimate: "Estimated reset credit expiry",
       lastRequestTokens: "Last request",
       totalTokens: "Total tokens",
       reasoningTokens: "Reasoning tokens",
@@ -554,6 +594,8 @@ export const messages = {
       localCliWeeklyWindow: "1 week",
       localCliRemaining: "Remaining",
       localCliResetAt: "Reset",
+      localCliUsageResetCredits: "Usage reset credits",
+      localCliUsageResetCredit: "Usage reset credit",
       localCliLearnMore: "Learn more",
       localCliDashboardTitle: "CLI dashboard fields",
       localCliDashboardSubtitle: "Choose which local CLI metrics appear in dashboard tables.",
@@ -562,6 +604,27 @@ export const messages = {
       dashboardDisplayPrefsSaved: "Dashboard display preferences saved locally.",
       dashboardDisplayPrefsSaveError: "Dashboard display preferences were not saved.",
       dashboardDisplayPrefsLoadError: "Dashboard display preferences could not be loaded.",
+      dashboardWidgetsTitle: "Dashboard widgets",
+      dashboardWidgetsSubtitle: "Hide, reorder, and resize each dashboard screen independently.",
+      dashboardWidgetScreen: "Dashboard screen",
+      dashboardWidgetSelection: "Dashboard widget layout",
+      dashboardWidgetSize: "Size",
+      dashboardWidgetMoveUp: "Move up",
+      dashboardWidgetMoveDown: "Move down",
+      dashboardWidgetCompact: "Compact",
+      dashboardWidgetNormal: "Normal",
+      dashboardWidgetWide: "Wide",
+      dashboardWidgetFull: "Full",
+      budgetTitle: "Monthly budget",
+      budgetSubtitle: "Set the local budget used for budget risk. Leave it blank to disable budget risk.",
+      monthlyBudgetLimit: "Monthly budget limit",
+      budgetCurrency: "Currency",
+      budgetWarningPercent: "Warning at",
+      budgetCriticalPercent: "Critical at",
+      saveBudget: "Save budget",
+      budgetPrefsSaved: "Budget settings saved locally.",
+      budgetPrefsSaveError: "Budget settings were not saved.",
+      budgetPrefsLoadError: "Budget settings could not be loaded.",
       localCliLastRequest: "Last request",
       localCliSessionTokens: "Session tokens",
       localCliCurrentUsage: "Current usage",
@@ -589,6 +652,7 @@ export const messages = {
       claude_weekly_percent: "Claude weekly usage",
       codex_five_hour_percent: "Codex 5-hour usage",
       codex_weekly_percent: "Codex weekly usage",
+      codex_reset_credit_expiry: "Codex reset credit expiry",
       supabase_usage_health: "Supabase usage health",
       cloudflare_month_to_date: "Cloudflare month to date",
     },
@@ -669,6 +733,11 @@ export const messages = {
       overviewTitle: "대시보드",
       overviewSubtitle: "이번 달 예상 비용을 먼저 보고, 오늘 값은 임시 데이터로 분리합니다.",
       monthForecast: "이번 달 예상",
+      monthlyBudget: "월 예산",
+      budgetUsage: "예산 사용률",
+      budgetNotSet: "예산 없음",
+      budgetRisk: "예산 리스크",
+      confirmedCoverage: "확정률",
       confirmedThroughYesterday: "어제까지 확정",
       todayLive: "오늘 실시간",
       providersNeedingAttention: "확인이 필요한 서비스",
@@ -738,6 +807,9 @@ export const messages = {
       weeklyTokens: "주간 토큰",
       fiveHourRemainingTokens: "5시간 남은 토큰",
       weeklyRemainingTokens: "주간 남은 토큰",
+      usageResetCredits: "초기화권",
+      usageResetCredit: "초기화권",
+      usageResetCreditEstimate: "초기화권 추정 만료",
       lastRequestTokens: "마지막 요청",
       totalTokens: "전체 토큰",
       reasoningTokens: "Reasoning 토큰",
@@ -888,6 +960,8 @@ export const messages = {
       localCliWeeklyWindow: "1주",
       localCliRemaining: "남은 사용량",
       localCliResetAt: "초기화",
+      localCliUsageResetCredits: "초기화권",
+      localCliUsageResetCredit: "초기화권",
       localCliLearnMore: "자세히 알아보기",
       localCliDashboardTitle: "CLI 대시보드 항목",
       localCliDashboardSubtitle: "대시보드 테이블에 표시할 로컬 CLI 지표를 선택합니다.",
@@ -896,6 +970,27 @@ export const messages = {
       dashboardDisplayPrefsSaved: "대시보드 표시 설정이 로컬에 저장되었습니다.",
       dashboardDisplayPrefsSaveError: "대시보드 표시 설정을 저장하지 못했습니다.",
       dashboardDisplayPrefsLoadError: "대시보드 표시 설정을 불러오지 못했습니다.",
+      dashboardWidgetsTitle: "대시보드 위젯",
+      dashboardWidgetsSubtitle: "화면별 항목을 숨기고, 순서를 바꾸고, 크기를 조정합니다.",
+      dashboardWidgetScreen: "대시보드 화면",
+      dashboardWidgetSelection: "대시보드 위젯 레이아웃",
+      dashboardWidgetSize: "크기",
+      dashboardWidgetMoveUp: "위로 이동",
+      dashboardWidgetMoveDown: "아래로 이동",
+      dashboardWidgetCompact: "작게",
+      dashboardWidgetNormal: "보통",
+      dashboardWidgetWide: "넓게",
+      dashboardWidgetFull: "전체",
+      budgetTitle: "월 예산",
+      budgetSubtitle: "예산 리스크에 사용할 로컬 월 예산을 설정합니다. 비워두면 예산 리스크를 계산하지 않습니다.",
+      monthlyBudgetLimit: "월 예산 한도",
+      budgetCurrency: "통화",
+      budgetWarningPercent: "경고 기준",
+      budgetCriticalPercent: "위험 기준",
+      saveBudget: "예산 저장",
+      budgetPrefsSaved: "예산 설정이 로컬에 저장되었습니다.",
+      budgetPrefsSaveError: "예산 설정을 저장하지 못했습니다.",
+      budgetPrefsLoadError: "예산 설정을 불러오지 못했습니다.",
       localCliLastRequest: "마지막 요청",
       localCliSessionTokens: "세션 토큰",
       localCliCurrentUsage: "현재 사용량",
@@ -923,6 +1018,7 @@ export const messages = {
       claude_weekly_percent: "Claude 주간 사용률",
       codex_five_hour_percent: "Codex 5시간 사용률",
       codex_weekly_percent: "Codex 주간 사용률",
+      codex_reset_credit_expiry: "Codex 초기화권 추정 만료",
       supabase_usage_health: "Supabase 사용량 상태",
       cloudflare_month_to_date: "Cloudflare 월 누적",
     },
@@ -1003,6 +1099,11 @@ export const messages = {
       overviewTitle: "ダッシュボード",
       overviewSubtitle: "月次予測を中心に、今日の値は暫定データとして分離します。",
       monthForecast: "月次予測",
+      monthlyBudget: "月次予算",
+      budgetUsage: "予算使用率",
+      budgetNotSet: "予算未設定",
+      budgetRisk: "予算リスク",
+      confirmedCoverage: "確定率",
       confirmedThroughYesterday: "昨日まで確定",
       todayLive: "今日のライブ",
       providersNeedingAttention: "確認が必要なサービス",
@@ -1072,6 +1173,9 @@ export const messages = {
       weeklyTokens: "週間トークン",
       fiveHourRemainingTokens: "5時間残りトークン",
       weeklyRemainingTokens: "週間残りトークン",
+      usageResetCredits: "リセット権",
+      usageResetCredit: "リセット権",
+      usageResetCreditEstimate: "リセット権の推定期限",
       lastRequestTokens: "直近リクエスト",
       totalTokens: "合計トークン",
       reasoningTokens: "Reasoning トークン",
@@ -1222,6 +1326,8 @@ export const messages = {
       localCliWeeklyWindow: "1週間",
       localCliRemaining: "残り使用量",
       localCliResetAt: "リセット",
+      localCliUsageResetCredits: "リセット権",
+      localCliUsageResetCredit: "リセット権",
       localCliLearnMore: "詳しく見る",
       localCliDashboardTitle: "CLI ダッシュボード項目",
       localCliDashboardSubtitle: "ダッシュボード表に表示するローカル CLI 指標を選択します。",
@@ -1230,6 +1336,27 @@ export const messages = {
       dashboardDisplayPrefsSaved: "ダッシュボード表示設定をローカルに保存しました。",
       dashboardDisplayPrefsSaveError: "ダッシュボード表示設定を保存できませんでした。",
       dashboardDisplayPrefsLoadError: "ダッシュボード表示設定を読み込めませんでした。",
+      dashboardWidgetsTitle: "ダッシュボードウィジェット",
+      dashboardWidgetsSubtitle: "画面ごとに項目の非表示、並べ替え、サイズ変更を行います。",
+      dashboardWidgetScreen: "ダッシュボード画面",
+      dashboardWidgetSelection: "ダッシュボードウィジェット配置",
+      dashboardWidgetSize: "サイズ",
+      dashboardWidgetMoveUp: "上へ移動",
+      dashboardWidgetMoveDown: "下へ移動",
+      dashboardWidgetCompact: "小",
+      dashboardWidgetNormal: "標準",
+      dashboardWidgetWide: "広い",
+      dashboardWidgetFull: "全幅",
+      budgetTitle: "月次予算",
+      budgetSubtitle: "予算リスクに使うローカル月次予算を設定します。空欄なら予算リスクを計算しません。",
+      monthlyBudgetLimit: "月次予算上限",
+      budgetCurrency: "通貨",
+      budgetWarningPercent: "警告しきい値",
+      budgetCriticalPercent: "危険しきい値",
+      saveBudget: "予算を保存",
+      budgetPrefsSaved: "予算設定をローカルに保存しました。",
+      budgetPrefsSaveError: "予算設定を保存できませんでした。",
+      budgetPrefsLoadError: "予算設定を読み込めませんでした。",
       localCliLastRequest: "直近リクエスト",
       localCliSessionTokens: "セッショントークン",
       localCliCurrentUsage: "現在の使用量",
@@ -1257,6 +1384,7 @@ export const messages = {
       claude_weekly_percent: "Claude 週間使用率",
       codex_five_hour_percent: "Codex 5時間使用率",
       codex_weekly_percent: "Codex 週間使用率",
+      codex_reset_credit_expiry: "Codex リセット権の推定期限",
       supabase_usage_health: "Supabase 利用ヘルス",
       cloudflare_month_to_date: "Cloudflare 月初来",
     },

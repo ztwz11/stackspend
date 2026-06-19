@@ -120,6 +120,8 @@ export function ConnectionCard({
               localCliWeeklyWindow: messages.settings.localCliWeeklyWindow,
               localCliRemaining: messages.settings.localCliRemaining,
               localCliResetAt: messages.settings.localCliResetAt,
+              localCliUsageResetCredits: messages.settings.localCliUsageResetCredits,
+              localCliUsageResetCredit: messages.settings.localCliUsageResetCredit,
               localCliLearnMore: messages.settings.localCliLearnMore,
               localCliLastRequest: messages.settings.localCliLastRequest,
               localCliSessionTokens: messages.settings.localCliSessionTokens,

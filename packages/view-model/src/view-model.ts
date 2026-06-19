@@ -147,6 +147,7 @@ export interface TodayLiveMetric {
   key: string;
   value: number;
   unit: string;
+  resetAt?: string;
 }
 
 export interface NotificationDigest extends LocalSafeEnvelope {
@@ -212,6 +213,7 @@ const SUPABASE_PROVIDER_KEY = "supabase";
 const CLOUDFLARE_PROVIDER_KEY = "cloudflare";
 const CODEX_CLI_PROVIDER_KEY = "codex-cli";
 const CLAUDE_CLI_PROVIDER_KEY = "claude-cli";
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const SENSITIVE_TEXT_PATTERN =
   /(https:\/\/hooks\.slack\.com\/services\/[A-Za-z0-9/_-]+|\b(?:sk|sbp|xox[baprs])[-_][A-Za-z0-9_-]+\b|\bacct[_-][A-Za-z0-9_-]+\b|\b(?:proj|project)[_-][A-Za-z0-9_-]+\b|\b(?:in|invoice)[_-][A-Za-z0-9_-]+\b|[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})/gi;
 
@@ -353,6 +355,7 @@ export function buildTodayLiveView(
           key: safeText(metric.key),
           value: metric.value,
           unit: safeText(metric.unit),
+          ...(metric.resetAt === undefined ? {} : { resetAt: safeText(metric.resetAt) }),
         })),
       }));
   const includedProviders = providers.filter((provider) =>
@@ -657,6 +660,7 @@ function buildDigestItems(
       usedTokensMetricKey: "weekly_tokens",
       clickPath: "/ko/services/codex-cli",
     }),
+    codexResetCreditExpiryItem(todayLive),
     {
       widgetKey: "supabase_usage_health",
       kind: "health",
@@ -718,6 +722,30 @@ function cliRemainingPercentItem(options: {
           confidence: firstProvider.confidence,
         }),
     clickPath: options.clickPath,
+  };
+}
+
+function codexResetCreditExpiryItem(todayLive: TodayLiveView): NotificationDigestItem {
+  const providers = todayProviders(todayLive, CODEX_CLI_PROVIDER_KEY);
+  const firstProvider = providers[0];
+  const earliestExpiry = earliestMetricResetAt(providers, "usage_reset_credit_estimate");
+  const daysUntil = earliestExpiry === null
+    ? null
+    : Math.ceil((Date.parse(earliestExpiry) - Date.parse(todayLive.generatedAt)) / MS_PER_DAY);
+
+  return {
+    widgetKey: "codex_reset_credit_expiry",
+    kind: "usage",
+    severity: resetCreditExpirySeverity(daysUntil),
+    label: "Codex reset credit expiry",
+    value: resetCreditExpiryValue(daysUntil),
+    ...(firstProvider === undefined
+      ? {}
+      : {
+          freshness: firstProvider.freshness,
+          confidence: firstProvider.confidence,
+        }),
+    clickPath: "/ko/services/codex-cli",
   };
 }
 
@@ -850,6 +878,17 @@ function metricFirst(providers: readonly TodayLiveProviderView[], metricKey: str
   return null;
 }
 
+function earliestMetricResetAt(providers: readonly TodayLiveProviderView[], metricKey: string): string | null {
+  const values = providers.flatMap((provider) =>
+    provider.metrics
+      .filter((metric) => metric.key === metricKey && metric.resetAt !== undefined)
+      .map((metric) => metric.resetAt as string)
+      .filter((value) => Number.isFinite(Date.parse(value)))
+  );
+
+  return values.sort((first, second) => Date.parse(first) - Date.parse(second))[0] ?? null;
+}
+
 function remainingPercentFromMetrics(
   providers: readonly TodayLiveProviderView[],
   remainingTokensMetricKey: string,
@@ -870,6 +909,38 @@ function remainingPercentFromMetrics(
   const usedPercent = metricFirst(providers, usedPercentMetricKey);
 
   return usedPercent === null ? null : clampPercent(100 - usedPercent);
+}
+
+function resetCreditExpirySeverity(daysUntil: number | null): ViewModelRiskSeverity {
+  if (daysUntil === null) {
+    return "info";
+  }
+
+  if (daysUntil <= 1) {
+    return "critical";
+  }
+
+  if (daysUntil <= 7) {
+    return "warning";
+  }
+
+  return "info";
+}
+
+function resetCreditExpiryValue(daysUntil: number | null): string {
+  if (daysUntil === null) {
+    return "Not available";
+  }
+
+  if (daysUntil <= 0) {
+    return "May expire now";
+  }
+
+  if (daysUntil === 1) {
+    return "May expire within 1 day";
+  }
+
+  return `May expire within ${daysUntil} days`;
 }
 
 function providerRiskSeverity(provider: OperationsOverviewProvider | undefined): ViewModelRiskSeverity {

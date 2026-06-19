@@ -26,6 +26,7 @@ import {
   type Locale,
   type Messages,
 } from "../lib/i18n";
+import { AppLoadingOverlay } from "./AppLoadingOverlay";
 
 interface AppShellProps {
   children: ReactNode;
@@ -59,6 +60,10 @@ export function AppShell({ children, locale, messages, serviceNavItems, timezone
 
   return (
     <div className="app-shell" lang={locale}>
+      <AppLoadingOverlay
+        navigationLabel={messages.settings.toolLoadingPreparingView}
+        savingLabel={messages.settings.toolLoadingPreparingView}
+      />
       <div className="mobile-bar">
         <button
           aria-label={messages.app.menu}

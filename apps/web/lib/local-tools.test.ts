@@ -7,6 +7,7 @@ import {
   readAwsLocalSetupStatus,
   readGcpLocalSetupStatus,
   readLocalAiCliStatus,
+  reconcileCodexResetCreditObservations,
   setAwsProfileGlobally,
   type LocalCommandRunner,
 } from "./local-tools";
@@ -38,6 +39,16 @@ describe("local tool status", () => {
     expect(segments).toContain("C:\\Users\\developer\\AppData\\Local\\Microsoft\\WindowsApps");
     expect(segments).toContain("C:\\Program Files\\Amazon\\AWSCLIV2");
     expect(segments).toContain("C:\\Program Files\\Google\\Cloud SDK\\google-cloud-sdk\\bin");
+  });
+
+  it("adds Windows system and default AWS CLI paths even when inherited PATH is empty", () => {
+    const path = buildWindowsLocalToolPath("", {
+      SystemRoot: "C:\\Windows",
+    }, "C:\\Runtime\\node.exe");
+    const segments = path.split(";");
+
+    expect(segments).toContain("C:\\Windows\\System32");
+    expect(segments).toContain("C:\\Program Files\\Amazon\\AWSCLIV2");
   });
 
   it("detects an installed AWS CLI without returning secrets", async () => {
@@ -509,6 +520,202 @@ describe("local tool status", () => {
     });
   });
 
+  it("maps Codex app-server rate limit reset credits from local JSONL metadata", async () => {
+    const homeDir = await mkdtemp(join(tmpdir(), "moneysiren-codex-reset-credits-"));
+    const codexSessionDir = join(homeDir, ".codex", "sessions", "2026", "06", "10");
+    await mkdir(codexSessionDir, { recursive: true });
+    await writeFile(join(codexSessionDir, "rollout-reset-credits.jsonl"), JSON.stringify({
+      timestamp: "2026-06-10T01:00:00.000Z",
+      type: "turn_context",
+      turn_id: "turn_codex_reset_credits",
+      result: {
+        rateLimits: {
+          primary: {
+            usedPercent: 19,
+            windowDurationMins: 300,
+            resetsAt: "2026-06-10T05:00:00.000Z",
+          },
+          secondary: {
+            usedPercent: 6,
+            windowDurationMins: 10080,
+            resetsAt: "2026-06-17T00:00:00.000Z",
+          },
+        },
+        rateLimitResetCredits: {
+          availableCount: 2,
+        },
+      },
+    }), "utf8");
+
+    const status = await readLocalAiCliStatus({
+      homeDir,
+      now: () => new Date("2026-06-10T01:30:00.000Z"),
+      providerKeys: ["codex-cli"],
+      runCommand: async (file) => ({
+        stdout: `${file} 1.2.3`,
+      }),
+    });
+    const codex = status.providers.find((provider) => provider.providerKey === "codex-cli");
+
+    expect(codex?.usage.statusLine).toMatchObject({
+      fiveHourLimitPercent: 19,
+      fiveHourResetAt: "2026-06-10T05:00:00.000Z",
+      weeklyLimitPercent: 6,
+      weeklyResetAt: "2026-06-17T00:00:00.000Z",
+      usageResetCredits: [
+        { label: null, expiresAt: null },
+        { label: null, expiresAt: null },
+      ],
+    });
+  });
+
+  it("estimates Codex reset credit expiry ranges from observed count increases", () => {
+    const initialStore = reconcileCodexResetCreditObservations({
+      version: 1,
+      updatedAtUtc: "1970-01-01T00:00:00.000Z",
+      lastObservedAtUtc: null,
+      lastCount: null,
+      observations: [],
+    }, 1, "2026-06-19T01:00:00.000Z", { ttlDays: 30 });
+
+    const nextStore = reconcileCodexResetCreditObservations(
+      initialStore,
+      2,
+      "2026-06-19T01:10:00.000Z",
+      { ttlDays: 30 },
+    );
+
+    expect(nextStore.observations).toContainEqual(expect.objectContaining({
+      previousCount: 1,
+      currentCount: 2,
+      observedFromUtc: "2026-06-19T01:00:00.000Z",
+      observedToUtc: "2026-06-19T01:10:00.000Z",
+      estimatedEarliestExpiryUtc: "2026-07-19T01:00:00.000Z",
+      estimatedLatestExpiryUtc: "2026-07-19T01:10:00.000Z",
+      status: "estimated",
+      isExact: false,
+    }));
+  });
+
+  it("keeps first-seen Codex reset credits as non-exact existing credits", () => {
+    const store = reconcileCodexResetCreditObservations({
+      version: 1,
+      updatedAtUtc: "1970-01-01T00:00:00.000Z",
+      lastObservedAtUtc: null,
+      lastCount: null,
+      observations: [],
+    }, 2, "2026-06-19T01:00:00.000Z", { ttlDays: 30 });
+
+    expect(store.observations).toEqual([
+      expect.objectContaining({
+        previousCount: 2,
+        currentCount: 2,
+        observedFromUtc: "2026-06-19T01:00:00.000Z",
+        observedToUtc: "2026-06-19T01:00:00.000Z",
+        estimatedEarliestExpiryUtc: null,
+        estimatedLatestExpiryUtc: null,
+        status: "initial_existing",
+        isExact: false,
+      }),
+      expect.objectContaining({
+        previousCount: 2,
+        currentCount: 2,
+        estimatedEarliestExpiryUtc: null,
+        estimatedLatestExpiryUtc: null,
+        status: "initial_existing",
+        isExact: false,
+      }),
+    ]);
+  });
+
+  it("marks Codex reset credit count decreases as removed for an unknown reason", () => {
+    const store = reconcileCodexResetCreditObservations({
+      version: 1,
+      updatedAtUtc: "2026-06-19T01:10:00.000Z",
+      lastObservedAtUtc: "2026-06-19T01:10:00.000Z",
+      lastCount: 2,
+      observations: [
+        {
+          id: "credit-earliest",
+          previousCount: 1,
+          currentCount: 2,
+          observedFromUtc: "2026-06-19T01:00:00.000Z",
+          observedToUtc: "2026-06-19T01:10:00.000Z",
+          estimatedEarliestExpiryUtc: "2026-07-19T01:00:00.000Z",
+          estimatedLatestExpiryUtc: "2026-07-19T01:10:00.000Z",
+          status: "estimated",
+          isExact: false,
+        },
+        {
+          id: "credit-later",
+          previousCount: 2,
+          currentCount: 3,
+          observedFromUtc: "2026-06-19T02:00:00.000Z",
+          observedToUtc: "2026-06-19T02:10:00.000Z",
+          estimatedEarliestExpiryUtc: "2026-07-19T02:00:00.000Z",
+          estimatedLatestExpiryUtc: "2026-07-19T02:10:00.000Z",
+          status: "estimated",
+          isExact: false,
+        },
+      ],
+    }, 1, "2026-06-20T00:00:00.000Z", { ttlDays: 30 });
+
+    expect(store.observations).toEqual([
+      expect.objectContaining({
+        id: "credit-earliest",
+        status: "removed_unknown",
+        removedAtUtc: "2026-06-20T00:00:00.000Z",
+      }),
+      expect.objectContaining({
+        id: "credit-later",
+        status: "estimated",
+      }),
+    ]);
+  });
+
+  it("maps Codex remaining rate limit percentages to used usage percentages", async () => {
+    const homeDir = await mkdtemp(join(tmpdir(), "moneysiren-codex-remaining-rate-limits-"));
+    const codexSessionDir = join(homeDir, ".codex", "sessions", "2026", "06", "10");
+    await mkdir(codexSessionDir, { recursive: true });
+    await writeFile(join(codexSessionDir, "rollout-rate-limits.jsonl"), JSON.stringify({
+      timestamp: "2026-06-10T01:00:00.000Z",
+      type: "turn_context",
+      turn_id: "turn_codex_remaining_rate_limits",
+      payload: {
+        model: "gpt-5",
+        rate_limits: {
+          primary: {
+            remaining_percent: 80,
+            window_minutes: 300,
+            resets_at: "2026-06-10T05:00:00.000Z",
+          },
+          secondary: {
+            percent_remaining: 94,
+            window_minutes: 10080,
+            resets_at: "2026-06-17T00:00:00.000Z",
+          },
+        },
+      },
+    }), "utf8");
+
+    const status = await readLocalAiCliStatus({
+      homeDir,
+      now: () => new Date("2026-06-10T01:30:00.000Z"),
+      providerKeys: ["codex-cli"],
+      runCommand: async (file) => ({
+        stdout: `${file} 1.2.3`,
+      }),
+    });
+    const codex = status.providers.find((provider) => provider.providerKey === "codex-cli");
+
+    expect(codex?.usage.statusLine).toMatchObject({
+      fiveHourLimitPercent: 20,
+      fiveHourResetAt: "2026-06-10T05:00:00.000Z",
+      weeklyLimitPercent: 6,
+      weeklyResetAt: "2026-06-17T00:00:00.000Z",
+    });
+  });
+
   it("uses the latest Codex rate limit snapshot instead of the highest historical percent", async () => {
     const homeDir = await mkdtemp(join(tmpdir(), "moneysiren-codex-latest-rate-limit-"));
     const codexSessionDir = join(homeDir, ".codex", "sessions", "2026", "06", "10");
@@ -663,5 +870,177 @@ describe("local tool status", () => {
       totalTokens: 15,
     });
     expect(JSON.stringify(status)).not.toContain("FAKE_CUSTOM_CODEX_PROMPT");
+  });
+
+  it("separates Codex App sessions and reads usage reset credit expiry metadata", async () => {
+    const homeDir = await mkdtemp(join(tmpdir(), "moneysiren-codex-app-"));
+    const codexAppDir = join(homeDir, "CodexApp");
+    const codexSessionsDir = join(homeDir, "codex-sessions");
+    await mkdir(codexAppDir, { recursive: true });
+    await mkdir(codexSessionsDir, { recursive: true });
+    await writeFile(join(codexAppDir, "Last Version"), "0.140.0\n", "utf8");
+    await writeFile(join(codexSessionsDir, "app-session.jsonl"), [
+      JSON.stringify({
+        timestamp: "2026-06-10T01:00:00.000Z",
+        type: "session_meta",
+        payload: {
+          originator: "Codex Desktop",
+          rate_limits: {
+            credits: {
+              items: [
+                { id: "reset-1", expires_at: "2026-06-20T00:00:00.000Z" },
+                { id: "reset-2", expires_at: "2026-06-21T00:00:00.000Z" },
+              ],
+            },
+          },
+        },
+      }),
+      JSON.stringify({
+        timestamp: "2026-06-10T01:01:00.000Z",
+        type: "response_item",
+        payload: {
+          usage: {
+            input_tokens: 10,
+            output_tokens: 5,
+          },
+        },
+      }),
+    ].join("\n"), "utf8");
+
+    const status = await readLocalAiCliStatus({
+      env: {
+        MONEYSIREN_CODEX_APP_DATA_DIR: codexAppDir,
+        MONEYSIREN_CODEX_APP_SESSIONS_DIR: codexSessionsDir,
+        MONEYSIREN_CODEX_SESSIONS_DIR: codexSessionsDir,
+      },
+      homeDir,
+      now: () => new Date("2026-06-10T05:00:00.000Z"),
+      providerKeys: ["codex-app", "codex-cli"],
+      runCommand: async (file) => ({
+        stdout: `${file} 1.2.3`,
+      }),
+    });
+    const codexApp = status.providers.find((provider) => provider.providerKey === "codex-app");
+    const codexCli = status.providers.find((provider) => provider.providerKey === "codex-cli");
+
+    expect(codexApp).toMatchObject({
+      cli: {
+        state: "installed",
+        version: "0.140.0",
+      },
+      usage: {
+        source: "codex_app_sessions",
+        logFileCount: 1,
+        totalTokens: 15,
+        statusLine: {
+          usageResetCredits: [
+            { label: "reset-1", expiresAt: "2026-06-20T00:00:00.000Z" },
+            { label: "reset-2", expiresAt: "2026-06-21T00:00:00.000Z" },
+          ],
+        },
+      },
+    });
+    expect(codexCli?.usage).toMatchObject({
+      source: "codex_sessions",
+      logFileCount: 0,
+    });
+  });
+
+  it("shows Claude App usage from shared Claude project logs when app-local logs are not present", async () => {
+    const homeDir = await mkdtemp(join(tmpdir(), "moneysiren-claude-app-"));
+    const claudeProjectDir = join(homeDir, ".claude", "projects", "fake-project");
+    await mkdir(claudeProjectDir, { recursive: true });
+    await writeFile(join(claudeProjectDir, "session-fake.jsonl"), [
+      JSON.stringify({
+        timestamp: "2026-06-10T01:00:00.000Z",
+        context_window: {
+          current_usage: {
+            input_tokens: 42_000,
+            cache_read_input_tokens: 9_000,
+            output_tokens: 600,
+          },
+          max_tokens: 200_000,
+        },
+      }),
+      JSON.stringify({
+        type: "assistant",
+        timestamp: "2026-06-10T01:15:00.000Z",
+        sessionId: "claude_app_session_1",
+        message: {
+          model: "claude-sonnet-4-5",
+          usage: {
+            input_tokens: 80,
+            output_tokens: 20,
+            cache_read_input_tokens: 30,
+          },
+        },
+      }),
+    ].join("\n"), "utf8");
+
+    const status = await readLocalAiCliStatus({
+      env: {
+        MONEYSIREN_CLAUDE_APP_DATA_DIR: join(homeDir, "missing-app-data"),
+      },
+      homeDir,
+      now: () => new Date("2026-06-10T05:00:00.000Z"),
+      providerKeys: ["claude-app"],
+      runCommand: async (file) => ({
+        stdout: `${file} 1.2.3`,
+      }),
+    });
+    const claudeApp = status.providers.find((provider) => provider.providerKey === "claude-app");
+
+    expect(claudeApp?.usage).toMatchObject({
+      source: "claude_app",
+      logFileCount: 1,
+      sessionCount: 1,
+      turnCount: 1,
+      inputTokens: 80,
+      outputTokens: 20,
+      cacheTokens: 30,
+      statusLine: {
+        contextWindowTokens: 51000,
+        contextWindowLimit: 200000,
+        contextWindowPercent: 25.5,
+        lastInputTokens: 80,
+        lastOutputTokens: 20,
+        lastCacheTokens: 30,
+        lastTotalTokens: 130,
+        totalInputTokens: 80,
+        totalOutputTokens: 20,
+        totalCacheTokens: 30,
+        totalTokens: 130,
+      },
+    });
+  });
+
+  it("keeps configured Codex App reset credits visible when local logs do not expose them", async () => {
+    const homeDir = await mkdtemp(join(tmpdir(), "moneysiren-codex-app-reset-env-"));
+    const status = await readLocalAiCliStatus({
+      env: {
+        MONEYSIREN_CODEX_APP_DATA_DIR: join(homeDir, "missing-codex-app"),
+        MONEYSIREN_CODEX_APP_SESSIONS_DIR: join(homeDir, "missing-codex-sessions"),
+        MONEYSIREN_CODEX_APP_USAGE_RESET_CREDITS: "2",
+        MONEYSIREN_CODEX_APP_USAGE_RESET_CREDIT_EXPIRES_AT: "2026-06-25T00:00:00.000Z",
+      },
+      homeDir,
+      now: () => new Date("2026-06-10T05:00:00.000Z"),
+      providerKeys: ["codex-app"],
+      runCommand: async (file) => ({
+        stdout: `${file} 1.2.3`,
+      }),
+    });
+    const codexApp = status.providers.find((provider) => provider.providerKey === "codex-app");
+
+    expect(codexApp?.usage).toMatchObject({
+      source: "codex_app_sessions",
+      logFileCount: 0,
+      statusLine: {
+        usageResetCredits: [
+          { expiresAt: "2026-06-25T00:00:00.000Z" },
+          { expiresAt: "2026-06-25T00:00:00.000Z" },
+        ],
+      },
+    });
   });
 });

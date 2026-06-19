@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 
 const ALLOWED_WORKSPACE_SCRIPTS = new Set(["build", "test", "typecheck", "lint"]);
-const RUNTIME_WORKSPACE_PACKAGES = new Set(["moneysiren", "@moneysiren/web", "@moneysiren/tray"]);
+const RUNTIME_WORKSPACE_PACKAGES = new Set(["moneysiren", "@moneysiren/cli", "@moneysiren/web", "@moneysiren/tray"]);
 const RUNTIME_WORKSPACE_SCRIPTS = new Set(["dev", "start", "tauri:dev", "tauri:build", "tauri:build:unsigned"]);
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, "../..");

@@ -3,6 +3,7 @@ import {
   readWebLocalNotificationDigest,
   readWebNotificationPreferences,
 } from "../../lib/local-notification-model";
+import { AppLoadingOverlay } from "../../components/AppLoadingOverlay";
 import { HudWindowControls } from "../../components/HudWindowControls";
 import type { CSSProperties } from "react";
 
@@ -33,6 +34,10 @@ export default async function HudPage({ searchParams }: HudPageProps) {
 
   return (
     <main className="hud-page" style={hudStyle}>
+      <AppLoadingOverlay
+        navigationLabel={messages.settings.toolLoadingPreparingView}
+        savingLabel={messages.settings.toolLoadingPreparingView}
+      />
       <HudWindowControls
         initialPreferences={preferences}
         labels={{
@@ -46,6 +51,7 @@ export default async function HudPage({ searchParams }: HudPageProps) {
           save: messages.settings.hudSaveSettings,
           saved: messages.settings.notificationPrefsSaved,
           settings: messages.nav.settings,
+          toolLoadingPreparingView: messages.settings.toolLoadingPreparingView,
         }}
         locale={locale}
       />

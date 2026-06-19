@@ -1,8 +1,10 @@
 import { notFound } from "next/navigation";
 import {
   PageHeader,
+  ProviderSourceLink,
   ServiceDetail,
 } from "../../../../components/OperationsViews";
+import { LiveRefreshButton } from "../../../../components/LiveRefreshButton";
 import { getMessages, isLocale, type Locale } from "../../../../lib/i18n";
 import { summarizeLocalAiCliUsage } from "../../../../lib/live-today";
 import { readLocalAiCliStatus } from "../../../../lib/local-tools";
@@ -39,6 +41,12 @@ export default async function ServiceDetailPage({ params }: PageProps) {
         subtitle={localCliProvider
           ? messages.services.localCliUsageNote
           : `${messages.services.serviceTitle} - ${messages.services.readOnly}`}
+        meta={
+          <div className="header-control-row">
+            <ProviderSourceLink provider={selectedProvider} variant="button" />
+            <LiveRefreshButton className="ghost-button header-control" label={messages.dashboard.refresh} />
+          </div>
+        }
       />
       <ServiceDetail dashboard={dashboard} locale={locale} messages={messages} provider={selectedProvider} />
     </>
@@ -98,6 +106,12 @@ async function withFreshLocalAiCliUsage(provider: OperationsProvider): Promise<O
   };
 }
 
-function isLocalAiCliProvider(providerKey: ProviderKey): providerKey is "codex-cli" | "claude-cli" {
-  return providerKey === "codex-cli" || providerKey === "claude-cli";
+function isLocalAiCliProvider(
+  providerKey: ProviderKey,
+): providerKey is "codex-cli" | "codex-app" | "claude-cli" | "claude-app" | "antigravity" {
+  return providerKey === "codex-cli" ||
+    providerKey === "codex-app" ||
+    providerKey === "claude-cli" ||
+    providerKey === "claude-app" ||
+    providerKey === "antigravity";
 }

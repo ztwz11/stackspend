@@ -83,9 +83,9 @@ export interface LiveTodayUsageSummary {
 }
 
 export interface LiveTodayUsageMetric {
-  key: "input_tokens" | "output_tokens" | "cache_tokens" | "model_requests" | "sessions" | "turns" | "tool_calls" | "log_files" | "context_tokens" | "context_percent" | "last_request_tokens" | "total_tokens" | "reasoning_tokens" | "five_hour_limit_percent" | "weekly_limit_percent" | "five_hour_tokens" | "weekly_tokens" | "five_hour_remaining_tokens" | "weekly_remaining_tokens";
+  key: "input_tokens" | "output_tokens" | "cache_tokens" | "model_requests" | "sessions" | "turns" | "tool_calls" | "log_files" | "context_tokens" | "context_percent" | "last_request_tokens" | "total_tokens" | "reasoning_tokens" | "five_hour_limit_percent" | "weekly_limit_percent" | "five_hour_tokens" | "weekly_tokens" | "five_hour_remaining_tokens" | "weekly_remaining_tokens" | "usage_reset_credits" | "usage_reset_credit" | "usage_reset_credit_estimate";
   value: number;
-  unit: "tokens" | "requests" | "sessions" | "turns" | "calls" | "files" | "percent" | "usd";
+  unit: "tokens" | "requests" | "sessions" | "turns" | "calls" | "files" | "percent" | "usd" | "count";
   resetAt?: string;
 }
 
@@ -114,6 +114,7 @@ export interface LiveTodayOptions {
 }
 
 const DEFAULT_TTL_SECONDS = 60;
+const LOCAL_AI_CLI_TTL_SECONDS = 5;
 const AWS_REGION_ENV_KEY = "MONEYSIREN_AWS_REGION";
 const CLOUDFLARE_ACCOUNT_IDS_ENV_KEY = "CLOUDFLARE_ACCOUNT_IDS";
 const ENV_CONNECTION_ID = "env";
@@ -121,6 +122,7 @@ const cache = new Map<string, CachedLiveTodayProvider>();
 
 interface CachedLiveTodayProvider extends LiveTodayProviderCollection {
   expiresAt: string;
+  ttlSeconds: number;
 }
 
 export async function readLiveTodaySnapshot(options: LiveTodayOptions = {}): Promise<LiveTodaySnapshot> {
@@ -132,13 +134,19 @@ export async function readLiveTodaySnapshot(options: LiveTodayOptions = {}): Pro
       if (isLocalAiCliProviderKey(target.providerKey)) {
         const collected = await collectAndCacheLiveTodayTarget(context, target);
 
-        return snapshotFromCachedProvider(target, collected, context.now, context.ttlSeconds);
+        return snapshotFromCachedProvider(target, collected, context.now);
       }
 
       return notCheckedSnapshot(target, context.ttlSeconds);
     }
 
-    return snapshotFromCachedProvider(target, cached, context.now, context.ttlSeconds);
+    if (isLocalAiCliProviderKey(target.providerKey) && isCachedProviderExpired(cached, context.now)) {
+      const collected = await collectAndCacheLiveTodayTarget(context, target);
+
+      return snapshotFromCachedProvider(target, collected, context.now);
+    }
+
+    return snapshotFromCachedProvider(target, cached, context.now);
   }));
 
   return {
@@ -170,6 +178,7 @@ async function collectAndCacheLiveTodayTarget(
 ): Promise<CachedLiveTodayProvider> {
   const providerKey = target.providerKey;
   const checkedAt = context.now.toISOString();
+  const ttlSeconds = liveTtlSecondsForTarget(target, context.ttlSeconds);
   const preflight = preflightProvider(target);
 
   if (preflight !== null) {
@@ -179,7 +188,8 @@ async function collectAndCacheLiveTodayTarget(
       ...(target.connectionLabel === undefined ? {} : { connectionLabel: target.connectionLabel }),
       status: "partial",
       checkedAt,
-      expiresAt: expiresAt(context.now, context.ttlSeconds),
+      expiresAt: expiresAt(context.now, ttlSeconds),
+      ttlSeconds,
       todayLiveAmountMinor: null,
       currency: "USD",
       included: false,
@@ -207,7 +217,8 @@ async function collectAndCacheLiveTodayTarget(
       ...collected,
       ...(target.connectionId === undefined ? {} : { connectionId: target.connectionId }),
       ...(target.connectionLabel === undefined ? {} : { connectionLabel: target.connectionLabel }),
-      expiresAt: expiresAt(context.now, context.ttlSeconds),
+      expiresAt: expiresAt(context.now, ttlSeconds),
+      ttlSeconds,
     };
     cache.set(liveCacheKey(target), cached);
 
@@ -219,7 +230,8 @@ async function collectAndCacheLiveTodayTarget(
       ...(target.connectionLabel === undefined ? {} : { connectionLabel: target.connectionLabel }),
       status: "error",
       checkedAt,
-      expiresAt: expiresAt(context.now, context.ttlSeconds),
+      expiresAt: expiresAt(context.now, ttlSeconds),
+      ttlSeconds,
       todayLiveAmountMinor: null,
       currency: "USD",
       included: false,
@@ -369,10 +381,9 @@ function snapshotFromCachedProvider(
   target: LiveTodayConnectionTarget,
   cached: CachedLiveTodayProvider,
   now: Date,
-  ttlSeconds: number,
 ): LiveTodayProviderSnapshot {
   const granularity = findAvailableProvider(target.providerKey)?.liveGranularity ?? "unavailable";
-  const expired = new Date(cached.expiresAt).getTime() <= now.getTime();
+  const expired = isCachedProviderExpired(cached, now);
   const freshness = cached.status === "partial" && cached.confidence === "none" && cached.todayLiveAmountMinor === null
     ? freshnessWithoutCache(target.connectionState, granularity)
     : cached.status === "error"
@@ -387,7 +398,7 @@ function snapshotFromCachedProvider(
     ...(target.connectionLabel === undefined ? {} : { connectionLabel: target.connectionLabel }),
     checkedAt: cached.checkedAt,
     expiresAt: cached.expiresAt,
-    ttlSeconds,
+    ttlSeconds: cached.ttlSeconds,
     freshness,
     liveGranularity: granularity,
     confidence: expired || cached.status === "error" ? "none" : cached.confidence,
@@ -399,6 +410,10 @@ function snapshotFromCachedProvider(
     ...(cached.usageSummary === undefined ? {} : { usageSummary: cached.usageSummary }),
     ...(cached.message === undefined ? {} : { message: cached.message }),
   };
+}
+
+function isCachedProviderExpired(cached: CachedLiveTodayProvider, now: Date): boolean {
+  return new Date(cached.expiresAt).getTime() <= now.getTime();
 }
 
 function freshnessWithoutCache(
@@ -437,7 +452,17 @@ function summarizeCacheState(providers: readonly LiveTodayProviderSnapshot[]): L
 }
 
 function isLocalAiCliProviderKey(providerKey: ProviderKey): providerKey is LocalAiCliProviderKey {
-  return providerKey === "codex-cli" || providerKey === "claude-cli";
+  return providerKey === "codex-cli" ||
+    providerKey === "codex-app" ||
+    providerKey === "claude-cli" ||
+    providerKey === "claude-app" ||
+    providerKey === "antigravity";
+}
+
+function liveTtlSecondsForTarget(target: LiveTodayConnectionTarget, defaultTtlSeconds: number): number {
+  return isLocalAiCliProviderKey(target.providerKey)
+    ? Math.min(defaultTtlSeconds, LOCAL_AI_CLI_TTL_SECONDS)
+    : defaultTtlSeconds;
 }
 
 function createDefaultLiveTodayCollector(providerKey: ProviderKey): LiveTodayProviderCollector {
@@ -457,7 +482,7 @@ function createDefaultLiveTodayCollector(providerKey: ProviderKey): LiveTodayPro
     return collectCloudflareLiveToday;
   }
 
-  if (providerKey === "codex-cli" || providerKey === "claude-cli") {
+  if (isLocalAiCliProviderKey(providerKey)) {
     return collectLocalAiCliLiveToday;
   }
 
@@ -648,6 +673,22 @@ function localCliUsageMetrics(provider: LocalAiCliProviderStatus): LiveTodayUsag
       unit: "tokens",
       ...(statusLine.weeklyResetAt === null ? {} : { resetAt: statusLine.weeklyResetAt }),
     });
+  }
+
+  if (statusLine.usageResetCredits.length > 0) {
+    metrics.push({
+      key: "usage_reset_credits",
+      value: statusLine.usageResetCredits.length,
+      unit: "count",
+    });
+    metrics.push(...statusLine.usageResetCredits.map((credit) => ({
+      key: credit.status === "estimated" ? "usage_reset_credit_estimate" as const : "usage_reset_credit" as const,
+      value: 1,
+      unit: "count" as const,
+      ...(credit.status === "estimated"
+        ? credit.estimatedEarliestExpiryUtc === null ? {} : { resetAt: credit.estimatedEarliestExpiryUtc }
+        : credit.expiresAt === null ? {} : { resetAt: credit.expiresAt }),
+    })));
   }
 
   if (statusLine.contextWindowTokens !== null && statusLine.contextWindowTokens > 0) {

@@ -21,7 +21,10 @@ export const PROVIDER_ENV_KEYS = {
   datadog: ["DATADOG_API_KEY", "DATADOG_APP_KEY", "DATADOG_SITE"],
   sentry: ["SENTRY_AUTH_TOKEN", "SENTRY_ORG"],
   "codex-cli": [],
+  "codex-app": [],
   "claude-cli": [],
+  "claude-app": [],
+  antigravity: [],
 } as const;
 
 export type ConfiguredProvider = keyof typeof PROVIDER_ENV_KEYS;

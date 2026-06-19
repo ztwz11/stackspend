@@ -19,12 +19,15 @@ export const PROVIDER_KEYS = [
   "datadog",
   "sentry",
   "codex-cli",
+  "codex-app",
   "claude-cli",
+  "claude-app",
+  "antigravity",
 ] as const;
 
 export const LIVE_PROVIDER_KEYS = ["aws", "openai", "supabase", "cloudflare"] as const;
 export const AVAILABLE_PROVIDER_KEYS = LIVE_PROVIDER_KEYS;
-export const LOCAL_PROVIDER_KEYS = ["codex-cli", "claude-cli"] as const;
+export const LOCAL_PROVIDER_KEYS = ["codex-cli", "codex-app", "claude-cli", "claude-app", "antigravity"] as const;
 export const CONNECTABLE_PROVIDER_KEYS = [
   ...AVAILABLE_PROVIDER_KEYS,
   ...LOCAL_PROVIDER_KEYS,
@@ -641,6 +644,25 @@ export const providerCatalog: readonly ProviderCatalogItem[] = [
     ],
   },
   {
+    key: "codex-app",
+    name: "Codex App",
+    category: "AI",
+    status: "available",
+    authMethods: ["Local app"],
+    dataSurfaces: ["usage", "health"],
+    liveGranularity: "usage_only",
+    requiredEnvKeys: [],
+    credentialRequirements: ["Local Codex desktop app data plus Codex session status metadata"],
+    setupLinks: [
+      {
+        label: "Codex app data",
+        href: "https://chatgpt.com/codex",
+        description: "Inspect the local Codex app and session status metadata used for app usage estimates.",
+        valueHints: ["APPDATA\\Codex", "CODEX_HOME", ".codex/sessions", "rate_limits"],
+      },
+    ],
+  },
+  {
     key: "claude-cli",
     name: "Claude CLI",
     category: "AI",
@@ -656,6 +678,44 @@ export const providerCatalog: readonly ProviderCatalogItem[] = [
         href: "https://docs.anthropic.com/en/docs/claude-code/cli-usage",
         description: "Install or inspect the local Claude CLI used for local usage estimates.",
         valueHints: ["claude --version", "CLAUDE_CONFIG_DIR", ".claude/projects"],
+      },
+    ],
+  },
+  {
+    key: "claude-app",
+    name: "Claude App",
+    category: "AI",
+    status: "available",
+    authMethods: ["Local app"],
+    dataSurfaces: ["usage", "health"],
+    liveGranularity: "usage_only",
+    requiredEnvKeys: [],
+    credentialRequirements: ["Local Claude desktop app data"],
+    setupLinks: [
+      {
+        label: "Claude app",
+        href: "https://claude.ai/download",
+        description: "Inspect the local Claude app data used for local app presence and usage status.",
+        valueHints: ["APPDATA\\Claude", "Claude desktop", "local app"],
+      },
+    ],
+  },
+  {
+    key: "antigravity",
+    name: "Antigravity",
+    category: "AI",
+    status: "available",
+    authMethods: ["Local app"],
+    dataSurfaces: ["usage", "health"],
+    liveGranularity: "usage_only",
+    requiredEnvKeys: [],
+    credentialRequirements: ["Local Antigravity app data"],
+    setupLinks: [
+      {
+        label: "Antigravity app data",
+        href: "https://antigravity.google/",
+        description: "Inspect the local Antigravity app data used for local app presence and usage status.",
+        valueHints: ["APPDATA\\Antigravity", "Google Antigravity", "local app"],
       },
     ],
   },

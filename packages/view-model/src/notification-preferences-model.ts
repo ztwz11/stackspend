@@ -10,6 +10,7 @@ export const NOTIFICATION_WIDGET_KEYS = [
   "claude_weekly_percent",
   "codex_five_hour_percent",
   "codex_weekly_percent",
+  "codex_reset_credit_expiry",
   "supabase_usage_health",
   "cloudflare_month_to_date",
 ] as const;
@@ -22,6 +23,8 @@ export const LOCAL_CLI_DASHBOARD_METRIC_KEYS = [
   "weekly_limit_percent",
   "five_hour_remaining_tokens",
   "weekly_remaining_tokens",
+  "usage_reset_credits",
+  "usage_reset_credit_estimate",
   "context_tokens",
   "input_tokens",
   "output_tokens",
@@ -33,8 +36,37 @@ export const LOCAL_CLI_DASHBOARD_METRIC_KEYS = [
   "log_files",
 ] as const;
 
+export const DASHBOARD_VIEW_KEYS = ["overview", "today", "forecast", "risks"] as const;
+export const DASHBOARD_WIDGET_SIZES = ["compact", "normal", "wide", "full"] as const;
+export const DASHBOARD_WIDGET_KEYS_BY_VIEW = {
+  overview: [
+    "overview_meta",
+    "overview_metrics",
+    "overview_trend",
+    "overview_grouping",
+    "overview_services",
+    "overview_insights",
+  ],
+  today: [
+    "today_main",
+    "today_rail",
+  ],
+  forecast: [
+    "forecast_metrics",
+    "forecast_table",
+    "forecast_breakdown",
+  ],
+  risks: [
+    "risks_summary",
+    "risks_table",
+  ],
+} as const;
+
 export type NotificationWidgetKey = (typeof NOTIFICATION_WIDGET_KEYS)[number];
 export type LocalCliDashboardMetricKey = (typeof LOCAL_CLI_DASHBOARD_METRIC_KEYS)[number];
+export type DashboardViewKey = (typeof DASHBOARD_VIEW_KEYS)[number];
+export type DashboardWidgetSize = (typeof DASHBOARD_WIDGET_SIZES)[number];
+export type DashboardWidgetKey = (typeof DASHBOARD_WIDGET_KEYS_BY_VIEW)[DashboardViewKey][number];
 export type ThresholdOperator = "gte" | "lte" | "eq";
 export type DigestInterval = "six-hours" | "daily" | "weekly";
 
@@ -60,8 +92,27 @@ export interface NotificationPreferences {
   hud: HudPreferences;
 }
 
+export interface DashboardBudgetPreferences {
+  monthlyBudgetMinor: number | null;
+  currency: string;
+  warningPercent: number;
+  criticalPercent: number;
+}
+
 export interface DashboardDisplayPreferences {
   localCliMetricKeys: readonly LocalCliDashboardMetricKey[];
+  budget: DashboardBudgetPreferences;
+  widgetLayouts: DashboardWidgetLayoutPreferences;
+}
+
+export type DashboardWidgetLayoutPreferences = {
+  readonly [ViewKey in DashboardViewKey]: readonly DashboardWidgetLayoutItem[];
+};
+
+export interface DashboardWidgetLayoutItem {
+  widgetKey: DashboardWidgetKey;
+  visible: boolean;
+  size: DashboardWidgetSize;
 }
 
 export interface HudPreferences {
@@ -84,13 +135,22 @@ export const DEFAULT_SELECTED_NOTIFICATION_WIDGET_KEYS: readonly NotificationWid
   "stale_connection_count",
   "openai_today_tokens",
   "codex_five_hour_percent",
+  "codex_reset_credit_expiry",
 ];
 
 export const DEFAULT_LOCAL_CLI_DASHBOARD_METRIC_KEYS: readonly LocalCliDashboardMetricKey[] = [
   "context_percent",
   "last_request_tokens",
   "total_tokens",
+  "usage_reset_credits",
 ];
+
+export const DEFAULT_DASHBOARD_WIDGET_LAYOUTS: DashboardWidgetLayoutPreferences = {
+  overview: defaultDashboardWidgetLayout("overview"),
+  today: defaultDashboardWidgetLayout("today"),
+  forecast: defaultDashboardWidgetLayout("forecast"),
+  risks: defaultDashboardWidgetLayout("risks"),
+};
 
 export const DEFAULT_NOTIFICATION_THRESHOLD_RULES: readonly NotificationThresholdRule[] = [
   {
@@ -126,6 +186,13 @@ export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
   desktopEnabled: false,
   dashboard: {
     localCliMetricKeys: DEFAULT_LOCAL_CLI_DASHBOARD_METRIC_KEYS,
+    widgetLayouts: DEFAULT_DASHBOARD_WIDGET_LAYOUTS,
+    budget: {
+      monthlyBudgetMinor: null,
+      currency: "USD",
+      warningPercent: 80,
+      criticalPercent: 100,
+    },
   },
   hud: {
     alwaysOnTop: true,
@@ -180,6 +247,112 @@ function parseDashboardDisplayPreferences(value: unknown): DashboardDisplayPrefe
 
   return {
     localCliMetricKeys: parseLocalCliDashboardMetricKeys(record.localCliMetricKeys),
+    budget: parseDashboardBudgetPreferences(record.budget),
+    widgetLayouts: parseDashboardWidgetLayouts(record.widgetLayouts),
+  };
+}
+
+function parseDashboardWidgetLayouts(value: unknown): DashboardWidgetLayoutPreferences {
+  const record = isRecord(value) ? value : {};
+
+  return {
+    overview: parseDashboardWidgetLayout("overview", record.overview),
+    today: parseDashboardWidgetLayout("today", record.today),
+    forecast: parseDashboardWidgetLayout("forecast", record.forecast),
+    risks: parseDashboardWidgetLayout("risks", record.risks),
+  };
+}
+
+function parseDashboardWidgetLayout(
+  viewKey: DashboardViewKey,
+  value: unknown,
+): readonly DashboardWidgetLayoutItem[] {
+  const validWidgetKeys = new Set<DashboardWidgetKey>(DASHBOARD_WIDGET_KEYS_BY_VIEW[viewKey]);
+  const defaults = defaultDashboardWidgetLayout(viewKey);
+  const defaultByKey = new Map(defaults.map((item) => [item.widgetKey, item]));
+  const parsed = Array.isArray(value)
+    ? value
+        .map((item): DashboardWidgetLayoutItem | null => {
+          if (!isRecord(item) || typeof item.widgetKey !== "string" || !validWidgetKeys.has(item.widgetKey as DashboardWidgetKey)) {
+            return null;
+          }
+
+          const widgetKey = item.widgetKey as DashboardWidgetKey;
+          const fallback = defaultByKey.get(widgetKey);
+
+          return {
+            widgetKey,
+            visible: typeof item.visible === "boolean" ? item.visible : fallback?.visible ?? true,
+            size: parseDashboardWidgetSize(item.size, fallback?.size ?? "normal"),
+          };
+        })
+        .filter((item): item is DashboardWidgetLayoutItem => item !== null)
+    : [];
+  const seen = new Set<DashboardWidgetKey>();
+  const normalized = parsed.filter((item) => {
+    if (seen.has(item.widgetKey)) {
+      return false;
+    }
+
+    seen.add(item.widgetKey);
+    return true;
+  });
+  const missing = defaults.filter((item) => !seen.has(item.widgetKey));
+
+  return [...normalized, ...missing];
+}
+
+function defaultDashboardWidgetLayout(viewKey: DashboardViewKey): DashboardWidgetLayoutItem[] {
+  return DASHBOARD_WIDGET_KEYS_BY_VIEW[viewKey].map((widgetKey) => ({
+    widgetKey,
+    visible: true,
+    size: defaultDashboardWidgetSize(widgetKey),
+  }));
+}
+
+function defaultDashboardWidgetSize(widgetKey: DashboardWidgetKey): DashboardWidgetSize {
+  if (widgetKey === "overview_metrics" || widgetKey === "overview_services" || widgetKey === "risks_table") {
+    return "full";
+  }
+
+  if (widgetKey === "today_main" || widgetKey === "forecast_table") {
+    return "wide";
+  }
+
+  if (widgetKey === "forecast_breakdown" || widgetKey === "today_rail") {
+    return "compact";
+  }
+
+  return "normal";
+}
+
+function parseDashboardWidgetSize(value: unknown, fallback: DashboardWidgetSize): DashboardWidgetSize {
+  return typeof value === "string" && DASHBOARD_WIDGET_SIZES.includes(value as DashboardWidgetSize)
+    ? value as DashboardWidgetSize
+    : fallback;
+}
+
+function parseDashboardBudgetPreferences(value: unknown): DashboardBudgetPreferences {
+  const record = isRecord(value) ? value : {};
+  const monthlyBudgetMinor = parseOptionalPositiveInteger(record.monthlyBudgetMinor);
+  const warningPercent = clampNumber(
+    record.warningPercent,
+    1,
+    999,
+    DEFAULT_NOTIFICATION_PREFERENCES.dashboard.budget.warningPercent,
+  );
+  const criticalPercent = clampNumber(
+    record.criticalPercent,
+    warningPercent,
+    999,
+    DEFAULT_NOTIFICATION_PREFERENCES.dashboard.budget.criticalPercent,
+  );
+
+  return {
+    monthlyBudgetMinor,
+    currency: parseCurrency(record.currency, DEFAULT_NOTIFICATION_PREFERENCES.dashboard.budget.currency),
+    warningPercent,
+    criticalPercent,
   };
 }
 
@@ -286,6 +459,28 @@ function parseNonNegativeNumber(value: unknown): number | null {
   }
 
   return Math.max(0, value);
+}
+
+function parseOptionalPositiveInteger(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    return null;
+  }
+
+  return Math.round(value);
+}
+
+function parseCurrency(value: unknown, fallback: string): string {
+  if (typeof value !== "string") {
+    return fallback;
+  }
+
+  const normalized = value.trim().toUpperCase();
+
+  return /^[A-Z]{3}$/.test(normalized) ? normalized : fallback;
 }
 
 function clampNumber(value: unknown, min: number, max: number, fallback: number): number {

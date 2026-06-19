@@ -2,13 +2,13 @@
 
 import { useTransition } from "react";
 
-export function LiveRefreshButton({ label }: { label: string }) {
+export function LiveRefreshButton({ className = "ghost-button", label }: { className?: string; label: string }) {
   const [isPending, startTransition] = useTransition();
 
   return (
     <button
       aria-busy={isPending}
-      className="ghost-button"
+      className={className}
       disabled={isPending}
       onClick={() => {
         startTransition(async () => {

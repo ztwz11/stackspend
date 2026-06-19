@@ -8,6 +8,7 @@ import {
   MoreVertical,
 } from "lucide-react";
 import type { Messages, Locale } from "../lib/i18n";
+import { BudgetSettings } from "./BudgetSettings";
 import { ConnectionCard } from "./ConnectionCard";
 import { DashboardDisplaySettings } from "./DashboardDisplaySettings";
 import { LiveRefreshButton } from "./LiveRefreshButton";
@@ -19,7 +20,12 @@ import type {
   OperationsProviderConnection,
   OperationsUsageTrendPoint,
 } from "../lib/operations-data";
-import type { ProviderCatalogItem } from "../lib/provider-catalog";
+import type { ProviderCatalogItem, ProviderSetupLink } from "../lib/provider-catalog";
+import type {
+  DashboardViewKey,
+  DashboardWidgetKey,
+  DashboardWidgetLayoutItem,
+} from "../../../packages/view-model/src/index";
 
 export type DashboardGrouping = "service" | "connection";
 
@@ -48,6 +54,54 @@ export function PageHeader({
       </div>
       {meta === undefined ? null : <div className="meta-stack">{meta}</div>}
     </header>
+  );
+}
+
+export function ProviderSourceLink({
+  provider,
+  variant = "icon",
+}: {
+  provider: {
+    displayName: string;
+    setupLinks: readonly ProviderSetupLink[];
+  };
+  variant?: "button" | "icon";
+}) {
+  const link = primaryProviderSourceLink(provider.setupLinks);
+
+  if (link === undefined) {
+    return null;
+  }
+
+  const label = `${provider.displayName}: ${link.label}`;
+
+  if (variant === "button") {
+    return (
+      <a
+        aria-label={label}
+        className="ghost-button header-control"
+        href={link.href}
+        rel="noreferrer"
+        target="_blank"
+        title={link.description}
+      >
+        <span>{link.label}</span>
+        <ExternalLink aria-hidden="true" size={14} />
+      </a>
+    );
+  }
+
+  return (
+    <a
+      aria-label={label}
+      className="icon-button"
+      href={link.href}
+      rel="noreferrer"
+      target="_blank"
+      title={link.description}
+    >
+      <ExternalLink aria-hidden="true" size={15} strokeWidth={1.8} />
+    </a>
   );
 }
 
@@ -118,15 +172,23 @@ function hrefWithGrouping(href: string, grouping: DashboardGrouping): string {
 }
 
 export function OverviewView({ dashboard, locale, messages, grouping = "service", groupingBasePath }: ViewProps) {
-  return (
-    <div className="stack">
-      <DashboardMeta dashboard={dashboard} locale={locale} messages={messages} />
+  const widgets = {
+    overview_meta: <DashboardMeta dashboard={dashboard} locale={locale} messages={messages} />,
+    overview_metrics: (
       <section className="metric-grid">
         <MetricCard
           label={messages.dashboard.monthForecast}
           value={formatMinorAmount(dashboard.summary.monthForecastAmountMinor, dashboard.summary.currency, locale)}
           meta={`${messages.dashboard.canonicalCoverage}: ${dashboard.summary.canonicalCoverageDate ?? labelFor(messages, "missing")}`}
           progress={forecastCoveragePercent(dashboard)}
+        />
+        <MetricCard
+          label={messages.dashboard.monthlyBudget}
+          value={budgetValueLabel(dashboard, locale, messages)}
+          meta={budgetUsageLabel(dashboard, locale, messages)}
+          progress={dashboard.summary.budget.usagePercent ?? undefined}
+          progressState={dashboard.summary.budget.riskLevel}
+          warning={dashboard.summary.budget.riskLevel !== "low"}
         />
         <MetricCard
           label={messages.dashboard.confirmedThroughYesterday}
@@ -153,11 +215,15 @@ export function OverviewView({ dashboard, locale, messages, grouping = "service"
           warning={dashboard.summary.providersNeedingAttention > 0}
         />
       </section>
+    ),
+    overview_trend: (
       <UsageTrendPanel
         locale={locale}
         messages={messages}
         points={dashboard.usageTrend}
       />
+    ),
+    overview_grouping: (
       <div className="view-switch-row">
         <GroupingToggle
           basePath={groupingBasePath}
@@ -166,23 +232,28 @@ export function OverviewView({ dashboard, locale, messages, grouping = "service"
           wide
         />
       </div>
+    ),
+    overview_services: (
       <DashboardServicesTable
         dashboard={dashboard}
         locale={locale}
         messages={messages}
         grouping={grouping}
       />
-      <DashboardInsightPanels dashboard={dashboard} locale={locale} messages={messages} />
-    </div>
+    ),
+    overview_insights: <DashboardInsightPanels dashboard={dashboard} locale={locale} messages={messages} />,
+  } satisfies DashboardWidgetNodes;
+
+  return (
+    <DashboardWidgetLayout dashboard={dashboard} viewKey="overview" widgets={widgets} />
   );
 }
 
 export function TodayLiveView({ dashboard, locale, messages, grouping = "service", groupingBasePath }: ViewProps) {
   const rows = serviceRowsFor(dashboard, grouping);
   const liveStats = summarizeLiveRows(rows);
-
-  return (
-    <div className="ops-grid">
+  const widgets = {
+    today_main: (
       <div className="panel ops-main-panel">
         <div className="panel-header">
           <h2 className="panel-title">{messages.dashboard.todayTitle}</h2>
@@ -207,14 +278,18 @@ export function TodayLiveView({ dashboard, locale, messages, grouping = "service
           rows={rows}
         />
       </div>
-      <TodayLiveRail dashboard={dashboard} rows={rows} locale={locale} messages={messages} />
-    </div>
+    ),
+    today_rail: <TodayLiveRail dashboard={dashboard} rows={rows} locale={locale} messages={messages} />,
+  } satisfies DashboardWidgetNodes;
+
+  return (
+    <DashboardWidgetLayout className="dashboard-widget-grid dashboard-widget-grid-ops" dashboard={dashboard} viewKey="today" widgets={widgets} />
   );
 }
 
 export function ForecastView({ dashboard, locale, messages, grouping = "service", groupingBasePath }: ViewProps) {
-  return (
-    <div className="stack">
+  const widgets = {
+    forecast_metrics: (
       <section className="metric-grid">
         <MetricCard
           label={messages.dashboard.monthForecast}
@@ -237,17 +312,21 @@ export function ForecastView({ dashboard, locale, messages, grouping = "service"
           meta={dashboard.timezone}
         />
       </section>
-      <div className="ops-grid">
-        <ProviderSummaryTable
-          dashboard={dashboard}
-          locale={locale}
-          messages={messages}
-          grouping={grouping}
-          groupingBasePath={groupingBasePath}
-        />
-        <ForecastBreakdownPanel dashboard={dashboard} locale={locale} messages={messages} />
-      </div>
-    </div>
+    ),
+    forecast_table: (
+      <ProviderSummaryTable
+        dashboard={dashboard}
+        locale={locale}
+        messages={messages}
+        grouping={grouping}
+        groupingBasePath={groupingBasePath}
+      />
+    ),
+    forecast_breakdown: <ForecastBreakdownPanel dashboard={dashboard} locale={locale} messages={messages} />,
+  } satisfies DashboardWidgetNodes;
+
+  return (
+    <DashboardWidgetLayout className="dashboard-widget-grid dashboard-widget-grid-ops" dashboard={dashboard} viewKey="forecast" widgets={widgets} />
   );
 }
 
@@ -261,9 +340,9 @@ export function RisksView({ dashboard, locale, messages, grouping = "service", g
       || provider.liveFreshness !== "live",
   );
 
-  return (
-    <div className="stack">
-      <RiskSummaryCards rows={rows} messages={messages} />
+  const widgets = {
+    risks_summary: <RiskSummaryCards dashboard={dashboard} rows={rows} messages={messages} />,
+    risks_table: (
       <div className="panel">
         <div className="panel-header">
           <h2 className="panel-title">{messages.dashboard.risksTitle}</h2>
@@ -310,7 +389,11 @@ export function RisksView({ dashboard, locale, messages, grouping = "service", g
           )}
         </div>
       </div>
-    </div>
+    ),
+  } satisfies DashboardWidgetNodes;
+
+  return (
+    <DashboardWidgetLayout dashboard={dashboard} viewKey="risks" widgets={widgets} />
   );
 }
 
@@ -501,7 +584,7 @@ function LocalAiCliServiceDetail({
   const contextValue = usageMetricValue(summary, "context_percent", locale) ??
     usageMetricValue(summary, "context_tokens", locale) ??
     messages.services.noCurrentUsage;
-  const remainingRows = localCliRemainingRowsFromSummary(summary, locale, dashboard.timezone, messages);
+  const remainingRows = localCliRemainingRowsFromSummary(summary, locale, dashboard.timezone, messages, provider.providerKey);
   const learnMoreHref = provider.setupLinks[0]?.href;
 
   return (
@@ -654,6 +737,7 @@ export function PreferencesView({ dashboard, locale, messages }: ViewProps) {
           <KeyValue label={messages.settings.telemetry} value={messages.settings.off} />
         </InfoPanel>
       </div>
+      <BudgetSettings currentCurrency={dashboard.summary.currency} messages={messages} />
       <DashboardDisplaySettings messages={messages} />
     </div>
   );
@@ -879,7 +963,15 @@ function ForecastBreakdownPanel({
   );
 }
 
-function RiskSummaryCards({ rows, messages }: { rows: readonly OperationsRow[]; messages: Messages }) {
+function RiskSummaryCards({
+  dashboard,
+  rows,
+  messages,
+}: {
+  dashboard: OperationsDashboard;
+  rows: readonly OperationsRow[];
+  messages: Messages;
+}) {
   const staleLive = rows.filter((row) => row.liveFreshness !== "live").length;
   const missingCanonical = rows.filter((row) => row.canonicalFreshness !== "fresh").length;
   const healthIssues = rows.filter((row) => row.healthStatus !== "ok").length;
@@ -892,6 +984,12 @@ function RiskSummaryCards({ rows, messages }: { rows: readonly OperationsRow[]; 
 
   return (
     <section className="risk-summary-grid">
+      <StatusMetric
+        label={messages.dashboard.budgetRisk}
+        value={dashboard.summary.budget.usagePercent === null ? messages.dashboard.budgetNotSet : `${dashboard.summary.budget.usagePercent}%`}
+        state={dashboard.summary.budget.status === "not_configured" ? "stale" : dashboard.summary.budget.riskLevel}
+        messages={messages}
+      />
       <StatusMetric label={messages.services.liveFreshness} value={String(staleLive)} state={staleLive > 0 ? "warning" : "ok"} messages={messages} />
       <StatusMetric label={messages.services.canonicalFreshness} value={String(missingCanonical)} state={missingCanonical > 0 ? "warning" : "ok"} messages={messages} />
       <StatusMetric label={messages.services.healthRisk} value={String(healthIssues)} state={healthIssues > 0 ? "critical" : "ok"} messages={messages} />
@@ -1292,7 +1390,7 @@ function DashboardAmountServicesTable({
               <th>{messages.dashboard.monthForecast}</th>
               <th>{messages.dashboard.confirmedThroughYesterday}</th>
               <th>{messages.dashboard.todayLive}</th>
-              <th>{messages.table.risk}</th>
+              <th>{messages.dashboard.confirmedCoverage}</th>
               <th aria-label="actions" />
             </tr>
           </thead>
@@ -1323,11 +1421,14 @@ function DashboardAmountServicesTable({
                     <td>
                       <div className="table-progress-cell">
                         <span>{ratio}%</span>
-                        <ProgressBar value={ratio} state={provider.riskLevel} />
+                        <ProgressBar value={ratio} state="low" />
                       </div>
                     </td>
                     <td className="table-action-cell">
-                      <ServiceDetailLink locale={locale} messages={messages} row={provider} />
+                      <div className="table-action-buttons">
+                        <ProviderSourceLink provider={provider} />
+                        <ServiceDetailLink locale={locale} messages={messages} row={provider} />
+                      </div>
                     </td>
                   </tr>
                 );
@@ -1395,7 +1496,10 @@ function DashboardUsageServicesTable({
                   <td>{formatOptionalDate(provider.latestLiveCheck, locale, dashboard.timezone, messages)}</td>
                   <td>{provider.liveConfidence}</td>
                   <td className="table-action-cell">
-                    <ServiceDetailLink locale={locale} messages={messages} row={provider} />
+                    <div className="table-action-buttons">
+                      <ProviderSourceLink provider={provider} />
+                      <ServiceDetailLink locale={locale} messages={messages} row={provider} />
+                    </div>
                   </td>
                 </tr>
               ))
@@ -1655,7 +1759,62 @@ function forecastRingStyle(dashboard: OperationsDashboard): CSSProperties {
   } as CSSProperties;
 }
 
+function budgetValueLabel(dashboard: OperationsDashboard, locale: Locale, messages: Messages): string {
+  return dashboard.summary.budget.monthlyBudgetMinor === null
+    ? messages.dashboard.budgetNotSet
+    : formatMinorAmount(dashboard.summary.budget.monthlyBudgetMinor, dashboard.summary.budget.currency, locale);
+}
+
+function budgetUsageLabel(dashboard: OperationsDashboard, locale: Locale, messages: Messages): string {
+  if (dashboard.summary.budget.status === "currency_mismatch") {
+    return `${messages.dashboard.budgetRisk}: ${labelFor(messages, "warning")}`;
+  }
+
+  if (dashboard.summary.budget.usagePercent === null) {
+    return messages.dashboard.budgetNotSet;
+  }
+
+  return `${messages.dashboard.budgetUsage}: ${new Intl.NumberFormat(locale).format(dashboard.summary.budget.usagePercent)}%`;
+}
+
 type OperationsRow = OperationsProvider | OperationsProviderConnection;
+type DashboardWidgetNodes = Partial<Record<DashboardWidgetKey, ReactNode>>;
+
+function DashboardWidgetLayout({
+  className = "dashboard-widget-grid",
+  dashboard,
+  viewKey,
+  widgets,
+}: {
+  className?: string;
+  dashboard: OperationsDashboard;
+  viewKey: DashboardViewKey;
+  widgets: DashboardWidgetNodes;
+}) {
+  const layout = dashboard.displayPreferences.widgetLayouts[viewKey];
+
+  return (
+    <div className={className}>
+      {layout.map((item) => {
+        const widget = widgets[item.widgetKey];
+
+        if (!item.visible || widget === undefined) {
+          return null;
+        }
+
+        return (
+          <div className={dashboardWidgetClassName(item)} key={item.widgetKey}>
+            {widget}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function dashboardWidgetClassName(item: DashboardWidgetLayoutItem): string {
+  return `dashboard-widget dashboard-widget-${item.size}`;
+}
 
 function serviceRowsFor(
   dashboard: OperationsDashboard,
@@ -1670,6 +1829,30 @@ function rowKey(row: OperationsRow): string {
 
 function rowSubLabel(row: OperationsRow): string {
   return isConnectionRow(row) ? row.connectionId : row.providerKey;
+}
+
+function primaryProviderSourceLink(links: readonly ProviderSetupLink[]): ProviderSetupLink | undefined {
+  return [...links]
+    .sort((first, second) => providerSourceLinkScore(second) - providerSourceLinkScore(first))[0];
+}
+
+function providerSourceLinkScore(link: ProviderSetupLink): number {
+  const searchable = `${link.label} ${link.href} ${link.description}`.toLowerCase();
+  let score = 0;
+
+  if (/(console|dashboard|settings|tokens|usage|cost|billing|management)/.test(searchable)) {
+    score += 20;
+  }
+
+  if (/(console\.aws\.amazon\.com|platform\.openai\.com\/settings|supabase\.com\/dashboard|dash\.cloudflare\.com)/.test(searchable)) {
+    score += 30;
+  }
+
+  if (/(docs|install|configure|profiles|sso|keys-create-delete)/.test(searchable)) {
+    score -= 8;
+  }
+
+  return score;
 }
 
 function isConnectionRow(row: OperationsRow): row is OperationsProviderConnection {
@@ -1713,13 +1896,16 @@ function serviceNameCell(row: OperationsRow): ReactNode {
 function summaryServiceNameCell(row: OperationsRow, locale: Locale, serviceLinks: boolean): ReactNode {
   return (
     <>
-      {serviceLinks ? (
-        <Link href={`/${locale}/services/${row.providerKey}`}>
+      <span className="summary-service-title-line">
+        {serviceLinks ? (
+          <Link href={`/${locale}/services/${row.providerKey}`}>
+            <strong>{row.displayName}</strong>
+          </Link>
+        ) : (
           <strong>{row.displayName}</strong>
-        </Link>
-      ) : (
-        <strong>{row.displayName}</strong>
-      )}
+        )}
+        <ProviderSourceLink provider={row} />
+      </span>
       <div className="muted">{rowSubLabel(row)}</div>
     </>
   );
@@ -1846,6 +2032,7 @@ function DashboardMeta({
             </Link>
             <RefreshPageButton label={messages.dashboard.refresh} />
           </div>
+          <span>{exchangeRateLabel(dashboard, locale)}</span>
           <span>{messages.app.generated}: {dashboard.generatedAt}</span>
         </>
       }
@@ -1853,17 +2040,35 @@ function DashboardMeta({
   );
 }
 
+function exchangeRateLabel(dashboard: OperationsDashboard, locale: Locale): string {
+  const rate = dashboard.summary.exchangeRate;
+
+  if (rate.status === "identity") {
+    return `${rate.displayCurrency}`;
+  }
+
+  if (rate.status === "unavailable") {
+    return `${rate.sourceCurrency}->${rate.requestedCurrency}: unavailable`;
+  }
+
+  return `${rate.sourceCurrency}->${rate.displayCurrency}: ${new Intl.NumberFormat(locale, {
+    maximumFractionDigits: 4,
+  }).format(rate.rate)}${rate.rateDate === null ? "" : ` (${rate.rateDate})`}`;
+}
+
 function MetricCard({
   label,
   value,
   meta,
   progress,
+  progressState = "low",
   warning = false,
 }: {
   label: string;
   value: string;
   meta: string;
-  progress?: number;
+  progress?: number | undefined;
+  progressState?: string | undefined;
   warning?: boolean;
 }) {
   return (
@@ -1874,7 +2079,7 @@ function MetricCard({
       </div>
       <p className={value.length > 7 ? "metric-value metric-value-compact" : "metric-value"}>{value}</p>
       <p className="metric-meta">{meta}</p>
-      {progress === undefined ? null : <ProgressBar value={progress} state="low" />}
+      {progress === undefined ? null : <ProgressBar value={progress} state={progressState} />}
     </article>
   );
 }
@@ -1932,7 +2137,11 @@ function RequirementLinks({ provider, messages }: { provider: OperationsProvider
 }
 
 function isLocalAiCliProvider(providerKey: string): boolean {
-  return providerKey === "codex-cli" || providerKey === "claude-cli";
+  return providerKey === "codex-cli" ||
+    providerKey === "codex-app" ||
+    providerKey === "claude-cli" ||
+    providerKey === "claude-app" ||
+    providerKey === "antigravity";
 }
 
 function dashboardMetricKeysForRow(
@@ -1947,12 +2156,13 @@ function localCliRemainingRowsFromSummary(
   locale: Locale,
   timezone: string,
   messages: Messages,
+  providerKey?: string,
 ): Array<{ label: string; percent: string; resetAt: string }> {
   if (summary === null) {
     return [];
   }
 
-  return [
+  const rows: Array<{ label: string; percent: string; resetAt: string }> = [
     {
       label: messages.settings.localCliFiveHourWindow,
       percent: formatRemainingUsagePercent(summary, "five_hour_remaining_tokens", "five_hour_limit_percent", locale),
@@ -1964,6 +2174,48 @@ function localCliRemainingRowsFromSummary(
       resetAt: formatUsageResetAt(usageMetric(summary, "weekly_remaining_tokens")?.resetAt, locale, timezone),
     },
   ];
+
+  const resetCreditEstimateMetrics = usageMetrics(summary, "usage_reset_credit_estimate");
+  const resetCreditMetrics = usageMetrics(summary, "usage_reset_credit");
+
+  if (resetCreditEstimateMetrics.length > 0) {
+    rows.push(...resetCreditEstimateMetrics.map((metric, index) => ({
+      label: `${messages.services.usageResetCreditEstimate} ${index + 1}`,
+      percent: formatUsageMetric(metric.value, metric.unit, locale),
+      resetAt: formatUsageResetAt(metric.resetAt, locale, timezone),
+    })));
+  }
+
+  if (resetCreditMetrics.length > 0) {
+    rows.push(...resetCreditMetrics.map((metric, index) => ({
+      label: `${messages.settings.localCliUsageResetCredit} ${index + 1}`,
+      percent: formatUsageMetric(metric.value, metric.unit, locale),
+      resetAt: formatUsageResetAt(metric.resetAt, locale, timezone),
+    })));
+    return rows;
+  }
+
+  const resetCreditCount = usageMetric(summary, "usage_reset_credits");
+
+  if (resetCreditCount !== undefined) {
+    rows.push({
+      label: messages.settings.localCliUsageResetCredits,
+      percent: formatUsageMetric(resetCreditCount.value, resetCreditCount.unit, locale),
+      resetAt: "-",
+    });
+  } else if (providerKey !== undefined && isCodexLocalProvider(providerKey)) {
+    rows.push({
+      label: messages.settings.localCliUsageResetCredits,
+      percent: "-",
+      resetAt: "-",
+    });
+  }
+
+  return rows;
+}
+
+function isCodexLocalProvider(providerKey: string): boolean {
+  return providerKey === "codex-cli" || providerKey === "codex-app";
 }
 
 function formatRemainingUsagePercent(
@@ -1998,6 +2250,13 @@ function usageMetric(
   key: string,
 ): NonNullable<OperationsProvider["currentUsageSummary"]>["metrics"][number] | undefined {
   return summary?.metrics.find((item) => item.key === key);
+}
+
+function usageMetrics(
+  summary: OperationsProvider["currentUsageSummary"],
+  key: string,
+): Array<NonNullable<OperationsProvider["currentUsageSummary"]>["metrics"][number]> {
+  return summary?.metrics.filter((item) => item.key === key) ?? [];
 }
 
 function rowTodayLiveLabel(row: OperationsRow, locale: Locale, messages: Messages): string {
@@ -2059,8 +2318,8 @@ function UsageSummaryBlock({
       ) : (
         <div className="usage-summary">
           <div className="metric-meta">{messages.services.currentPeriod}</div>
-          {summary.metrics.map((metric) => (
-            <div className="usage-metric" key={metric.key}>
+          {summary.metrics.map((metric, index) => (
+            <div className="usage-metric" key={`${metric.key}:${index}`}>
               <span>{usageMetricLabel(metric.key, messages)}</span>
               <strong>{formatUsageMetric(metric.value, metric.unit, locale)}</strong>
             </div>
@@ -2114,8 +2373,8 @@ function renderUsageSummary(
 
   return (
     <div className="usage-summary compact dashboard-usage-summary">
-      {visibleMetrics.map((metric) => (
-        <div className="usage-metric" key={metric.key}>
+      {visibleMetrics.map((metric, index) => (
+        <div className="usage-metric" key={`${metric.key}:${index}`}>
           <span>{usageMetricLabel(metric.key, messages)}</span>
           <strong>{formatUsageMetric(metric.value, metric.unit, locale)}</strong>
         </div>
@@ -2191,6 +2450,18 @@ function usageMetricLabel(metric: string, messages: Messages): string {
 
   if (metric === "weekly_remaining_tokens") {
     return messages.services.weeklyRemainingTokens;
+  }
+
+  if (metric === "usage_reset_credits") {
+    return messages.services.usageResetCredits;
+  }
+
+  if (metric === "usage_reset_credit") {
+    return messages.services.usageResetCredit;
+  }
+
+  if (metric === "usage_reset_credit_estimate") {
+    return messages.services.usageResetCreditEstimate;
   }
 
   if (metric === "last_request_tokens") {
@@ -2329,7 +2600,7 @@ function formatDateKey(dateKey: string, locale: Locale): string {
 
 function formatUsageMetric(
   value: number,
-  unit: "tokens" | "requests" | "sessions" | "turns" | "calls" | "files" | "percent" | "usd",
+  unit: "tokens" | "requests" | "sessions" | "turns" | "calls" | "files" | "percent" | "usd" | "count",
   locale: Locale,
 ): string {
   if (unit === "percent") {

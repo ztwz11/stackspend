@@ -1,7 +1,10 @@
 import { loadMoneySirenConfig } from "../../../packages/config/src/index";
 import {
   DEFAULT_LOCAL_CLI_DASHBOARD_METRIC_KEYS,
+  DEFAULT_NOTIFICATION_PREFERENCES,
   readNotificationPreferencesFile,
+  type DashboardBudgetPreferences,
+  type DashboardWidgetLayoutPreferences,
   type LocalCliDashboardMetricKey,
   type NotificationPreferences,
 } from "../../../packages/view-model/src/index";
@@ -38,6 +41,7 @@ import {
   type LiveTodaySnapshot,
   type LiveTodayUsageSummary,
 } from "./live-today";
+import { readExchangeRate, type ExchangeRateResult } from "./exchange-rates";
 
 export type CanonicalFreshness = "fresh" | "stale" | "missing";
 export type LiveFreshness = "live" | "stale" | "error" | "unavailable" | "not_configured" | "locked";
@@ -58,10 +62,13 @@ export interface OperationsDashboard {
 
 export interface OperationsDisplayPreferences {
   localCliMetricKeys: readonly LocalCliDashboardMetricKey[];
+  widgetLayouts: DashboardWidgetLayoutPreferences;
 }
 
 export interface OperationsSummary {
   currency: string;
+  sourceCurrency: string;
+  exchangeRate: OperationsExchangeRateStatus;
   monthForecastAmountMinor: number;
   confirmedThroughYesterdayAmountMinor: number;
   todayLiveAmountMinor: number | null;
@@ -70,6 +77,29 @@ export interface OperationsSummary {
   providersNeedingAttention: number;
   canonicalCoverageDate: string | null;
   remainingDaysInMonth: number;
+  budget: OperationsBudgetStatus;
+}
+
+export interface OperationsBudgetStatus {
+  monthlyBudgetMinor: number | null;
+  currency: string;
+  warningPercent: number;
+  criticalPercent: number;
+  usagePercent: number | null;
+  riskLevel: DashboardRiskLevel;
+  status: "not_configured" | "ok" | "warning" | "critical" | "currency_mismatch";
+}
+
+export interface OperationsExchangeRateStatus {
+  sourceCurrency: string;
+  requestedCurrency: string;
+  displayCurrency: string;
+  rate: number;
+  rateDate: string | null;
+  fetchedAt: string;
+  source: "identity" | "frankfurter";
+  status: "identity" | "live" | "unavailable";
+  message?: string;
 }
 
 export interface OperationsProvider {
@@ -137,6 +167,7 @@ export interface OperationsProviderConnection extends Omit<OperationsProvider, "
 export interface ReadOperationsDashboardOptions extends ReadDashboardSnapshotOptions {
   env?: Record<string, string | undefined>;
   connections?: ConnectionsStatusPayload;
+  exchangeRate?: ExchangeRateResult;
   liveToday?: LiveTodaySnapshot;
   notificationPreferences?: NotificationPreferences;
 }
@@ -152,20 +183,27 @@ export async function readOperationsDashboard(
     env,
     now: () => now,
   });
+  const notificationPreferences = options.notificationPreferences ?? await readNotificationPreferencesFile({
+    ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
+    env,
+  });
+  const exchangeRate = options.exchangeRate ?? await readExchangeRate({
+    env,
+    now: () => now,
+    requestedCurrency: notificationPreferences.dashboard.budget.currency,
+    sourceCurrency: snapshot.summary.currency,
+  });
   const liveToday = options.liveToday ?? await readLiveTodaySnapshot({
     env,
     connections,
     now: () => now,
     timezone,
   });
-  const notificationPreferences = options.notificationPreferences ?? await readNotificationPreferencesFile({
-    ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
-    env,
-  });
 
   return buildOperationsDashboard(snapshot, {
     connections,
     env,
+    exchangeRate,
     liveToday,
     notificationPreferences,
     now,
@@ -178,6 +216,7 @@ export function buildOperationsDashboard(
   options: {
     connections?: ConnectionsStatusPayload;
     env: Record<string, string | undefined>;
+    exchangeRate?: ExchangeRateResult;
     liveToday?: LiveTodaySnapshot;
     notificationPreferences?: NotificationPreferences;
     now: Date;
@@ -185,6 +224,12 @@ export function buildOperationsDashboard(
   },
 ): OperationsDashboard {
   const config = loadMoneySirenConfig(options.env);
+  const conversion = buildCurrencyConversion(
+    snapshot.summary.currency,
+    options.notificationPreferences?.dashboard.budget.currency ?? snapshot.summary.currency,
+    options.exchangeRate,
+    options.now,
+  );
   const providers = CONNECTABLE_PROVIDER_KEYS.map((providerKey) => {
     const catalog = findAvailableProvider(providerKey);
     const row = snapshot.providers.find((provider) => provider.providerKey === providerKey);
@@ -200,8 +245,21 @@ export function buildOperationsDashboard(
     const connectionState = connection?.connectionState ?? (providerConfig.configured ? "env_configured" : "not_configured");
     const canonicalFreshness = summarizeCanonicalFreshness(row, options.now, options.timezone);
     const risks = snapshot.alerts.filter((alert) => alert.providerKey === providerKey);
-    const serviceCostBreakdown = buildServiceCostBreakdown(snapshot.usage.latestServiceMetrics, providerKey);
-    const usageTrend = buildUsageTrend(snapshot.usage.dailyMetrics, providerKey);
+    const usageTrend = buildUsageTrend(snapshot.usage.dailyMetrics, providerKey, conversion);
+    const monthForecast = convertAmountMinorForDisplay(
+      row?.estimatedAmountMinor ?? 0,
+      row?.currency ?? snapshot.summary.currency,
+      conversion,
+    );
+    const confirmed = convertAmountMinorForDisplay(
+      row?.billingAmountMinor ?? 0,
+      row?.currency ?? snapshot.summary.currency,
+      conversion,
+    );
+    const todayLiveSource = liveTodayDisplaySource(liveSummary, catalog?.liveGranularity, row);
+    const todayLive = todayLiveSource === null
+      ? null
+      : convertAmountMinorForDisplay(todayLiveSource.amountMinor, todayLiveSource.currency, conversion);
 
     return {
       providerKey,
@@ -224,13 +282,13 @@ export function buildOperationsDashboard(
       currentUsageSummary: liveSummary.usageSummary,
       latestCanonicalSync: row?.latestCollectedAt ?? null,
       latestLiveCheck: liveSummary.checkedAt,
-      monthForecastAmountMinor: row?.estimatedAmountMinor ?? 0,
-      confirmedAmountMinor: row?.billingAmountMinor ?? 0,
-      todayLiveAmountMinor: liveSummary.todayLiveAmountMinor,
+      monthForecastAmountMinor: monthForecast.amountMinor,
+      confirmedAmountMinor: confirmed.amountMinor,
+      todayLiveAmountMinor: todayLive?.amountMinor ?? null,
       todayLiveIncluded: liveSummary.included,
-      currency: liveSummary.currency,
+      currency: todayLive?.currency ?? monthForecast.currency,
       usageSnapshotCount: row?.usageSnapshotCount ?? 0,
-      serviceCostBreakdown,
+      serviceCostBreakdown: buildServiceCostBreakdown(snapshot.usage.latestServiceMetrics, providerKey, conversion),
       usageTrend,
       healthStatus: row?.healthStatus ?? "unknown",
       riskLevel: row?.riskLevel ?? "warning",
@@ -240,7 +298,7 @@ export function buildOperationsDashboard(
   });
   const visibleProviders = providers.filter(isVisibleProvider);
   const visibleConnections = providers.flatMap((provider) =>
-    buildProviderConnectionRows(provider, options.liveToday?.providers ?? [], snapshot.summary.currency)
+    buildProviderConnectionRows(provider, options.liveToday?.providers ?? [], conversion)
   );
   const usageTrend = visibleProviders.flatMap((provider) => provider.usageTrend);
   const canonicalCoverageDate = latestDateKey(
@@ -250,13 +308,13 @@ export function buildOperationsDashboard(
   const includedLiveProviders = visibleProviders.filter((provider) =>
     provider.todayLiveIncluded &&
     provider.todayLiveAmountMinor !== null &&
-    provider.currency === snapshot.summary.currency
+    provider.currency === conversion.displayCurrency
   );
   const todayLiveAmountMinor = sum(includedLiveProviders.map((provider) => provider.todayLiveAmountMinor ?? 0));
   const remainingDays = remainingDaysInMonth(options.now, options.timezone);
   const confirmedThroughYesterdayAmountMinor = sum(
     visibleProviders
-      .filter((provider) => provider.currency === snapshot.summary.currency)
+      .filter((provider) => provider.currency === conversion.displayCurrency)
       .map((provider) => provider.confirmedAmountMinor),
   );
   const projectedRemainingDays = projectedRemainingAmountMinor(
@@ -267,6 +325,11 @@ export function buildOperationsDashboard(
   );
   const monthForecastAmountMinor =
     confirmedThroughYesterdayAmountMinor + todayLiveAmountMinor + projectedRemainingDays;
+  const budget = buildBudgetStatus(
+    options.notificationPreferences?.dashboard.budget,
+    monthForecastAmountMinor,
+    conversion.displayCurrency,
+  );
   const visibleProviderKeys = new Set<string>(visibleProviders.map((provider) => provider.providerKey));
 
   return {
@@ -275,7 +338,9 @@ export function buildOperationsDashboard(
     database: snapshot.database,
     timezone: options.timezone,
     summary: {
-      currency: snapshot.summary.currency,
+      currency: conversion.displayCurrency,
+      sourceCurrency: conversion.sourceCurrency,
+      exchangeRate: conversion.exchangeRate,
       monthForecastAmountMinor,
       confirmedThroughYesterdayAmountMinor,
       todayLiveAmountMinor: includedLiveProviders.length === 0 ? null : todayLiveAmountMinor,
@@ -284,6 +349,7 @@ export function buildOperationsDashboard(
       providersNeedingAttention: visibleProviders.filter(providerNeedsAttention).length,
       canonicalCoverageDate,
       remainingDaysInMonth: remainingDays,
+      budget,
     },
     providers,
     visibleProviders,
@@ -294,6 +360,8 @@ export function buildOperationsDashboard(
         ...(options.notificationPreferences?.dashboard.localCliMetricKeys ??
           DEFAULT_LOCAL_CLI_DASHBOARD_METRIC_KEYS),
       ],
+      widgetLayouts: options.notificationPreferences?.dashboard.widgetLayouts ??
+        DEFAULT_NOTIFICATION_PREFERENCES.dashboard.widgetLayouts,
     },
     risks: snapshot.alerts.filter((alert) =>
       alert.providerKey !== null && visibleProviderKeys.has(alert.providerKey)
@@ -329,17 +397,26 @@ function summarizeCanonicalFreshness(
 function buildServiceCostBreakdown(
   metrics: readonly DashboardUsageMetric[],
   providerKey: ProviderKey,
+  conversion: CurrencyConversion,
 ): OperationsServiceCostRow[] {
   const costRows = metrics
     .filter((metric) => metric.providerKey === providerKey && metric.metric === "unblended_cost")
-    .map((metric) => ({
-      service: metric.service,
-      metric: metric.metric,
-      currency: metric.unit,
-      amountMinor: majorAmountToMinorUnits(metric.value),
-      collectedAt: metric.collectedAt,
-      sharePercent: 0,
-    }));
+    .map((metric) => {
+      const converted = convertAmountMinorForDisplay(
+        majorAmountToMinorUnits(metric.value),
+        metric.unit,
+        conversion,
+      );
+
+      return {
+        service: metric.service,
+        metric: metric.metric,
+        currency: converted.currency,
+        amountMinor: converted.amountMinor,
+        collectedAt: metric.collectedAt,
+        sharePercent: 0,
+      };
+    });
   const totalByCurrency = new Map<string, number>();
 
   for (const row of costRows) {
@@ -421,17 +498,50 @@ function summarizeProviderLive(
   }
 
   const includedItems = liveItems.filter((item) => item.included && item.todayLiveAmountMinor !== null);
-  const currency = singleCurrency(includedItems.map((item) => item.currency)) ?? fallbackCurrency;
+  const amountItems = liveItems.filter((item) => item.todayLiveAmountMinor !== null);
+  const includedCurrency = singleCurrency(includedItems.map((item) => item.currency));
+  const amountCurrency = singleCurrency(amountItems.map((item) => item.currency));
+  const currency = includedCurrency ?? amountCurrency ?? fallbackCurrency;
   const canSumLive = includedItems.length > 0 && includedItems.every((item) => item.currency === currency);
+  const canDisplayLive = amountItems.length > 0 && amountItems.every((item) => item.currency === currency);
 
   return {
     freshness: summarizeLiveItemsFreshness(liveItems, connectionState, liveGranularity),
     confidence: highestConfidence(liveItems.map((item) => item.confidence)),
     usageSummary: liveItems.find((item) => item.usageSummary !== undefined)?.usageSummary ?? null,
     checkedAt: latestIso(liveItems.map((item) => item.checkedAt).filter((value): value is string => value !== null)),
-    todayLiveAmountMinor: canSumLive ? sum(includedItems.map((item) => item.todayLiveAmountMinor ?? 0)) : null,
+    todayLiveAmountMinor: canSumLive
+      ? sum(includedItems.map((item) => item.todayLiveAmountMinor ?? 0))
+      : canDisplayLive
+        ? sum(amountItems.map((item) => item.todayLiveAmountMinor ?? 0))
+        : null,
     included: canSumLive,
     currency,
+  };
+}
+
+function liveTodayDisplaySource(
+  liveSummary: {
+    todayLiveAmountMinor: number | null;
+    currency: string;
+  },
+  liveGranularity: LiveGranularity | undefined,
+  row: DashboardProviderRow | undefined,
+): { amountMinor: number; currency: string } | null {
+  if (liveSummary.todayLiveAmountMinor !== null) {
+    return {
+      amountMinor: liveSummary.todayLiveAmountMinor,
+      currency: liveSummary.currency,
+    };
+  }
+
+  if (liveGranularity !== "current_period" || row === undefined) {
+    return null;
+  }
+
+  return {
+    amountMinor: row.estimatedAmountMinor,
+    currency: row.currency,
   };
 }
 
@@ -456,10 +566,106 @@ function summarizeLiveItemsFreshness(
   return found ?? summarizeLiveFreshness(connectionState, liveGranularity);
 }
 
+interface CurrencyConversion {
+  sourceCurrency: string;
+  requestedCurrency: string;
+  displayCurrency: string;
+  rate: number;
+  canConvert: boolean;
+  exchangeRate: OperationsExchangeRateStatus;
+}
+
+function buildCurrencyConversion(
+  sourceCurrency: string,
+  requestedCurrency: string,
+  exchangeRate: ExchangeRateResult | undefined,
+  now: Date,
+): CurrencyConversion {
+  const source = normalizeCurrencyCode(sourceCurrency) ?? "USD";
+  const requested = normalizeCurrencyCode(requestedCurrency) ?? source;
+  const canConvert = requested === source || exchangeRate?.status === "live" || exchangeRate?.status === "identity";
+  const displayCurrency = canConvert ? requested : source;
+  const rate = requested === source ? 1 : exchangeRate?.rate ?? 1;
+
+  return {
+    sourceCurrency: source,
+    requestedCurrency: requested,
+    displayCurrency,
+    rate,
+    canConvert,
+    exchangeRate: {
+      sourceCurrency: source,
+      requestedCurrency: requested,
+      displayCurrency,
+      rate,
+      rateDate: requested === source
+        ? now.toISOString().slice(0, 10)
+        : exchangeRate?.rateDate ?? null,
+      fetchedAt: exchangeRate?.fetchedAt ?? now.toISOString(),
+      source: requested === source ? "identity" : exchangeRate?.source ?? "frankfurter",
+      status: requested === source ? "identity" : exchangeRate?.status ?? "unavailable",
+      ...(exchangeRate?.message === undefined ? {} : { message: exchangeRate.message }),
+    },
+  };
+}
+
+function convertAmountMinorForDisplay(
+  amountMinor: number,
+  currency: string,
+  conversion: CurrencyConversion,
+): { amountMinor: number; currency: string } {
+  const normalizedCurrency = normalizeCurrencyCode(currency);
+
+  if (normalizedCurrency === conversion.displayCurrency) {
+    return {
+      amountMinor,
+      currency: conversion.displayCurrency,
+    };
+  }
+
+  if (normalizedCurrency === conversion.sourceCurrency && conversion.canConvert) {
+    return {
+      amountMinor: Math.round(amountMinor * conversion.rate),
+      currency: conversion.displayCurrency,
+    };
+  }
+
+  return {
+    amountMinor,
+    currency: normalizedCurrency ?? currency,
+  };
+}
+
+function convertTrendValueForDisplay(
+  value: number,
+  unit: string,
+  conversion: CurrencyConversion,
+): { value: number; unit: string } {
+  const normalizedUnit = normalizeCurrencyCode(unit);
+
+  if (normalizedUnit === conversion.sourceCurrency && conversion.canConvert) {
+    return {
+      value: value * conversion.rate,
+      unit: conversion.displayCurrency,
+    };
+  }
+
+  return {
+    value,
+    unit,
+  };
+}
+
+function normalizeCurrencyCode(value: string): string | null {
+  const normalized = value.trim().toUpperCase();
+
+  return /^[A-Z]{3}$/.test(normalized) ? normalized : null;
+}
+
 function buildProviderConnectionRows(
   provider: OperationsProvider,
   liveItems: readonly LiveTodayProviderSnapshot[],
-  fallbackCurrency: string,
+  conversion: CurrencyConversion,
 ): OperationsProviderConnection[] {
   const envConnection: ProviderCredentialConnectionStatus[] = provider.connectionState === "env_configured"
     ? [{
@@ -486,6 +692,19 @@ function buildProviderConnectionRows(
     );
     const liveFreshness = live?.freshness ??
       summarizeLiveFreshness(connection.connectionState, provider.liveGranularity);
+    const liveAmount = live?.todayLiveAmountMinor === null || live?.todayLiveAmountMinor === undefined
+      ? null
+      : convertAmountMinorForDisplay(live.todayLiveAmountMinor, live.currency, conversion);
+    const fallbackLiveAmount = liveAmount === null &&
+      connectionRows.length === 1 &&
+      provider.liveGranularity === "current_period" &&
+      provider.todayLiveAmountMinor !== null
+      ? {
+          amountMinor: provider.todayLiveAmountMinor,
+          currency: provider.currency,
+        }
+      : null;
+    const displayLiveAmount = liveAmount ?? fallbackLiveAmount;
 
     return {
       providerKey: provider.providerKey,
@@ -510,11 +729,11 @@ function buildProviderConnectionRows(
       currentUsageSummary: live?.usageSummary ?? null,
       latestCanonicalSync: null,
       latestLiveCheck: live?.checkedAt ?? null,
-      monthForecastAmountMinor: live?.todayLiveAmountMinor ?? 0,
+      monthForecastAmountMinor: displayLiveAmount?.amountMinor ?? 0,
       confirmedAmountMinor: 0,
-      todayLiveAmountMinor: live?.todayLiveAmountMinor ?? null,
+      todayLiveAmountMinor: displayLiveAmount?.amountMinor ?? null,
       todayLiveIncluded: live?.included ?? false,
-      currency: live?.currency ?? fallbackCurrency,
+      currency: displayLiveAmount?.currency ?? provider.currency,
       usageSnapshotCount: 0,
       serviceCostBreakdown: [],
       usageTrend: [],
@@ -529,19 +748,24 @@ function buildProviderConnectionRows(
 function buildUsageTrend(
   metrics: readonly DashboardDailyUsageMetric[],
   providerKey: ProviderKey,
+  conversion: CurrencyConversion,
 ): OperationsUsageTrendPoint[] {
   return metrics
     .filter((metric) => metric.providerKey === providerKey)
-    .map((metric) => ({
-      date: metric.date,
-      providerKey,
-      displayName: metric.displayName,
-      metric: metric.metric,
-      unit: metric.unit,
-      value: metric.value,
-      sampleCount: metric.sampleCount,
-      latestCollectedAt: metric.latestCollectedAt,
-    }));
+    .map((metric) => {
+      const converted = convertTrendValueForDisplay(metric.value, metric.unit, conversion);
+
+      return {
+        date: metric.date,
+        providerKey,
+        displayName: metric.displayName,
+        metric: metric.metric,
+        unit: converted.unit,
+        value: converted.value,
+        sampleCount: metric.sampleCount,
+        latestCollectedAt: metric.latestCollectedAt,
+      };
+    });
 }
 
 function highestConfidence(
@@ -585,6 +809,54 @@ function providerNeedsAttention(provider: OperationsProvider): boolean {
     || provider.riskLevel !== "low"
     || provider.healthStatus !== "ok"
   );
+}
+
+function buildBudgetStatus(
+  budget: DashboardBudgetPreferences | undefined,
+  monthForecastAmountMinor: number,
+  currency: string,
+): OperationsBudgetStatus {
+  if (budget?.monthlyBudgetMinor === null || budget?.monthlyBudgetMinor === undefined) {
+    return {
+      monthlyBudgetMinor: null,
+      currency,
+      warningPercent: budget?.warningPercent ?? 80,
+      criticalPercent: budget?.criticalPercent ?? 100,
+      usagePercent: null,
+      riskLevel: "low",
+      status: "not_configured",
+    };
+  }
+
+  if (budget.currency !== currency) {
+    return {
+      monthlyBudgetMinor: budget.monthlyBudgetMinor,
+      currency: budget.currency,
+      warningPercent: budget.warningPercent,
+      criticalPercent: budget.criticalPercent,
+      usagePercent: null,
+      riskLevel: "warning",
+      status: "currency_mismatch",
+    };
+  }
+
+  const usagePercent = Math.round((monthForecastAmountMinor / budget.monthlyBudgetMinor) * 100);
+  const riskLevel =
+    usagePercent >= budget.criticalPercent
+      ? "critical"
+      : usagePercent >= budget.warningPercent
+        ? "warning"
+        : "low";
+
+  return {
+    monthlyBudgetMinor: budget.monthlyBudgetMinor,
+    currency: budget.currency,
+    warningPercent: budget.warningPercent,
+    criticalPercent: budget.criticalPercent,
+    usagePercent,
+    riskLevel,
+    status: riskLevel === "low" ? "ok" : riskLevel,
+  };
 }
 
 function isVisibleProvider(provider: OperationsProvider): boolean {

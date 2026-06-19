@@ -16,12 +16,15 @@ import {
   DEFAULT_SELECTED_NOTIFICATION_WIDGET_KEYS,
   NOTIFICATION_WIDGET_KEYS,
   type DigestInterval,
+  type DashboardBudgetPreferences,
+  type DashboardWidgetLayoutPreferences,
   type LocalCliDashboardMetricKey,
   type NotificationPreferences,
   type NotificationThresholdDraft,
   type NotificationWidgetKey,
   type ThresholdOperator,
 } from "./NotificationSettingsModel";
+import { withAppLoading } from "./AppLoadingOverlay";
 
 type SaveState = "idle" | "loading" | "saving" | "saved" | "error";
 
@@ -40,6 +43,12 @@ export function NotificationSettingsPanel({ messages }: { messages: Messages }) 
   );
   const [localCliDashboardMetricKeys, setLocalCliDashboardMetricKeys] = useState<LocalCliDashboardMetricKey[]>(
     [...DEFAULT_LOCAL_CLI_DASHBOARD_METRIC_KEYS],
+  );
+  const [dashboardBudget, setDashboardBudget] = useState<DashboardBudgetPreferences>({
+    ...DEFAULT_NOTIFICATION_PREFERENCES.dashboard.budget,
+  });
+  const [dashboardWidgetLayouts, setDashboardWidgetLayouts] = useState<DashboardWidgetLayoutPreferences>(
+    DEFAULT_NOTIFICATION_PREFERENCES.dashboard.widgetLayouts,
   );
   const [selectedWidgets, setSelectedWidgets] = useState<NotificationWidgetKey[]>(
     [...DEFAULT_SELECTED_NOTIFICATION_WIDGET_KEYS],
@@ -426,6 +435,8 @@ export function NotificationSettingsPanel({ messages }: { messages: Messages }) 
     setHudOpacity(preferences.hud.opacity);
     setHudSelectedWidgets([...preferences.hud.selectedWidgets]);
     setLocalCliDashboardMetricKeys([...preferences.dashboard.localCliMetricKeys]);
+    setDashboardBudget({ ...preferences.dashboard.budget });
+    setDashboardWidgetLayouts(preferences.dashboard.widgetLayouts);
   }
 
   function currentPreferences(): NotificationPreferences {
@@ -441,7 +452,9 @@ export function NotificationSettingsPanel({ messages }: { messages: Messages }) 
       thresholdRules,
       desktopEnabled,
       dashboard: {
+        budget: dashboardBudget,
         localCliMetricKeys: localCliDashboardMetricKeys,
+        widgetLayouts: dashboardWidgetLayouts,
       },
       hud: {
         alwaysOnTop: hudAlwaysOnTop,
@@ -453,36 +466,38 @@ export function NotificationSettingsPanel({ messages }: { messages: Messages }) 
   }
 
   async function saveNotificationPreferences() {
-    try {
-      setSaveState("saving");
-      setStatusMessage(messages.settings.notificationStoredLocally);
-      const session = await createLocalSession();
-      const response = await fetch("/api/notification-preferences", {
-        body: JSON.stringify(currentPreferences()),
-        credentials: "same-origin",
-        headers: {
-          "Content-Type": "application/json",
-          "X-MoneySiren-CSRF": session.csrfToken,
-        },
-        method: "PUT",
-      });
+    await withAppLoading(messages.settings.toolLoadingPreparingView, async () => {
+      try {
+        setSaveState("saving");
+        setStatusMessage(messages.settings.notificationStoredLocally);
+        const session = await createLocalSession();
+        const response = await fetch("/api/notification-preferences", {
+          body: JSON.stringify(currentPreferences()),
+          credentials: "same-origin",
+          headers: {
+            "Content-Type": "application/json",
+            "X-MoneySiren-CSRF": session.csrfToken,
+          },
+          method: "PUT",
+        });
 
-      if (!response.ok) {
-        throw new Error(`Save failed with status ${response.status}.`);
+        if (!response.ok) {
+          throw new Error(`Save failed with status ${response.status}.`);
+        }
+
+        const payload = await response.json() as { preferences?: NotificationPreferences };
+
+        if (payload.preferences !== undefined) {
+          applyPreferences(payload.preferences);
+        }
+
+        setStatusMessage(messages.settings.notificationStoredLocally);
+        setSaveState("saved");
+      } catch {
+        setStatusMessage(messages.settings.notificationPrefsSaveError);
+        setSaveState("error");
       }
-
-      const payload = await response.json() as { preferences?: NotificationPreferences };
-
-      if (payload.preferences !== undefined) {
-        applyPreferences(payload.preferences);
-      }
-
-      setStatusMessage(messages.settings.notificationStoredLocally);
-      setSaveState("saved");
-    } catch {
-      setStatusMessage(messages.settings.notificationPrefsSaveError);
-      setSaveState("error");
-    }
+    });
   }
 }
 

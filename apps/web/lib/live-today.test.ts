@@ -5,6 +5,7 @@ import {
   clearLiveTodayCache,
   readLiveTodaySnapshot,
   refreshLiveToday,
+  summarizeLocalAiCliUsage,
   type LiveTodayProviderCollector,
 } from "./live-today";
 
@@ -23,10 +24,15 @@ describe("live today cache", () => {
       secret: "FAKE_OPENAI_ADMIN_KEY_FOR_TESTS",
       authMethod: "api_key",
     });
-    const connections = await readConnectionsStatus({
+    const allConnections = await readConnectionsStatus({
       credentialStore: store,
+      localAiCliStatus: emptyLocalAiCliStatus(),
       now: () => NOW,
     });
+    const connections = {
+      ...allConnections,
+      providers: allConnections.providers.filter((provider) => provider.providerKey === "openai"),
+    };
     const openAiCollector: LiveTodayProviderCollector = async () => ({
       providerKey: "openai",
       status: "ok",
@@ -95,6 +101,7 @@ describe("live today cache", () => {
       credentialStore: createMemoryCredentialStore({
         now: () => NOW,
       }),
+      localAiCliStatus: emptyLocalAiCliStatus(),
       now: () => NOW,
     });
     let called = false;
@@ -252,6 +259,184 @@ describe("live today cache", () => {
     });
   });
 
+  it("refreshes stale local AI CLI usage on read without refreshing external providers", async () => {
+    const store = createMemoryCredentialStore({
+      now: () => NOW,
+    });
+    await store.setCredential("openai", "read-only", {
+      secret: "FAKE_OPENAI_ADMIN_KEY_FOR_TESTS",
+      authMethod: "api_key",
+    });
+    const connections = await readConnectionsStatus({
+      credentialStore: store,
+      localAiCliStatus: {
+        generatedAt: NOW.toISOString(),
+        localOnly: true,
+        secretsReturned: false,
+        providers: [
+          {
+            providerKey: "codex-cli",
+            displayName: "Codex CLI",
+            command: "codex",
+            cli: {
+              state: "installed",
+              version: "1.2.3",
+              detail: "codex-cli 1.2.3",
+            },
+            usage: {
+              source: "codex_sessions",
+              period: "current_month",
+              providerKind: "codex",
+              sessionCount: 2,
+              turnCount: 5,
+              toolCallCount: 1,
+              inputTokens: null,
+              outputTokens: null,
+              cacheTokens: null,
+              totalTokens: null,
+              reasoningOutputTokens: null,
+              logFileCount: 2,
+              parsedUsageRecordCount: 9,
+              searchedPathHint: "~\\.codex\\sessions",
+              latestActivityAt: NOW.toISOString(),
+              topModels: ["gpt-5"],
+              statusLine: emptyStatusLineUsage(),
+              message: "fake",
+            },
+          },
+        ],
+      },
+      now: () => NOW,
+    });
+    let codexCollectorCalls = 0;
+    let openAiCollectorCalls = 0;
+
+    const collectors: Partial<Record<"codex-cli" | "openai", LiveTodayProviderCollector>> = {
+      "codex-cli": async (context) => {
+        codexCollectorCalls += 1;
+
+        return {
+          providerKey: "codex-cli",
+          status: "ok",
+          checkedAt: context.now.toISOString(),
+          todayLiveAmountMinor: null,
+          currency: "USD",
+          included: false,
+          confidence: "low",
+          usageSummary: {
+            kind: "llm_subscription",
+            period: "current_month",
+            metrics: [
+              { key: "five_hour_limit_percent", value: codexCollectorCalls === 1 ? 19 : 20, unit: "percent" },
+            ],
+            topServices: ["gpt-5"],
+          },
+        };
+      },
+      openai: async () => {
+        openAiCollectorCalls += 1;
+        throw new Error("OpenAI should still require an explicit refresh.");
+      },
+    };
+
+    const first = await readLiveTodaySnapshot({
+      connections,
+      credentialStore: store,
+      now: () => NOW,
+      ttlSeconds: 60,
+      collectors,
+    });
+    const second = await readLiveTodaySnapshot({
+      connections,
+      credentialStore: store,
+      now: () => new Date(NOW.getTime() + 6_000),
+      ttlSeconds: 60,
+      collectors,
+    });
+
+    expect(codexCollectorCalls).toBe(2);
+    expect(openAiCollectorCalls).toBe(0);
+    expect(first.providers.find((provider) => provider.providerKey === "codex-cli")).toMatchObject({
+      freshness: "live",
+      ttlSeconds: 5,
+      usageSummary: {
+        metrics: [
+          { key: "five_hour_limit_percent", value: 19, unit: "percent" },
+        ],
+      },
+    });
+    expect(second.providers.find((provider) => provider.providerKey === "codex-cli")).toMatchObject({
+      freshness: "live",
+      ttlSeconds: 5,
+      usageSummary: {
+        metrics: [
+          { key: "five_hour_limit_percent", value: 20, unit: "percent" },
+        ],
+      },
+    });
+  });
+
+  it("maps estimated Codex reset credits to conservative expiry metrics", () => {
+    const summary = summarizeLocalAiCliUsage({
+      providerKey: "codex-cli",
+      displayName: "Codex CLI",
+      command: "codex",
+      cli: {
+        state: "installed",
+        version: "1.2.3",
+        detail: "codex-cli 1.2.3",
+      },
+      usage: {
+        source: "codex_sessions",
+        period: "current_month",
+        providerKind: "codex",
+        sessionCount: 0,
+        turnCount: 0,
+        toolCallCount: 0,
+        inputTokens: null,
+        outputTokens: null,
+        cacheTokens: null,
+        totalTokens: null,
+        reasoningOutputTokens: null,
+        logFileCount: 0,
+        parsedUsageRecordCount: 0,
+        searchedPathHint: "~\\.codex\\sessions",
+        latestActivityAt: null,
+        topModels: [],
+        statusLine: {
+          ...emptyStatusLineUsage(),
+          usageResetCredits: [
+            {
+              label: "estimated",
+              expiresAt: "2026-07-08T04:00:00.000Z",
+              estimatedEarliestExpiryUtc: "2026-07-08T04:00:00.000Z",
+              estimatedLatestExpiryUtc: "2026-07-08T04:10:00.000Z",
+              observedFromUtc: "2026-06-08T04:00:00.000Z",
+              observedToUtc: "2026-06-08T04:10:00.000Z",
+              status: "estimated",
+              isExact: false,
+            },
+          ],
+        },
+        message: "fake",
+      },
+    });
+
+    expect(summary?.metrics).toEqual(expect.arrayContaining([
+      {
+        key: "usage_reset_credits",
+        value: 1,
+        unit: "count",
+      },
+      {
+        key: "usage_reset_credit_estimate",
+        value: 1,
+        unit: "count",
+        resetAt: "2026-07-08T04:00:00.000Z",
+      },
+    ]));
+  });
+
   it("keeps separate live cache entries for multiple provider connections", async () => {
     const store = createMemoryCredentialStore({
       now: () => NOW,
@@ -378,5 +563,15 @@ function emptyStatusLineUsage() {
     totalCacheTokens: null,
     totalReasoningTokens: null,
     totalTokens: null,
+    usageResetCredits: [],
+  };
+}
+
+function emptyLocalAiCliStatus() {
+  return {
+    generatedAt: NOW.toISOString(),
+    localOnly: true as const,
+    secretsReturned: false as const,
+    providers: [],
   };
 }
