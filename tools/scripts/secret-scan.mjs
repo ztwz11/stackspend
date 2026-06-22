@@ -92,6 +92,10 @@ const SENSITIVE_PATH_PATTERNS = [
 ];
 
 const SAFE_EXAMPLE_PATTERN = /fake|fixture|synthetic|example|do-not-use|dummy|test/i;
+const SAFE_PLACEHOLDER_SECRETS = new Set([
+  // Historical test fixture value retained only in git history before fake-* placeholders replaced it.
+  "sk-admin-secret-value",
+]);
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, "../..");
 const gitSafeDirectory = repoRoot.replaceAll("\\", "/");
@@ -245,7 +249,7 @@ function scanLineForSecrets({ file, line, lineNumber, source }) {
     for (const match of line.matchAll(secretPattern.pattern)) {
       const value = normalizeMatchedSecret(match[0]);
 
-      if (SAFE_EXAMPLE_PATTERN.test(line) || SAFE_EXAMPLE_PATTERN.test(value)) {
+      if (SAFE_EXAMPLE_PATTERN.test(line) || SAFE_EXAMPLE_PATTERN.test(value) || SAFE_PLACEHOLDER_SECRETS.has(value)) {
         continue;
       }
 

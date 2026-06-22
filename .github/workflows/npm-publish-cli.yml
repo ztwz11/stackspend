@@ -1,6 +1,9 @@
 name: npm-publish-cli
 
 on:
+  push:
+    tags:
+      - "v*"
   workflow_dispatch:
     inputs:
       tag:
@@ -21,6 +24,7 @@ jobs:
     env:
       NPM_CONFIG_CACHE: ${{ github.workspace }}/.tmp/npm-cache
       NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      NPM_DIST_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || 'alpha' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -55,4 +59,4 @@ jobs:
       - name: Publish CLI to npm
         working-directory: apps/cli
         shell: bash
-        run: npm publish --tag "${{ inputs.tag }}" --access public
+        run: npm publish --tag "${NPM_DIST_TAG}" --access public

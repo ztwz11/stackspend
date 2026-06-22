@@ -9,8 +9,8 @@ import type { InstallSurface } from "./install-profile.js";
 const execFileAsync = promisify(execFile);
 
 export const DEFAULT_RELEASE_REPOSITORY = "ztwz11/moneysiren";
-// The npm CLI can patch faster than desktop assets; keep this pinned until a signed release supersedes it.
-export const DEFAULT_RELEASE_TAG = "v0.1.0-alpha.0";
+// Keep the source-free installer pinned to the latest published desktop/web release tag.
+export const DEFAULT_RELEASE_TAG = "v0.1.0-alpha.2";
 
 export interface ReleaseInstallOptions {
   env?: Record<string, string | undefined>;
