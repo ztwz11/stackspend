@@ -5,13 +5,14 @@ import { runInstallCommand } from "./commands/install.js";
 import { runModesCommand } from "./commands/modes.js";
 import { runNotifyCommand } from "./commands/notify.js";
 import { runReportCommand } from "./commands/report.js";
-import { runDesktopCommand, runOpenCommand, runServeCommand } from "./commands/runtime.js";
+import { runDesktopCommand, runHudCommand, runOpenCommand, runServeCommand, runStartCommand } from "./commands/runtime.js";
 import { runSummaryCommand } from "./commands/summary.js";
 import { runSyncCommand } from "./commands/sync.js";
 import { runThemeCommand } from "./commands/theme.js";
 import { renderHelpScreen, renderHomeScreen } from "./home.js";
 import { runSlashPrompt } from "./interactive.js";
 import { openUrlInBrowser, type CliLocalRuntimeAdapter } from "./runtime-adapter.js";
+import type { CliDesktopRuntimeAdapter } from "./desktop-runtime.js";
 import { resolveSlashCommand } from "./slash.js";
 import { createTheme, type Theme } from "./theme.js";
 import { CLI_VERSION } from "./version.js";
@@ -42,6 +43,7 @@ export interface CliRuntime {
   liveClients?: CliLiveClients;
   fetch?: typeof fetch;
   localRuntime?: CliLocalRuntimeAdapter;
+  desktopRuntime?: CliDesktopRuntimeAdapter;
   openUrl?: (url: string) => Promise<void> | void;
 }
 
@@ -67,6 +69,7 @@ export interface CliExecutionContext {
   interactive: boolean;
   theme: Theme;
   localRuntime?: CliLocalRuntimeAdapter;
+  desktopRuntime?: CliDesktopRuntimeAdapter;
 }
 
 export interface CliResult {
@@ -124,6 +127,7 @@ export async function runCli(args: readonly string[], runtime: CliRuntime = {}):
     }),
     theme,
     ...(runtime.localRuntime === undefined ? {} : { localRuntime: runtime.localRuntime }),
+    ...(runtime.desktopRuntime === undefined ? {} : { desktopRuntime: runtime.desktopRuntime }),
   };
 
   context.stdin = runtime.stdin ?? process.stdin;
@@ -211,6 +215,14 @@ async function dispatchCommand(args: readonly string[], context: CliExecutionCon
     return runServeCommand(rest, context);
   }
 
+  if (command === "start") {
+    return runStartCommand(rest, context);
+  }
+
+  if (command === "hud") {
+    return runHudCommand(rest, context);
+  }
+
   if (command === "open") {
     return runOpenCommand(rest, context);
   }
@@ -240,7 +252,7 @@ async function dispatchCommand(args: readonly string[], context: CliExecutionCon
   }
 
   context.stderr(`Unknown command: ${command}`);
-  context.stderr("Run `moneysiren --help` for usage.");
+  context.stderr("Run `msiren --help` or `moneysiren --help` for usage.");
   return 1;
 }
 

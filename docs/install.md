@@ -77,25 +77,29 @@ Install the CLI first:
 
 ```bash
 npm install -g @moneysiren/cli@alpha
-moneysiren install --all
-moneysiren sync --provider mock
+msiren install --all
+msiren sync --provider mock
+msiren start
+msiren hud
 ```
 
-`moneysiren install --all` downloads the web runtime archive and the current OS desktop/HUD artifact from GitHub Releases. By default, the files are stored in the MoneySiren local application data directory. To pin a release tag or choose a directory:
+`msiren install --all` downloads the web runtime archive and the current OS desktop/HUD artifact from GitHub Releases. By default, the files are stored in the MoneySiren local application data directory. `msiren start` extracts and starts the installed web runtime, then opens the local dashboard. `msiren hud` ensures that runtime is running and launches the desktop HUD shell when a runnable desktop app is installed or configured.
+
+To pin a release tag or choose a directory:
 
 ```bash
-moneysiren install --all --tag v0.1.0-alpha.0 --dir ./moneysiren-release
+msiren install --all --tag v0.1.0-alpha.0 --dir ./moneysiren-release
 ```
 
-Extract the downloaded web runtime archive, then start it:
+If the desktop installer was installed to a non-default location, point the CLI at it before opening HUD:
 
 ```bash
-node start.mjs
+MONEYSIREN_DESKTOP_APP="<path-to-installed-MoneySiren-app>" msiren hud
 ```
 
-The web runtime listens at `http://127.0.0.1:3000` by default. Start the downloaded desktop installer/app after the web runtime is running; the native shell opens the dashboard and HUD from that local address.
+The web runtime listens at `http://127.0.0.1:3000` by default. The native shell opens the dashboard and HUD from that local address.
 
-This alpha desktop shell does not yet embed or auto-start the web runtime. Windows and macOS may warn when using older unsigned alpha artifacts or local unsigned builds.
+This alpha desktop shell is still a thin local shell. The CLI owns the source-free startup path, while Windows and macOS may warn when using older unsigned alpha artifacts or local unsigned builds.
 
 MoneySiren is prepared to use the SignPath Foundation program for open-source Windows code signing. When a Windows Release artifact is signed through the SignPath Foundation, the GitHub Release notes and this install guide will identify that signature path so users can distinguish signed desktop artifacts from local unsigned builds.
 

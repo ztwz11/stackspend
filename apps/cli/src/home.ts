@@ -13,6 +13,8 @@ export function renderHomeScreen(input: { version: string; theme: Theme }): stri
     `  ${theme.command("/doctor")}               Check local readiness without printing secrets`,
     `  ${theme.command("/install")}              Choose CLI, web dashboard, and HUD components`,
     `  ${theme.command("/modes")}                Show the CLI, web, and desktop modes`,
+    `  ${theme.command("/start")}                Start the installed dashboard runtime`,
+    `  ${theme.command("/hud")}                  Start the installed runtime and open HUD`,
     `  ${theme.command("/init")}                 Create local SQLite storage`,
     `  ${theme.command("/dashboard")}            Check the local dashboard API`,
     `  ${theme.command("/dashboard check")}      Same as /dashboard`,
@@ -30,6 +32,11 @@ export function renderHomeScreen(input: { version: string; theme: Theme }): stri
     `  ${theme.command("/quit")}                 Exit the slash prompt`,
     "",
     theme.heading("Classic CLI"),
+    "  msiren start",
+    "  msiren hud",
+    "  msiren install --all",
+    "",
+    theme.heading("Full command"),
     "  moneysiren doctor",
     "  moneysiren install",
     "  moneysiren install --status",
@@ -58,6 +65,11 @@ export function renderHelpScreen(version: string): string {
 
 Local-first cloud/SaaS usage, status, and expected billing dashboard.
 
+Short command:
+  msiren start
+  msiren hud
+  msiren install --all
+
 Usage:
   moneysiren
   moneysiren --help
@@ -66,6 +78,8 @@ Usage:
   moneysiren install [--status|--all|--cli|--web|--hud|--no-cli|--no-web|--no-hud]
   moneysiren doctor
   moneysiren modes
+  moneysiren start [--port <port>] [--open|--no-open] [--hud]
+  moneysiren hud [--port <port>]
   moneysiren dashboard check [--url <local-dashboard-url>]
   moneysiren serve [--port <port>]
   moneysiren open
@@ -85,6 +99,8 @@ Slash commands:
   moneysiren /doctor
   moneysiren /install
   moneysiren /modes
+  moneysiren /start
+  moneysiren /hud
   moneysiren /init
   moneysiren /dashboard
   moneysiren /dashboard check

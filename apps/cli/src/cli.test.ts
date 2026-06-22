@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import type { SlackReportTransportRequest } from "../../../packages/report/src/slack.js";
 import { CLI_VERSION, runCli } from "./cli.js";
+import type { CliDesktopRuntimeAdapter } from "./desktop-runtime.js";
 import type { CliLocalRuntimeAdapter, LocalRuntime, StartRuntimeOptions } from "./runtime-adapter.js";
 
 const FIXED_NOW = "2026-06-02T09:00:00.000Z";
@@ -49,6 +50,8 @@ describe("MoneySiren CLI", () => {
     expect(stdout).toContain("/install");
     expect(stdout).toContain("/modes");
     expect(stdout).toContain("/sync mock");
+    expect(stdout).toContain("msiren start");
+    expect(stdout).toContain("msiren hud");
     expect(stdout).toContain("moneysiren install");
     expect(stdout).toContain("moneysiren modes");
     expect(stdout).toContain("moneysiren sync --provider mock");
@@ -56,6 +59,18 @@ describe("MoneySiren CLI", () => {
     expect(stdout).not.toMatch(ANSI_PATTERN);
     expect(await fileExists(join(cwd, ".env"))).toBe(false);
     expect(await fileExists(join(cwd, ".moneysiren"))).toBe(false);
+  });
+
+  it("prints the short command alias in the help guide", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "moneysiren-cli-"));
+    const result = await runCli(["--help"], testContext(cwd));
+    const stdout = result.stdout.join("\n");
+
+    expect(result.exitCode).toBe(0);
+    expect(stdout).toContain("Short command:");
+    expect(stdout).toContain("msiren start");
+    expect(stdout).toContain("msiren hud");
+    expect(stdout).toContain("msiren install --all");
   });
 
   it("renders home guide color when enabled and disables it for NO_COLOR or TERM=dumb", async () => {
@@ -200,6 +215,7 @@ describe("MoneySiren CLI", () => {
     expect(packageJson.publishConfig?.access).toBe("public");
     expect(packageJson.dependencies?.["@aws-sdk/client-cost-explorer"]).toBe("^3.1061.0");
     expect(packageJson.bin?.moneysiren).toBe("dist/apps/cli/src/index.js");
+    expect(packageJson.bin?.msiren).toBe("dist/apps/cli/src/index.js");
     expect(packageJson.bin?.moneysiren).not.toBe("src/index.ts");
     expect(packageJson.scripts?.build).toBe("node ../../tools/scripts/build-cli.mjs");
     expect(packageJson.scripts?.prepack).toBe("node ../../tools/scripts/build-cli.mjs");
@@ -351,13 +367,15 @@ describe("MoneySiren CLI", () => {
     expect(stdout).toContain("MoneySiren modes");
     expect(stdout).toContain("Install profile: CLI, Web dashboard, HUD");
     expect(stdout).toContain("npm install -g @moneysiren/cli@alpha");
+    expect(stdout).toContain("Short command: msiren");
     expect(stdout).toContain("1. CLI automation");
     expect(stdout).toContain("2. Local web dashboard/runtime");
     expect(stdout).toContain("3. Desktop tray/notifier");
     expect(stdout).toContain("Windows/macOS target");
-    expect(stdout).toContain("moneysiren doctor");
-    expect(stdout).toContain("moneysiren serve");
-    expect(stdout).toContain("moneysiren desktop status");
+    expect(stdout).toContain("msiren doctor");
+    expect(stdout).toContain("msiren start");
+    expect(stdout).toContain("msiren hud");
+    expect(stdout).toContain("msiren desktop status");
 
     if (process.platform === "darwin") {
       expect(stdout).toContain("Platform: macOS");
@@ -949,6 +967,81 @@ describe("MoneySiren CLI", () => {
     expect(missingStatus.stdout.join("\n")).toContain("Runtime lock: not found");
     expect(missingStatus.stdout.join("\n")).toContain("run `moneysiren serve`");
     expect(missingStatus.stdout.join("\n")).not.toContain("pending packages/runtime integration");
+  });
+
+  it("routes deployed start and hud commands through the desktop runtime adapter", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "moneysiren-cli-"));
+    const webStarts: Array<{ openBrowser: boolean; port?: number }> = [];
+    const hudStarts: Array<{ port?: number }> = [];
+    const openedUrls: string[] = [];
+    const desktopRuntime: CliDesktopRuntimeAdapter = {
+      async startWebRuntime(options) {
+        webStarts.push(options);
+        return {
+          status: "started",
+          dashboardUrl: `http://127.0.0.1:${options.port ?? 3000}/ko/dashboard/overview`,
+          pid: 321,
+          notes: ["test web runtime"],
+        };
+      },
+      async startHud(options) {
+        hudStarts.push(options);
+        return {
+          status: "started",
+          executablePath: "C:\\fake\\MoneySiren Tray.exe",
+          pid: 322,
+          notes: ["test hud"],
+        };
+      },
+    };
+
+    const start = await runCli(["start", "--port", "3001"], {
+      ...testContext(cwd),
+      desktopRuntime,
+      openUrl: (url) => {
+        openedUrls.push(url);
+      },
+    });
+    const startHud = await runCli(["start", "--no-open", "--hud"], {
+      ...testContext(cwd),
+      desktopRuntime,
+      openUrl: (url) => {
+        openedUrls.push(url);
+      },
+    });
+    const hud = await runCli(["hud", "--port=3002"], {
+      ...testContext(cwd),
+      desktopRuntime,
+    });
+
+    expect(start.exitCode).toBe(0);
+    expect(start.stdout.join("\n")).toContain("MoneySiren dashboard runtime");
+    expect(start.stdout.join("\n")).toContain("Dashboard URL: http://127.0.0.1:3001/ko/dashboard/overview");
+    expect(start.stdout.join("\n")).toContain("HUD: run `msiren hud`");
+    expect(startHud.exitCode).toBe(0);
+    expect(startHud.stdout.join("\n")).toContain("MoneySiren HUD");
+    expect(hud.exitCode).toBe(0);
+    expect(hud.stdout.join("\n")).toContain("Desktop shell: started");
+    expect(webStarts).toEqual([
+      {
+        openBrowser: true,
+        port: 3001,
+      },
+      {
+        openBrowser: false,
+      },
+      {
+        openBrowser: false,
+        port: 3002,
+      },
+    ]);
+    expect(hudStarts).toEqual([
+      {},
+      {
+        port: 3002,
+      },
+    ]);
+    expect(openedUrls).toEqual(["http://127.0.0.1:3001/ko/dashboard/overview"]);
   });
 
   it("syncs the mock provider and renders a Korean daily report from persisted normalized data", async () => {

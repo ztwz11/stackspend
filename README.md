@@ -219,7 +219,7 @@ During an interactive PowerShell, cmd, or shell install, the package asks which 
 - Web dashboard
 - HUD
 
-Press Enter to accept the recommended default, which selects all three. In CI or non-interactive npm installs, MoneySiren writes that same all-selected profile automatically. Run `moneysiren install --all` to download the matching GitHub Release assets for the web runtime and HUD desktop shell, or `moneysiren install --profile-only` to only change the local profile.
+Press Enter to accept the recommended default, which selects all three. In CI or non-interactive npm installs, MoneySiren writes that same all-selected profile automatically. The npm package installs both `moneysiren` and the shorter `msiren` command. Run `msiren install --all` to download the matching GitHub Release assets for the web runtime and HUD desktop shell, or `msiren install --profile-only` to only change the local profile.
 
 The same source tree supports Windows and macOS. Local config paths and native desktop artifacts are selected per OS. The shared runtime lock defaults to `%APPDATA%\MoneySiren\runtime.json` on Windows and `~/Library/Application Support/MoneySiren/runtime.json` on macOS so the npm CLI and native tray can discover the same local runtime.
 
@@ -229,23 +229,27 @@ After a `desktop-release` GitHub Actions run publishes assets, users can review 
 
 ```bash
 npm install -g @moneysiren/cli@alpha
-moneysiren install --all
-moneysiren sync --provider mock
+msiren install --all
+msiren sync --provider mock
+msiren start
+msiren hud
 ```
 
-`moneysiren install --all` stores the selected release assets under the MoneySiren local application data directory by default. To install from a specific release tag or into a custom directory:
+`msiren install --all` stores the selected release assets under the MoneySiren local application data directory by default. `msiren start` extracts and starts the installed web runtime, then opens the local dashboard. `msiren hud` ensures the web runtime is running and opens the desktop HUD shell when a runnable desktop app is installed or configured.
+
+To install from a specific release tag or into a custom directory:
 
 ```bash
-moneysiren install --all --tag v0.1.0-alpha.0 --dir ./moneysiren-release
+msiren install --all --tag v0.1.0-alpha.0 --dir ./moneysiren-release
 ```
 
-Extract `moneysiren-web-runtime-*.tar.gz` from that install directory and start the local dashboard runtime:
+If the desktop installer was installed to a non-default location, point the CLI at it before opening HUD:
 
 ```bash
-node start.mjs
+MONEYSIREN_DESKTOP_APP="<path-to-installed-MoneySiren-app>" msiren hud
 ```
 
-Finally install/open the Windows or macOS desktop artifact from the same install directory. The desktop shell connects to `http://127.0.0.1:3000` for the dashboard and HUD. In this alpha, the native app does not yet embed or auto-start the web runtime.
+The desktop shell connects to `http://127.0.0.1:3000` for the dashboard and HUD. In this alpha, the native app still runs as a thin local shell, but the CLI now handles the web runtime startup path.
 
 Release maintainers should verify published assets before announcing a desktop build:
 

@@ -10,7 +10,8 @@
     "node": ">=20.11.0"
   },
   "bin": {
-    "moneysiren": "dist/apps/cli/src/index.js"
+    "moneysiren": "dist/apps/cli/src/index.js",
+    "msiren": "dist/apps/cli/src/index.js"
   },
   "main": "dist/apps/cli/src/cli.js",
   "types": "dist/apps/cli/src/cli.d.ts",

@@ -14,7 +14,7 @@ try {
 
   console.log("MoneySiren setup profile saved.");
   console.log(formatInstallSelectionLine(profile.selectedSurfaces));
-  console.log("Run `moneysiren install --status` to review or `moneysiren install` to change it.");
+  console.log("Run `msiren install --status` to review, `msiren install` to change it, or `msiren start` after installing release assets.");
 } catch (error) {
   console.warn(`MoneySiren setup profile skipped: ${error instanceof Error ? error.message : String(error)}`);
 }
