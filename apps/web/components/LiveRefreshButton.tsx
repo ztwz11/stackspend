@@ -1,6 +1,7 @@
 "use client";
 
 import { useTransition } from "react";
+import { refreshLocalLive } from "../lib/local-client";
 
 export function LiveRefreshButton({ className = "ghost-button", label }: { className?: string; label: string }) {
   const [isPending, startTransition] = useTransition();
@@ -12,14 +13,7 @@ export function LiveRefreshButton({ className = "ghost-button", label }: { class
       disabled={isPending}
       onClick={() => {
         startTransition(async () => {
-          const response = await fetch("/api/live-today", {
-            method: "POST",
-          });
-
-          if (!response.ok) {
-            return;
-          }
-
+          await refreshLocalLive("all");
           window.location.reload();
         });
       }}

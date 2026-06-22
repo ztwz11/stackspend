@@ -107,6 +107,7 @@ describe("shared view model", () => {
       "stale_connection_count",
       "openai_today_tokens",
       "codex_five_hour_percent",
+      "codex_reset_credit_count",
       "codex_reset_credit_expiry",
     ]);
     expect(tray.items.map((item) => item.id)).toEqual([
@@ -117,6 +118,7 @@ describe("shared view model", () => {
       "widget-stale_connection_count",
       "widget-openai_today_tokens",
       "widget-codex_five_hour_percent",
+      "widget-codex_reset_credit_count",
       "widget-codex_reset_credit_expiry",
       "separator-widgets",
       "show-hud",

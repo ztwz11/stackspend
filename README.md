@@ -370,6 +370,8 @@ Telegram notifications are optional. Set both `TELEGRAM_BOT_TOKEN` and `TELEGRAM
 
 The desktop tray/notifier opens the same local dashboard runtime and a compact always-on-top HUD at `/hud`. The HUD is a native desktop window, not a web page overlay. It supports configurable font size, opacity, always-on-top behavior, refresh, minimize, close, and a separate HUD widget list.
 
+The HUD uses a local-only shared view model and refresh contract. It polls sanitized local AI usage every 5 seconds, keeps the last good value on refresh failure, separates sync state from risk state, and treats Codex App and Codex CLI reset credits as separate pools. See [docs/local-hud-sync.md](docs/local-hud-sync.md).
+
 Notification digest widgets and HUD widgets are configured independently:
 
 - Digest widgets control scheduled/local notification content.

@@ -423,17 +423,21 @@ describe("live today cache", () => {
     });
 
     expect(summary?.metrics).toEqual(expect.arrayContaining([
-      {
+      expect.objectContaining({
         key: "usage_reset_credits",
         value: 1,
         unit: "count",
-      },
-      {
+        accuracy: "bounded",
+      }),
+      expect.objectContaining({
         key: "usage_reset_credit_estimate",
         value: 1,
         unit: "count",
         resetAt: "2026-07-08T04:00:00.000Z",
-      },
+        resetAtLatest: "2026-07-08T04:10:00.000Z",
+        accuracy: "bounded",
+        source: "count_observation",
+      }),
     ]));
   });
 

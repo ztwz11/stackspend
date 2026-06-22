@@ -1,10 +1,10 @@
 import { getMessages, isLocale, type Locale } from "../../lib/i18n";
 import {
-  readWebLocalNotificationDigest,
   readWebNotificationPreferences,
 } from "../../lib/local-notification-model";
 import { AppLoadingOverlay } from "../../components/AppLoadingOverlay";
-import { HudWindowControls } from "../../components/HudWindowControls";
+import { HudDashboard, type HudDashboardLabels } from "../../components/HudDashboard";
+import { readLocalHudViewModel } from "../../lib/local-hud-model";
 import type { CSSProperties } from "react";
 
 interface HudPageProps {
@@ -19,13 +19,8 @@ export default async function HudPage({ searchParams }: HudPageProps) {
   const locale = await readLocale(searchParams);
   const messages = getMessages(locale);
   const preferences = await readWebNotificationPreferences();
-  const digest = await readWebLocalNotificationDigest({
-    notificationPreferences: {
-      ...preferences,
-      enabled: true,
-      digestEnabled: true,
-      selectedWidgets: preferences.hud.selectedWidgets,
-    },
+  const hud = await readLocalHudViewModel({
+    selectedWidgets: preferences.hud.selectedWidgets,
   });
   const hudStyle = {
     "--hud-font-scale": String(preferences.hud.fontScale),
@@ -38,9 +33,8 @@ export default async function HudPage({ searchParams }: HudPageProps) {
         navigationLabel={messages.settings.toolLoadingPreparingView}
         savingLabel={messages.settings.toolLoadingPreparingView}
       />
-      <HudWindowControls
-        initialPreferences={preferences}
-        labels={{
+      <HudDashboard
+        controlLabels={{
           alwaysOnTop: messages.settings.hudAlwaysOnTop,
           close: messages.settings.hudClose,
           error: messages.settings.notificationPrefsSaveError,
@@ -53,34 +47,128 @@ export default async function HudPage({ searchParams }: HudPageProps) {
           settings: messages.nav.settings,
           toolLoadingPreparingView: messages.settings.toolLoadingPreparingView,
         }}
+        initialPreferences={preferences}
+        initialModel={hud}
+        labels={hudLabels(locale, messages)}
         locale={locale}
       />
-      <header className="hud-header" data-tauri-drag-region>
-        <div>
-          <h1>MoneySiren HUD</h1>
-        </div>
-        <span className={digest.status === "ok" ? "badge badge-ok" : digest.status === "critical" ? "badge badge-critical" : "badge badge-warn"}>
-          {digest.status}
-        </span>
-      </header>
-      <section className="hud-item-list" aria-label={messages.settings.widgetSelection}>
-        {digest.items.length === 0 ? (
-          <div className="hud-empty">
-            <strong>{messages.settings.notificationDisabled}</strong>
-            <span>{digest.suppressedReason ?? messages.settings.notificationPreview}</span>
-          </div>
-        ) : digest.items.map((item) => (
-          <a className="hud-item" href={item.clickPath ?? `/${locale}/dashboard/overview`} key={item.widgetKey}>
-            <span className="hud-item-copy">
-              <strong>{messages.notificationWidgets[item.widgetKey]}</strong>
-              <span className="metric-meta">{item.label}</span>
-            </span>
-            <span className={`hud-value hud-value-${item.severity}`}>{item.value}</span>
-          </a>
-        ))}
-      </section>
     </main>
   );
+}
+
+function hudLabels(locale: Locale, messages: ReturnType<typeof getMessages>): HudDashboardLabels {
+  const localized = {
+    ko: {
+      title: "MoneySiren HUD",
+      items: "HUD 항목",
+      empty: "표시할 HUD 항목이 없습니다.",
+      ok: "정상",
+      partial: "부분",
+      stale: "오래됨",
+      error: "오류",
+      freshItems: "최신",
+      staleItems: "오래됨",
+      errorItems: "오류",
+      generatedAt: "생성",
+      lastSuccessAt: "마지막 성공",
+      syncFailed: "동기화 실패",
+      refreshFailed: "새로고침에 실패했습니다.",
+      used: "사용",
+      remaining: "남음",
+      resetAt: "초기화",
+      fiveHour: messages.settings.localCliFiveHourWindow,
+      weekly: messages.settings.localCliWeeklyWindow,
+      context: messages.services.contextPercent,
+      resetCredits: messages.services.usageResetCredits,
+      resetCreditExpiry: "초기화권 만료일",
+      expiresAt: "만료",
+      estimatedExpiry: "예상 만료",
+      unresolvedCredits: "만료 미확인",
+      exact: "정확",
+      estimated: "추정",
+      bounded: "범위 추정",
+      unknown: "알 수 없음",
+      active: "활성",
+      expiringSoon: "곧 만료",
+      expired: "만료됨",
+      noExpiry: "만료 정보 없음",
+      openTarget: "상세 화면 열기",
+    },
+    en: {
+      title: "MoneySiren HUD",
+      items: "HUD items",
+      empty: "No HUD items to show.",
+      ok: "OK",
+      partial: "Partial",
+      stale: "Stale",
+      error: "Error",
+      freshItems: "Fresh",
+      staleItems: "Stale",
+      errorItems: "Error",
+      generatedAt: "Generated",
+      lastSuccessAt: "Last success",
+      syncFailed: "Sync failed",
+      refreshFailed: "Refresh failed.",
+      used: "Used",
+      remaining: "Left",
+      resetAt: "Reset",
+      fiveHour: messages.settings.localCliFiveHourWindow,
+      weekly: messages.settings.localCliWeeklyWindow,
+      context: messages.services.contextPercent,
+      resetCredits: messages.services.usageResetCredits,
+      resetCreditExpiry: "Reset credit expiry",
+      expiresAt: "Expires",
+      estimatedExpiry: "Estimated expiry",
+      unresolvedCredits: "Unknown expiry",
+      exact: "Exact",
+      estimated: "Estimated",
+      bounded: "Estimated range",
+      unknown: "Unknown",
+      active: "Active",
+      expiringSoon: "Expiring soon",
+      expired: "Expired",
+      noExpiry: "No expiry",
+      openTarget: "Open detail",
+    },
+    ja: {
+      title: "MoneySiren HUD",
+      items: "HUD items",
+      empty: "No HUD items to show.",
+      ok: "OK",
+      partial: "Partial",
+      stale: "Stale",
+      error: "Error",
+      freshItems: "Fresh",
+      staleItems: "Stale",
+      errorItems: "Error",
+      generatedAt: "Generated",
+      lastSuccessAt: "Last success",
+      syncFailed: "Sync failed",
+      refreshFailed: "Refresh failed.",
+      used: "Used",
+      remaining: "Left",
+      resetAt: "Reset",
+      fiveHour: messages.settings.localCliFiveHourWindow,
+      weekly: messages.settings.localCliWeeklyWindow,
+      context: messages.services.contextPercent,
+      resetCredits: messages.services.usageResetCredits,
+      resetCreditExpiry: "リセット権の期限",
+      expiresAt: "Expires",
+      estimatedExpiry: "Estimated expiry",
+      unresolvedCredits: "Unknown expiry",
+      exact: "Exact",
+      estimated: "Estimated",
+      bounded: "Estimated range",
+      unknown: "Unknown",
+      active: "Active",
+      expiringSoon: "Expiring soon",
+      expired: "Expired",
+      noExpiry: "No expiry",
+      openTarget: "Open detail",
+    },
+  } satisfies Record<Locale, HudDashboardLabels>;
+
+  return localized[locale];
 }
 
 async function readLocale(searchParams: HudPageProps["searchParams"]): Promise<Locale> {

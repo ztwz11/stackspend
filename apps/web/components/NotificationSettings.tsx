@@ -4,11 +4,12 @@ import { useEffect, useState } from "react";
 import {
   BellRing,
   Clock3,
+  ExternalLink,
   MonitorCheck,
   Send,
   SlidersHorizontal,
 } from "lucide-react";
-import type { Messages } from "../lib/i18n";
+import type { Locale, Messages } from "../lib/i18n";
 import {
   DEFAULT_NOTIFICATION_THRESHOLD_RULES,
   DEFAULT_LOCAL_CLI_DASHBOARD_METRIC_KEYS,
@@ -28,7 +29,7 @@ import { withAppLoading } from "./AppLoadingOverlay";
 
 type SaveState = "idle" | "loading" | "saving" | "saved" | "error";
 
-export function NotificationSettingsPanel({ messages }: { messages: Messages }) {
+export function NotificationSettingsPanel({ locale, messages }: { locale: Locale; messages: Messages }) {
   const [notificationsEnabled, setNotificationsEnabled] = useState(DEFAULT_NOTIFICATION_PREFERENCES.enabled);
   const [digestEnabled, setDigestEnabled] = useState(DEFAULT_NOTIFICATION_PREFERENCES.digestEnabled);
   const [desktopEnabled, setDesktopEnabled] = useState(DEFAULT_NOTIFICATION_PREFERENCES.desktopEnabled);
@@ -315,6 +316,14 @@ export function NotificationSettingsPanel({ messages }: { messages: Messages }) 
                 <strong>{messages.settings.hudSettingsTitle}</strong>
                 <span className="metric-meta">{messages.settings.hudSettingsSubtitle}</span>
               </div>
+              <button
+                className="secondary-button notification-hud-open-button"
+                onClick={() => openHudWindow(locale)}
+                type="button"
+              >
+                <ExternalLink aria-hidden="true" size={14} />
+                <span>{messages.settings.hudOpenWindow}</span>
+              </button>
               <div className="notification-field">
                 <span className="metric-label">{messages.settings.hudAlwaysOnTop}</span>
                 <label className="notification-toggle-card notification-hud-toggle-card">
@@ -569,6 +578,13 @@ function buildPreviewMessage(
   const firstWidget = selectedWidgets[0] ?? "month_forecast";
 
   return `${messages.notificationWidgets[firstWidget]} / ${digestInterval} / ${quietStart}-${quietEnd}`;
+}
+
+function openHudWindow(locale: Locale) {
+  const url = `/hud?locale=${encodeURIComponent(locale)}`;
+  const opened = window.open(url, "moneysiren-hud", "popup=yes,width=360,height=520,resizable=yes,scrollbars=no");
+
+  opened?.focus();
 }
 
 function KeyValueLine({ label, value }: { label: string; value: string }) {

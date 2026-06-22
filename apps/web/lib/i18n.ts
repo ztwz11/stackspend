@@ -173,6 +173,7 @@ export interface Messages {
     hudSaveSettings: string;
     hudWidgetsTitle: string;
     hudWidgetsSubtitle: string;
+    hudOpenWindow: string;
     testNotification: string;
     testNotificationSent: string;
     notificationLocalOnly: string;
@@ -316,6 +317,7 @@ export interface Messages {
     claude_weekly_percent: string;
     codex_five_hour_percent: string;
     codex_weekly_percent: string;
+    codex_reset_credit_count: string;
     codex_reset_credit_expiry: string;
     supabase_usage_health: string;
     cloudflare_month_to_date: string;
@@ -509,6 +511,7 @@ export const messages = {
       hudSaveSettings: "Save HUD",
       hudWidgetsTitle: "HUD items",
       hudWidgetsSubtitle: "Choose exactly what stays visible in the floating HUD.",
+      hudOpenWindow: "Open HUD window",
       testNotification: "Test notification",
       testNotificationSent: "Preview generated",
       notificationLocalOnly: "Local preview only. No webhook or provider call is sent; the installed desktop app can consume the same digest.",
@@ -652,6 +655,7 @@ export const messages = {
       claude_weekly_percent: "Claude weekly usage",
       codex_five_hour_percent: "Codex 5-hour usage",
       codex_weekly_percent: "Codex weekly usage",
+      codex_reset_credit_count: "Codex reset credits",
       codex_reset_credit_expiry: "Codex reset credit expiry",
       supabase_usage_health: "Supabase usage health",
       cloudflare_month_to_date: "Cloudflare month to date",
@@ -875,6 +879,7 @@ export const messages = {
       hudSaveSettings: "HUD 저장",
       hudWidgetsTitle: "HUD 표시 항목",
       hudWidgetsSubtitle: "떠 있는 HUD에 계속 보여줄 항목을 고릅니다.",
+      hudOpenWindow: "HUD 창 열기",
       testNotification: "테스트 알림",
       testNotificationSent: "Preview 생성됨",
       notificationLocalOnly: "로컬 미리보기 전용입니다. webhook이나 provider 호출은 보내지 않고, 설치된 데스크톱 앱이 같은 digest를 읽을 수 있습니다.",
@@ -1018,7 +1023,8 @@ export const messages = {
       claude_weekly_percent: "Claude 주간 사용률",
       codex_five_hour_percent: "Codex 5시간 사용률",
       codex_weekly_percent: "Codex 주간 사용률",
-      codex_reset_credit_expiry: "Codex 초기화권 추정 만료",
+      codex_reset_credit_count: "Codex 초기화권",
+      codex_reset_credit_expiry: "Codex 초기화권 만료일",
       supabase_usage_health: "Supabase 사용량 상태",
       cloudflare_month_to_date: "Cloudflare 월 누적",
     },
@@ -1241,6 +1247,7 @@ export const messages = {
       hudSaveSettings: "HUD を保存",
       hudWidgetsTitle: "HUD 表示項目",
       hudWidgetsSubtitle: "浮かせた HUD に表示する項目を選びます。",
+      hudOpenWindow: "HUD ウィンドウを開く",
       testNotification: "テスト通知",
       testNotificationSent: "Preview 生成済み",
       notificationLocalOnly: "ローカルプレビュー専用です。webhook や provider 呼び出しは送信せず、インストール済み desktop app が同じ digest を読めます。",
@@ -1384,7 +1391,8 @@ export const messages = {
       claude_weekly_percent: "Claude 週間使用率",
       codex_five_hour_percent: "Codex 5時間使用率",
       codex_weekly_percent: "Codex 週間使用率",
-      codex_reset_credit_expiry: "Codex リセット権の推定期限",
+      codex_reset_credit_count: "Codex リセット権",
+      codex_reset_credit_expiry: "Codex リセット権の期限",
       supabase_usage_health: "Supabase 利用ヘルス",
       cloudflare_month_to_date: "Cloudflare 月初来",
     },

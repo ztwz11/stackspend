@@ -131,6 +131,15 @@ export interface TodayLiveProviderInput {
   providerKey: string;
   displayName: string;
   checkedAt: string | null;
+  expiresAt?: string | null;
+  ttlSeconds?: number;
+  lastAttemptAt?: string | null;
+  lastSuccessAt?: string | null;
+  freshUntil?: string | null;
+  staleUntil?: string | null;
+  lastRefreshFailed?: boolean;
+  revision?: number;
+  message?: string;
   freshness: "live" | "stale" | "error" | "unavailable" | "not_configured" | "locked";
   confidence: "high" | "medium" | "low" | "none";
   todayLiveAmountMinor: number | null;
@@ -148,6 +157,10 @@ export interface TodayLiveMetric {
   value: number;
   unit: string;
   resetAt?: string;
+  resetAtLatest?: string;
+  itemKey?: string;
+  accuracy?: "exact" | "estimated" | "bounded" | "unknown";
+  source?: string;
 }
 
 export interface NotificationDigest extends LocalSafeEnvelope {
@@ -163,6 +176,14 @@ export interface NotificationDigestItem {
   severity: ViewModelRiskSeverity;
   label: string;
   value: string;
+  numericValue?: number;
+  unit?: string;
+  usedPercent?: number;
+  remainingPercent?: number;
+  resetAt?: string;
+  resetAtLatest?: string;
+  providerKey?: string;
+  accuracy?: "exact" | "estimated" | "bounded" | "unknown";
   freshness?: TodayLiveProviderView["freshness"];
   confidence?: TodayLiveProviderView["confidence"];
   clickPath?: string;
@@ -211,6 +232,7 @@ const OPENAI_PROVIDER_KEY = "openai";
 const AWS_PROVIDER_KEY = "aws";
 const SUPABASE_PROVIDER_KEY = "supabase";
 const CLOUDFLARE_PROVIDER_KEY = "cloudflare";
+const CODEX_APP_PROVIDER_KEY = "codex-app";
 const CODEX_CLI_PROVIDER_KEY = "codex-cli";
 const CLAUDE_CLI_PROVIDER_KEY = "claude-cli";
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -351,11 +373,23 @@ export function buildTodayLiveView(
         ...provider,
         providerKey: safeText(provider.providerKey),
         displayName: safeText(provider.displayName),
+        ...(provider.expiresAt === undefined ? {} : { expiresAt: provider.expiresAt }),
+        ...(provider.lastAttemptAt === undefined ? {} : { lastAttemptAt: provider.lastAttemptAt }),
+        ...(provider.lastSuccessAt === undefined ? {} : { lastSuccessAt: provider.lastSuccessAt }),
+        ...(provider.freshUntil === undefined ? {} : { freshUntil: provider.freshUntil }),
+        ...(provider.staleUntil === undefined ? {} : { staleUntil: provider.staleUntil }),
+        ...(provider.lastRefreshFailed === undefined ? {} : { lastRefreshFailed: provider.lastRefreshFailed }),
+        ...(provider.revision === undefined ? {} : { revision: provider.revision }),
+        ...(provider.message === undefined ? {} : { message: safeText(provider.message) }),
         metrics: (provider.metrics ?? []).map((metric) => ({
           key: safeText(metric.key),
           value: metric.value,
           unit: safeText(metric.unit),
           ...(metric.resetAt === undefined ? {} : { resetAt: safeText(metric.resetAt) }),
+          ...(metric.resetAtLatest === undefined ? {} : { resetAtLatest: safeText(metric.resetAtLatest) }),
+          ...(metric.itemKey === undefined ? {} : { itemKey: safeText(metric.itemKey) }),
+          ...(metric.accuracy === undefined ? {} : { accuracy: metric.accuracy }),
+          ...(metric.source === undefined ? {} : { source: safeText(metric.source) }),
         })),
       }));
   const includedProviders = providers.filter((provider) =>
@@ -660,6 +694,7 @@ function buildDigestItems(
       usedTokensMetricKey: "weekly_tokens",
       clickPath: "/ko/services/codex-cli",
     }),
+    codexResetCreditCountItem(todayLive),
     codexResetCreditExpiryItem(todayLive),
     {
       widgetKey: "supabase_usage_health",
@@ -715,6 +750,13 @@ function cliRemainingPercentItem(options: {
     severity: remainingPercentSeverity(percent),
     label: options.label,
     value: percent === null ? "Not available" : formatPercent(percent),
+    ...(percent === null ? {} : {
+      numericValue: percent,
+      unit: "percent",
+      remainingPercent: percent,
+      usedPercent: clampPercent(100 - percent),
+    }),
+    providerKey: options.providerKey,
     ...(firstProvider === undefined
       ? {}
       : {
@@ -725,10 +767,48 @@ function cliRemainingPercentItem(options: {
   };
 }
 
-function codexResetCreditExpiryItem(todayLive: TodayLiveView): NotificationDigestItem {
-  const providers = todayProviders(todayLive, CODEX_CLI_PROVIDER_KEY);
+function codexResetCreditCountItem(todayLive: TodayLiveView): NotificationDigestItem {
+  const providers = [
+    ...todayProviders(todayLive, CODEX_APP_PROVIDER_KEY),
+    ...todayProviders(todayLive, CODEX_CLI_PROVIDER_KEY),
+  ];
   const firstProvider = providers[0];
-  const earliestExpiry = earliestMetricResetAt(providers, "usage_reset_credit_estimate");
+  const metricEntry = firstMetricEntry(providers, "usage_reset_credits");
+  const count = metricEntry?.metric.value ?? null;
+  const clickProviderKey = metricEntry?.provider.providerKey ?? CODEX_CLI_PROVIDER_KEY;
+
+  return {
+    widgetKey: "codex_reset_credit_count",
+    kind: "usage",
+    severity: "info",
+    label: "Codex reset credits",
+    value: count === null ? "Not available" : formatCount(count),
+    ...(count === null ? {} : {
+      numericValue: count,
+      unit: "count",
+    }),
+    ...(metricEntry === undefined ? {} : { providerKey: metricEntry.provider.providerKey }),
+    ...(firstProvider === undefined
+      ? {}
+      : {
+          freshness: firstProvider.freshness,
+          confidence: firstProvider.confidence,
+        }),
+    clickPath: `/ko/services/${clickProviderKey}`,
+  };
+}
+
+function codexResetCreditExpiryItem(todayLive: TodayLiveView): NotificationDigestItem {
+  const providers = [
+    ...todayProviders(todayLive, CODEX_APP_PROVIDER_KEY),
+    ...todayProviders(todayLive, CODEX_CLI_PROVIDER_KEY),
+  ];
+  const firstProvider = providers[0];
+  const exactExpiry = earliestMetricResetAt(providers, "usage_reset_credit");
+  const estimatedExpiry = earliestMetricResetAt(providers, "usage_reset_credit_estimate");
+  const earliestExpiry = exactExpiry ?? estimatedExpiry;
+  const metric = earliestResetCreditMetric(providers, exactExpiry === null ? "usage_reset_credit_estimate" : "usage_reset_credit", earliestExpiry);
+  const metricProviderKey = metric === undefined ? undefined : providerForMetric(providers, metric);
   const daysUntil = earliestExpiry === null
     ? null
     : Math.ceil((Date.parse(earliestExpiry) - Date.parse(todayLive.generatedAt)) / MS_PER_DAY);
@@ -739,6 +819,10 @@ function codexResetCreditExpiryItem(todayLive: TodayLiveView): NotificationDiges
     severity: resetCreditExpirySeverity(daysUntil),
     label: "Codex reset credit expiry",
     value: resetCreditExpiryValue(daysUntil),
+    ...(earliestExpiry === null ? {} : { resetAt: earliestExpiry }),
+    ...(metric?.resetAtLatest === undefined ? {} : { resetAtLatest: metric.resetAtLatest }),
+    ...(metric?.accuracy === undefined ? {} : { accuracy: metric.accuracy }),
+    ...(metricProviderKey === undefined ? {} : { providerKey: metricProviderKey }),
     ...(firstProvider === undefined
       ? {}
       : {
@@ -878,6 +962,21 @@ function metricFirst(providers: readonly TodayLiveProviderView[], metricKey: str
   return null;
 }
 
+function firstMetricEntry(
+  providers: readonly TodayLiveProviderView[],
+  metricKey: string,
+): { provider: TodayLiveProviderView; metric: TodayLiveMetric } | undefined {
+  for (const provider of providers) {
+    const metric = provider.metrics.find((item) => item.key === metricKey);
+
+    if (metric !== undefined) {
+      return { provider, metric };
+    }
+  }
+
+  return undefined;
+}
+
 function earliestMetricResetAt(providers: readonly TodayLiveProviderView[], metricKey: string): string | null {
   const values = providers.flatMap((provider) =>
     provider.metrics
@@ -887,6 +986,27 @@ function earliestMetricResetAt(providers: readonly TodayLiveProviderView[], metr
   );
 
   return values.sort((first, second) => Date.parse(first) - Date.parse(second))[0] ?? null;
+}
+
+function earliestResetCreditMetric(
+  providers: readonly TodayLiveProviderView[],
+  metricKey: string,
+  resetAt: string | null,
+): TodayLiveMetric | undefined {
+  if (resetAt === null) {
+    return undefined;
+  }
+
+  return providers
+    .flatMap((provider) => provider.metrics)
+    .find((metric) => metric.key === metricKey && metric.resetAt === resetAt);
+}
+
+function providerForMetric(
+  providers: readonly TodayLiveProviderView[],
+  target: TodayLiveMetric,
+): string | undefined {
+  return providers.find((provider) => provider.metrics.some((metric) => metric === target))?.providerKey;
 }
 
 function remainingPercentFromMetrics(
@@ -1108,6 +1228,12 @@ function formatTokens(tokens: number): string {
   return new Intl.NumberFormat("en-US", {
     maximumFractionDigits: 0,
   }).format(tokens);
+}
+
+function formatCount(value: number): string {
+  return new Intl.NumberFormat("en-US", {
+    maximumFractionDigits: 0,
+  }).format(value);
 }
 
 function formatPercent(percent: number): string {

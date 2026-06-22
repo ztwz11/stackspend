@@ -30,10 +30,12 @@ import {
   type ProviderKey,
 } from "./provider-catalog";
 import { readLocalAiCliStatus, type LocalAiCliProviderKey, type LocalAiCliProviderStatus } from "./local-tools";
+import type { ResetCreditStatus } from "./codex-reset-credits/types";
 
 export type LiveTodayFreshness = "live" | "stale" | "error" | "unavailable" | "not_configured" | "locked";
 export type LiveTodayConfidence = "high" | "medium" | "low" | "none";
 export type LiveTodayCollectionStatus = "ok" | "partial" | "error";
+export type RefreshScope = "hud" | "local_ai" | "all";
 
 export interface LiveTodayProviderSnapshot {
   providerKey: ProviderKey;
@@ -42,6 +44,12 @@ export interface LiveTodayProviderSnapshot {
   checkedAt: string | null;
   expiresAt: string | null;
   ttlSeconds: number;
+  lastAttemptAt?: string | null;
+  lastSuccessAt?: string | null;
+  freshUntil?: string | null;
+  staleUntil?: string | null;
+  lastRefreshFailed?: boolean;
+  revision?: number;
   freshness: LiveTodayFreshness;
   liveGranularity: LiveGranularity;
   confidence: LiveTodayConfidence;
@@ -83,10 +91,14 @@ export interface LiveTodayUsageSummary {
 }
 
 export interface LiveTodayUsageMetric {
-  key: "input_tokens" | "output_tokens" | "cache_tokens" | "model_requests" | "sessions" | "turns" | "tool_calls" | "log_files" | "context_tokens" | "context_percent" | "last_request_tokens" | "total_tokens" | "reasoning_tokens" | "five_hour_limit_percent" | "weekly_limit_percent" | "five_hour_tokens" | "weekly_tokens" | "five_hour_remaining_tokens" | "weekly_remaining_tokens" | "usage_reset_credits" | "usage_reset_credit" | "usage_reset_credit_estimate";
+  key: "input_tokens" | "output_tokens" | "cache_tokens" | "model_requests" | "sessions" | "turns" | "tool_calls" | "log_files" | "context_tokens" | "context_percent" | "last_request_tokens" | "total_tokens" | "reasoning_tokens" | "five_hour_limit_percent" | "weekly_limit_percent" | "five_hour_tokens" | "weekly_tokens" | "five_hour_remaining_tokens" | "weekly_remaining_tokens" | "usage_reset_credits" | "usage_reset_credit_total_earned" | "usage_reset_credit" | "usage_reset_credit_estimate";
   value: number;
   unit: "tokens" | "requests" | "sessions" | "turns" | "calls" | "files" | "percent" | "usd" | "count";
   resetAt?: string;
+  resetAtLatest?: string;
+  itemKey?: string;
+  accuracy?: "exact" | "estimated" | "bounded" | "unknown";
+  source?: string;
 }
 
 export type LiveTodayProviderCollector = (
@@ -111,23 +123,43 @@ export interface LiveTodayOptions {
   connections?: ConnectionsStatusPayload;
   credentialStore?: CredentialStore;
   collectors?: Partial<Record<ProviderKey, LiveTodayProviderCollector>>;
+  scope?: RefreshScope;
 }
 
 const DEFAULT_TTL_SECONDS = 60;
 const LOCAL_AI_CLI_TTL_SECONDS = 5;
+const LOCAL_AI_CLI_STALE_SECONDS = 120;
+const DEFAULT_STALE_SECONDS = 15 * 60;
 const AWS_REGION_ENV_KEY = "MONEYSIREN_AWS_REGION";
 const CLOUDFLARE_ACCOUNT_IDS_ENV_KEY = "CLOUDFLARE_ACCOUNT_IDS";
 const ENV_CONNECTION_ID = "env";
-const cache = new Map<string, CachedLiveTodayProvider>();
+const cache = new Map<string, CachedLiveTodayProviderState>();
+const inFlightByKey = new Map<string, Promise<CachedLiveTodayProviderState>>();
+let liveRevision = 0;
 
 interface CachedLiveTodayProvider extends LiveTodayProviderCollection {
   expiresAt: string;
   ttlSeconds: number;
 }
 
+interface CachedLiveTodayProviderState {
+  current: CachedLiveTodayProvider | null;
+  lastSuccess: CachedLiveTodayProvider | null;
+  lastAttemptAt: string;
+  lastSuccessAt: string | null;
+  freshUntil: string | null;
+  staleUntil: string | null;
+  consecutiveFailures: number;
+  lastError: {
+    status: LiveTodayCollectionStatus | "not_checked";
+    message: string;
+  } | null;
+  revision: number;
+}
+
 export async function readLiveTodaySnapshot(options: LiveTodayOptions = {}): Promise<LiveTodaySnapshot> {
   const context = await createLiveTodayContext(options);
-  const providers = await Promise.all(liveTargetsFromConnections(context.connections).map(async (target) => {
+  const providers = await Promise.all(liveTargetsFromConnections(context.connections, context.scope).map(async (target) => {
     const cached = cache.get(liveCacheKey(target));
 
     if (cached === undefined) {
@@ -140,7 +172,7 @@ export async function readLiveTodaySnapshot(options: LiveTodayOptions = {}): Pro
       return notCheckedSnapshot(target, context.ttlSeconds);
     }
 
-    if (isLocalAiCliProviderKey(target.providerKey) && isCachedProviderExpired(cached, context.now)) {
+    if (isLocalAiCliProviderKey(target.providerKey) && isCachedProviderStateFreshnessExpired(cached, context.now)) {
       const collected = await collectAndCacheLiveTodayTarget(context, target);
 
       return snapshotFromCachedProvider(target, collected, context.now);
@@ -161,7 +193,7 @@ export async function refreshLiveToday(options: LiveTodayOptions = {}): Promise<
   const context = await createLiveTodayContext(options);
 
   await Promise.all(
-    liveTargetsFromConnections(context.connections).map((target) => collectAndCacheLiveTodayTarget(context, target)),
+    liveTargetsFromConnections(context.connections, context.scope).map((target) => collectAndCacheLiveTodayTarget(context, target)),
   );
 
   return readLiveTodaySnapshot({
@@ -175,30 +207,44 @@ export async function refreshLiveToday(options: LiveTodayOptions = {}): Promise<
 async function collectAndCacheLiveTodayTarget(
   context: RequiredLiveTodayContext,
   target: LiveTodayConnectionTarget,
-): Promise<CachedLiveTodayProvider> {
+): Promise<CachedLiveTodayProviderState> {
+  const key = liveCacheKey(target);
+  const existing = inFlightByKey.get(key);
+
+  if (existing !== undefined) {
+    return existing;
+  }
+
+  const promise = collectAndCacheLiveTodayTargetUncached(context, target);
+  inFlightByKey.set(key, promise);
+
+  try {
+    return await promise;
+  } finally {
+    if (inFlightByKey.get(key) === promise) {
+      inFlightByKey.delete(key);
+    }
+  }
+}
+
+async function collectAndCacheLiveTodayTargetUncached(
+  context: RequiredLiveTodayContext,
+  target: LiveTodayConnectionTarget,
+): Promise<CachedLiveTodayProviderState> {
   const providerKey = target.providerKey;
   const checkedAt = context.now.toISOString();
   const ttlSeconds = liveTtlSecondsForTarget(target, context.ttlSeconds);
   const preflight = preflightProvider(target);
 
   if (preflight !== null) {
-    const collected: CachedLiveTodayProvider = {
-      providerKey,
-      ...(target.connectionId === undefined ? {} : { connectionId: target.connectionId }),
-      ...(target.connectionLabel === undefined ? {} : { connectionLabel: target.connectionLabel }),
-      status: "partial",
+    const failed = recordFailedLiveTodayTarget(context, target, {
       checkedAt,
-      expiresAt: expiresAt(context.now, ttlSeconds),
-      ttlSeconds,
-      todayLiveAmountMinor: null,
-      currency: "USD",
-      included: false,
-      confidence: "none",
       message: preflight,
-    };
-    cache.set(liveCacheKey(target), collected);
+      status: "partial",
+      ttlSeconds,
+    });
 
-    return collected;
+    return failed;
   }
 
   const collector = context.collectors[providerKey] ?? createDefaultLiveTodayCollector(providerKey);
@@ -220,28 +266,72 @@ async function collectAndCacheLiveTodayTarget(
       expiresAt: expiresAt(context.now, ttlSeconds),
       ttlSeconds,
     };
-    cache.set(liveCacheKey(target), cached);
+    const next = recordSuccessfulLiveTodayTarget(context, target, cached);
 
-    return cached;
+    return next;
   } catch (error) {
-    const cached: CachedLiveTodayProvider = {
-      providerKey,
-      ...(target.connectionId === undefined ? {} : { connectionId: target.connectionId }),
-      ...(target.connectionLabel === undefined ? {} : { connectionLabel: target.connectionLabel }),
-      status: "error",
+    const failed = recordFailedLiveTodayTarget(context, target, {
       checkedAt,
-      expiresAt: expiresAt(context.now, ttlSeconds),
-      ttlSeconds,
-      todayLiveAmountMinor: null,
-      currency: "USD",
-      included: false,
-      confidence: "none",
       message: safeErrorMessage(error),
-    };
-    cache.set(liveCacheKey(target), cached);
+      status: "error",
+      ttlSeconds,
+    });
 
-    return cached;
+    return failed;
   }
+}
+
+function recordSuccessfulLiveTodayTarget(
+  context: RequiredLiveTodayContext,
+  target: LiveTodayConnectionTarget,
+  collected: CachedLiveTodayProvider,
+): CachedLiveTodayProviderState {
+  const ttlSeconds = collected.ttlSeconds;
+  const staleSeconds = liveStaleSecondsForTarget(target);
+  const next: CachedLiveTodayProviderState = {
+    current: collected,
+    lastSuccess: collected,
+    lastAttemptAt: collected.checkedAt,
+    lastSuccessAt: collected.checkedAt,
+    freshUntil: expiresAt(context.now, ttlSeconds),
+    staleUntil: expiresAt(context.now, staleSeconds),
+    consecutiveFailures: 0,
+    lastError: null,
+    revision: ++liveRevision,
+  };
+  cache.set(liveCacheKey(target), next);
+
+  return next;
+}
+
+function recordFailedLiveTodayTarget(
+  context: RequiredLiveTodayContext,
+  target: LiveTodayConnectionTarget,
+  error: {
+    checkedAt: string;
+    message: string;
+    status: LiveTodayCollectionStatus | "not_checked";
+    ttlSeconds: number;
+  },
+): CachedLiveTodayProviderState {
+  const previous = cache.get(liveCacheKey(target));
+  const next: CachedLiveTodayProviderState = {
+    current: previous?.lastSuccess ?? null,
+    lastSuccess: previous?.lastSuccess ?? null,
+    lastAttemptAt: error.checkedAt,
+    lastSuccessAt: previous?.lastSuccessAt ?? null,
+    freshUntil: previous?.freshUntil ?? null,
+    staleUntil: previous?.staleUntil ?? expiresAt(context.now, liveStaleSecondsForTarget(target)),
+    consecutiveFailures: (previous?.consecutiveFailures ?? 0) + 1,
+    lastError: {
+      status: error.status,
+      message: error.message,
+    },
+    revision: ++liveRevision,
+  };
+  cache.set(liveCacheKey(target), next);
+
+  return next;
 }
 
 export function clearLiveTodayCache(): void {
@@ -266,6 +356,7 @@ async function createLiveTodayContext(options: LiveTodayOptions): Promise<Requir
     env,
     now,
     ttlSeconds,
+    scope: options.scope ?? "all",
     timezone: options.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC",
     connections,
     credentialStore,
@@ -277,6 +368,7 @@ interface RequiredLiveTodayContext {
   env: Record<string, string | undefined>;
   now: Date;
   ttlSeconds: number;
+  scope: RefreshScope;
   timezone: string;
   connections: ConnectionsStatusPayload;
   credentialStore: CredentialStore;
@@ -292,8 +384,15 @@ interface LiveTodayConnectionTarget {
   connectionState: ConnectionState;
 }
 
-function liveTargetsFromConnections(connections: ConnectionsStatusPayload): LiveTodayConnectionTarget[] {
+function liveTargetsFromConnections(
+  connections: ConnectionsStatusPayload,
+  scope: RefreshScope = "all",
+): LiveTodayConnectionTarget[] {
   return connections.providers.flatMap((connection) => {
+    if (scope !== "all" && !isLocalAiCliProviderKey(connection.providerKey)) {
+      return [];
+    }
+
     const targets: LiveTodayConnectionTarget[] = [];
 
     if (connection.connectionState === "env_configured") {
@@ -379,26 +478,58 @@ function notCheckedSnapshot(
 
 function snapshotFromCachedProvider(
   target: LiveTodayConnectionTarget,
-  cached: CachedLiveTodayProvider,
+  state: CachedLiveTodayProviderState,
   now: Date,
 ): LiveTodayProviderSnapshot {
   const granularity = findAvailableProvider(target.providerKey)?.liveGranularity ?? "unavailable";
-  const expired = isCachedProviderExpired(cached, now);
-  const freshness = cached.status === "partial" && cached.confidence === "none" && cached.todayLiveAmountMinor === null
-    ? freshnessWithoutCache(target.connectionState, granularity)
-    : cached.status === "error"
-    ? "error"
-    : expired
-      ? "stale"
-      : "live";
+  const cached = state.lastSuccess ?? state.current;
+
+  if (cached === null) {
+    const freshness = state.lastError?.status === "error"
+      ? "error"
+      : freshnessWithoutCache(target.connectionState, granularity);
+
+    return {
+      providerKey: target.providerKey,
+      ...(target.connectionId === undefined ? {} : { connectionId: target.connectionId }),
+      ...(target.connectionLabel === undefined ? {} : { connectionLabel: target.connectionLabel }),
+      checkedAt: state.lastAttemptAt,
+      expiresAt: state.freshUntil,
+      ttlSeconds: liveTtlSecondsForTarget(target, 0),
+      lastAttemptAt: state.lastAttemptAt,
+      lastSuccessAt: state.lastSuccessAt,
+      freshUntil: state.freshUntil,
+      staleUntil: state.staleUntil,
+      lastRefreshFailed: state.lastError !== null,
+      revision: state.revision,
+      freshness,
+      liveGranularity: granularity,
+      confidence: "none",
+      provisional: true,
+      todayLiveAmountMinor: null,
+      currency: "USD",
+      included: false,
+      status: state.lastError?.status ?? "not_checked",
+      ...(state.lastError === null ? {} : { message: state.lastError.message }),
+    };
+  }
+
+  const freshness = freshnessFromCachedState(state, target, granularity, now);
+  const expired = freshness !== "live";
 
   return {
     providerKey: target.providerKey,
     ...(target.connectionId === undefined ? {} : { connectionId: target.connectionId }),
     ...(target.connectionLabel === undefined ? {} : { connectionLabel: target.connectionLabel }),
     checkedAt: cached.checkedAt,
-    expiresAt: cached.expiresAt,
+    expiresAt: state.freshUntil ?? cached.expiresAt,
     ttlSeconds: cached.ttlSeconds,
+    lastAttemptAt: state.lastAttemptAt,
+    lastSuccessAt: state.lastSuccessAt,
+    freshUntil: state.freshUntil,
+    staleUntil: state.staleUntil,
+    lastRefreshFailed: state.lastError !== null,
+    revision: state.revision,
     freshness,
     liveGranularity: granularity,
     confidence: expired || cached.status === "error" ? "none" : cached.confidence,
@@ -408,12 +539,35 @@ function snapshotFromCachedProvider(
     included: !expired && cached.status !== "error" && cached.included,
     status: cached.status,
     ...(cached.usageSummary === undefined ? {} : { usageSummary: cached.usageSummary }),
-    ...(cached.message === undefined ? {} : { message: cached.message }),
+    ...(state.lastError?.message !== undefined
+      ? { message: state.lastError.message }
+      : cached.message === undefined ? {} : { message: cached.message }),
   };
 }
 
-function isCachedProviderExpired(cached: CachedLiveTodayProvider, now: Date): boolean {
-  return new Date(cached.expiresAt).getTime() <= now.getTime();
+function freshnessFromCachedState(
+  state: CachedLiveTodayProviderState,
+  target: LiveTodayConnectionTarget,
+  granularity: LiveGranularity,
+  now: Date,
+): LiveTodayFreshness {
+  if (state.lastSuccess === null) {
+    return state.lastError?.status === "error" ? "error" : freshnessWithoutCache(target.connectionState, granularity);
+  }
+
+  if (state.freshUntil !== null && Date.parse(state.freshUntil) > now.getTime()) {
+    return "live";
+  }
+
+  if (state.staleUntil !== null && Date.parse(state.staleUntil) > now.getTime()) {
+    return "stale";
+  }
+
+  return state.lastError === null ? "stale" : "error";
+}
+
+function isCachedProviderStateFreshnessExpired(state: CachedLiveTodayProviderState, now: Date): boolean {
+  return state.freshUntil === null || Date.parse(state.freshUntil) <= now.getTime();
 }
 
 function freshnessWithoutCache(
@@ -444,7 +598,11 @@ function summarizeCacheState(providers: readonly LiveTodayProviderSnapshot[]): L
     return "empty";
   }
 
-  if (providers.some((provider) => provider.freshness === "live")) {
+  const actionable = providers.filter((provider) =>
+    provider.freshness !== "not_configured" && provider.freshness !== "unavailable"
+  );
+
+  if (actionable.length > 0 && actionable.every((provider) => provider.freshness === "live")) {
     return "fresh";
   }
 
@@ -463,6 +621,12 @@ function liveTtlSecondsForTarget(target: LiveTodayConnectionTarget, defaultTtlSe
   return isLocalAiCliProviderKey(target.providerKey)
     ? Math.min(defaultTtlSeconds, LOCAL_AI_CLI_TTL_SECONDS)
     : defaultTtlSeconds;
+}
+
+function liveStaleSecondsForTarget(target: LiveTodayConnectionTarget): number {
+  return isLocalAiCliProviderKey(target.providerKey)
+    ? LOCAL_AI_CLI_STALE_SECONDS
+    : DEFAULT_STALE_SECONDS;
 }
 
 function createDefaultLiveTodayCollector(providerKey: ProviderKey): LiveTodayProviderCollector {
@@ -600,7 +764,10 @@ async function collectLocalAiCliLiveToday(context: LiveTodayCollectionContext): 
     throw new Error("Local AI CLI provider is not available.");
   }
 
-  const usageSummary = summarizeLocalAiCliUsage(provider);
+  const usageSummary = summarizeLocalAiCliUsage(
+    provider,
+    providerKey === "codex-app" ? await readCodexAppResetCreditMetrics(context) : [],
+  );
   const hasUsage = usageSummary !== null;
 
   return {
@@ -620,8 +787,11 @@ async function collectLocalAiCliLiveToday(context: LiveTodayCollectionContext): 
   };
 }
 
-export function summarizeLocalAiCliUsage(provider: LocalAiCliProviderStatus): LiveTodayUsageSummary | null {
-  const metrics = localCliUsageMetrics(provider);
+export function summarizeLocalAiCliUsage(
+  provider: LocalAiCliProviderStatus,
+  extraMetrics: readonly LiveTodayUsageMetric[] = [],
+): LiveTodayUsageSummary | null {
+  const metrics = mergeLocalCliUsageMetrics(localCliUsageMetrics(provider), extraMetrics);
 
   if (metrics.length === 0) {
     return null;
@@ -635,6 +805,81 @@ export function summarizeLocalAiCliUsage(provider: LocalAiCliProviderStatus): Li
       ? [provider.displayName]
       : provider.usage.topModels,
   };
+}
+
+async function readCodexAppResetCreditMetrics(
+  context: LiveTodayCollectionContext,
+): Promise<LiveTodayUsageMetric[]> {
+  try {
+    const { fetchCodexResetCreditStatus } = await import("./codex-reset-credits");
+    const status = await fetchCodexResetCreditStatus({
+      env: context.env,
+      now: () => context.now,
+    });
+
+    return resetCreditStatusMetrics(status);
+  } catch {
+    return [];
+  }
+}
+
+function resetCreditStatusMetrics(status: ResetCreditStatus): LiveTodayUsageMetric[] {
+  const metrics: LiveTodayUsageMetric[] = [];
+
+  if (status.availableCount !== null) {
+    metrics.push({
+      key: "usage_reset_credits",
+      value: status.availableCount,
+      unit: "count",
+      accuracy: "exact",
+      source: "codex_reset_credit_api",
+    });
+  }
+
+  if (status.totalEarnedCount !== null) {
+    metrics.push({
+      key: "usage_reset_credit_total_earned",
+      value: status.totalEarnedCount,
+      unit: "count",
+      accuracy: "exact",
+      source: "codex_reset_credit_api",
+    });
+  }
+
+  metrics.push(...status.credits.map((credit) => ({
+    key: "usage_reset_credit" as const,
+    value: 1,
+    unit: "count" as const,
+    itemKey: `codex-app-reset-credit-${credit.index}`,
+    accuracy: "exact" as const,
+    source: "codex_reset_credit_api",
+    ...(credit.expiresAtUtc === null ? {} : { resetAt: credit.expiresAtUtc }),
+  })));
+
+  return metrics;
+}
+
+function mergeLocalCliUsageMetrics(
+  baseMetrics: readonly LiveTodayUsageMetric[],
+  extraMetrics: readonly LiveTodayUsageMetric[],
+): LiveTodayUsageMetric[] {
+  if (extraMetrics.length === 0) {
+    return [...baseMetrics];
+  }
+
+  const extraResetCreditMetrics = extraMetrics.some((metric) => isResetCreditMetricKey(metric.key));
+  const filteredBase = extraResetCreditMetrics
+    ? baseMetrics.filter((metric) => !isResetCreditMetricKey(metric.key))
+    : baseMetrics;
+
+  return [...filteredBase, ...extraMetrics];
+}
+
+function isResetCreditMetricKey(key: LiveTodayUsageMetric["key"]): boolean {
+  return key === "usage_reset_credits" ||
+    key === "usage_reset_credit_total_earned" ||
+    key === "usage_reset_credit" ||
+    key === "usage_reset_credit_estimate";
 }
 
 function localCliUsageMetrics(provider: LocalAiCliProviderStatus): LiveTodayUsageMetric[] {
@@ -680,15 +925,30 @@ function localCliUsageMetrics(provider: LocalAiCliProviderStatus): LiveTodayUsag
       key: "usage_reset_credits",
       value: statusLine.usageResetCredits.length,
       unit: "count",
+      accuracy: summarizeResetCreditMetricAccuracy(statusLine.usageResetCredits),
+      source: resetCreditMetricSource(provider),
     });
-    metrics.push(...statusLine.usageResetCredits.map((credit) => ({
-      key: credit.status === "estimated" ? "usage_reset_credit_estimate" as const : "usage_reset_credit" as const,
-      value: 1,
-      unit: "count" as const,
-      ...(credit.status === "estimated"
-        ? credit.estimatedEarliestExpiryUtc === null ? {} : { resetAt: credit.estimatedEarliestExpiryUtc }
-        : credit.expiresAt === null ? {} : { resetAt: credit.expiresAt }),
-    })));
+    metrics.push(...statusLine.usageResetCredits.map((credit, index) => {
+      const accuracy = resetCreditAccuracy(credit);
+      const estimated = accuracy === "estimated" || accuracy === "bounded" || credit.status === "estimated";
+
+      return {
+        key: estimated ? "usage_reset_credit_estimate" as const : "usage_reset_credit" as const,
+        value: 1,
+        unit: "count" as const,
+        itemKey: credit.label ?? `${provider.providerKey}:reset-credit:${index + 1}`,
+        accuracy,
+        source: resetCreditMetricSource(provider, credit),
+        ...(estimated
+          ? credit.estimatedEarliestExpiryUtc === null || credit.estimatedEarliestExpiryUtc === undefined
+            ? credit.expiresAt === null ? {} : { resetAt: credit.expiresAt }
+            : { resetAt: credit.estimatedEarliestExpiryUtc }
+          : credit.expiresAt === null ? {} : { resetAt: credit.expiresAt }),
+        ...(credit.estimatedLatestExpiryUtc === undefined || credit.estimatedLatestExpiryUtc === null
+          ? {}
+          : { resetAtLatest: credit.estimatedLatestExpiryUtc }),
+      };
+    }));
   }
 
   if (statusLine.contextWindowTokens !== null && statusLine.contextWindowTokens > 0) {
@@ -742,6 +1002,68 @@ function localCliUsageMetrics(provider: LocalAiCliProviderStatus): LiveTodayUsag
   }
 
   return metrics;
+}
+
+function summarizeResetCreditMetricAccuracy(
+  credits: readonly LocalAiCliProviderStatus["usage"]["statusLine"]["usageResetCredits"][number][],
+): NonNullable<LiveTodayUsageMetric["accuracy"]> {
+  if (credits.length === 0) {
+    return "unknown";
+  }
+
+  if (credits.every((credit) => resetCreditAccuracy(credit) === "exact")) {
+    return "exact";
+  }
+
+  if (credits.some((credit) => resetCreditAccuracy(credit) === "bounded")) {
+    return "bounded";
+  }
+
+  if (credits.some((credit) => resetCreditAccuracy(credit) === "estimated")) {
+    return "estimated";
+  }
+
+  return "unknown";
+}
+
+function resetCreditAccuracy(
+  credit: LocalAiCliProviderStatus["usage"]["statusLine"]["usageResetCredits"][number],
+): NonNullable<LiveTodayUsageMetric["accuracy"]> {
+  if (credit.isExact === false) {
+    return credit.estimatedEarliestExpiryUtc !== undefined && credit.estimatedEarliestExpiryUtc !== null &&
+      credit.estimatedLatestExpiryUtc !== undefined && credit.estimatedLatestExpiryUtc !== null
+      ? "bounded"
+      : "estimated";
+  }
+
+  if (credit.status === "estimated") {
+    return "bounded";
+  }
+
+  if (credit.status === "initial_existing" || credit.status === "removed_unknown") {
+    return "unknown";
+  }
+
+  return credit.expiresAt === null ? "unknown" : "exact";
+}
+
+function resetCreditMetricSource(
+  provider: LocalAiCliProviderStatus,
+  credit?: LocalAiCliProviderStatus["usage"]["statusLine"]["usageResetCredits"][number],
+): string {
+  if (credit?.status === "estimated" || credit?.status === "initial_existing" || credit?.isExact === false) {
+    return "count_observation";
+  }
+
+  if (provider.providerKey === "codex-app") {
+    return provider.usage.logFileCount === 0 ? "env_fallback" : "codex_app_session";
+  }
+
+  if (provider.providerKey === "codex-cli") {
+    return provider.usage.logFileCount === 0 ? "env_fallback" : "codex_cli_session";
+  }
+
+  return "local_session";
 }
 
 async function resolveProviderSecret(

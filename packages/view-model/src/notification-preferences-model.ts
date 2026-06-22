@@ -10,6 +10,7 @@ export const NOTIFICATION_WIDGET_KEYS = [
   "claude_weekly_percent",
   "codex_five_hour_percent",
   "codex_weekly_percent",
+  "codex_reset_credit_count",
   "codex_reset_credit_expiry",
   "supabase_usage_health",
   "cloudflare_month_to_date",
@@ -135,7 +136,28 @@ export const DEFAULT_SELECTED_NOTIFICATION_WIDGET_KEYS: readonly NotificationWid
   "stale_connection_count",
   "openai_today_tokens",
   "codex_five_hour_percent",
+  "codex_reset_credit_count",
   "codex_reset_credit_expiry",
+];
+
+const LEGACY_SELECTED_NOTIFICATION_WIDGET_KEY_SETS: readonly (readonly NotificationWidgetKey[])[] = [
+  [
+    "month_forecast",
+    "today_live_cost",
+    "risk_high_count",
+    "stale_connection_count",
+    "openai_today_tokens",
+    "codex_five_hour_percent",
+  ],
+  [
+    "month_forecast",
+    "today_live_cost",
+    "risk_high_count",
+    "stale_connection_count",
+    "openai_today_tokens",
+    "codex_five_hour_percent",
+    "codex_reset_credit_expiry",
+  ],
 ];
 
 export const DEFAULT_LOCAL_CLI_DASHBOARD_METRIC_KEYS: readonly LocalCliDashboardMetricKey[] = [
@@ -410,7 +432,43 @@ function parseSelectedWidgets(
     ? value.filter((item): item is NotificationWidgetKey => typeof item === "string" && widgetKeys.has(item as NotificationWidgetKey))
     : [...fallbackSelectedWidgets];
 
-  return selected.length === 0 ? [...fallbackSelectedWidgets] : [...new Set(selected)];
+  if (selected.length === 0) {
+    return [...fallbackSelectedWidgets];
+  }
+
+  const uniqueSelected = [...new Set(selected)];
+
+  return isLegacySelectedWidgetDefault(uniqueSelected)
+    ? [...DEFAULT_SELECTED_NOTIFICATION_WIDGET_KEYS]
+    : migrateSelectedWidgets(uniqueSelected);
+}
+
+function migrateSelectedWidgets(selectedWidgets: readonly NotificationWidgetKey[]): NotificationWidgetKey[] {
+  if (
+    !selectedWidgets.includes("codex_reset_credit_expiry") ||
+    selectedWidgets.includes("codex_reset_credit_count")
+  ) {
+    return [...selectedWidgets];
+  }
+
+  const migrated: NotificationWidgetKey[] = [];
+
+  for (const widgetKey of selectedWidgets) {
+    if (widgetKey === "codex_reset_credit_expiry") {
+      migrated.push("codex_reset_credit_count");
+    }
+
+    migrated.push(widgetKey);
+  }
+
+  return migrated;
+}
+
+function isLegacySelectedWidgetDefault(selectedWidgets: readonly NotificationWidgetKey[]): boolean {
+  return LEGACY_SELECTED_NOTIFICATION_WIDGET_KEY_SETS.some((legacySet) =>
+    legacySet.length === selectedWidgets.length &&
+    legacySet.every((widgetKey, index) => selectedWidgets[index] === widgetKey)
+  );
 }
 
 function parseThresholdRules(value: unknown): readonly NotificationThresholdRule[] {

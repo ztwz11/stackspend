@@ -17,7 +17,7 @@ export default async function NotificationsPage({ params }: PageProps) {
   return (
     <>
       <PageHeader title={messages.settings.notificationsTitle} subtitle={messages.settings.notificationsSubtitle} />
-      <NotificationSettingsPanel messages={messages} />
+      <NotificationSettingsPanel locale={locale} messages={messages} />
     </>
   );
 }

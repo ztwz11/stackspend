@@ -14,6 +14,7 @@ import { DashboardDisplaySettings } from "./DashboardDisplaySettings";
 import { LiveRefreshButton } from "./LiveRefreshButton";
 import { ProviderIcon } from "./ProviderIcon";
 import { RefreshPageButton } from "./RefreshPageButton";
+import { UsageProgress } from "./UsageProgress";
 import {
   ServiceRemediationHeader,
   ServiceRemediationPanel,
@@ -2107,15 +2108,35 @@ function MetricCard({
 
 function ProgressBar({ value, state }: { value: number; state: string }) {
   const safeValue = Math.max(0, Math.min(100, value));
+  const thresholds = progressThresholdsForState(state);
 
-  return (
-    <span className="progress-track" aria-hidden="true">
-      <span
-        className={state === "critical" || state === "high" ? "progress-bar progress-bar-critical" : state === "warning" || state === "medium" ? "progress-bar progress-bar-warn" : "progress-bar"}
-        style={{ width: `${safeValue}%` }}
-      />
-    </span>
-  );
+  return <UsageProgress compact label="Usage progress" progress={{
+    usedPercent: safeValue,
+    remainingPercent: Math.max(0, 100 - safeValue),
+    warningAtPercent: thresholds.warningAtPercent,
+    criticalAtPercent: thresholds.criticalAtPercent,
+  }} />;
+}
+
+function progressThresholdsForState(state: string): { warningAtPercent: number; criticalAtPercent: number } {
+  if (state === "critical" || state === "high") {
+    return {
+      warningAtPercent: 0,
+      criticalAtPercent: 0,
+    };
+  }
+
+  if (state === "warning" || state === "medium") {
+    return {
+      warningAtPercent: 0,
+      criticalAtPercent: 101,
+    };
+  }
+
+  return {
+    warningAtPercent: 80,
+    criticalAtPercent: 95,
+  };
 }
 
 function InfoPanel({ title, children }: { title: string; children: ReactNode }) {
@@ -2475,6 +2496,10 @@ function usageMetricLabel(metric: string, messages: Messages): string {
 
   if (metric === "usage_reset_credits") {
     return messages.services.usageResetCredits;
+  }
+
+  if (metric === "usage_reset_credit_total_earned") {
+    return `${messages.services.usageResetCredits} total`;
   }
 
   if (metric === "usage_reset_credit") {

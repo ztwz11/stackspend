@@ -19,6 +19,7 @@ export {
   type ReadTrayMenuModelOptions,
   type TodayLiveProviderInput,
   type TodayLiveProviderView,
+  type TodayLiveMetric,
   type TodayLiveView,
   type TrayMenuItem,
   type TrayMenuModel,
@@ -33,6 +34,42 @@ export {
   type ViewModelStore,
   type ViewModelUsageSnapshotRecord,
 } from "./view-model.js";
+export {
+  CODEX_APP_PROVIDER_KEY,
+  CODEX_CLI_PROVIDER_KEY,
+  buildCreditPoolFromProvider,
+  buildCreditPoolsFromProvider,
+  buildHudViewModel,
+  filterHudViewModelByWidgets,
+  type CreditAccuracy,
+  type CreditItemView,
+  type CreditPoolView,
+  type HudItemView,
+  type HudViewModel,
+  type QuotaItemView,
+} from "./hud-model.js";
+export {
+  createSyncError,
+  isNeutralSyncState,
+  summarizeAggregateSync,
+  syncStateFromFreshness,
+  syncViewFromFreshness,
+  type AggregateSyncStatus,
+  type ItemSyncView,
+  type RiskSeverity,
+  type SyncErrorCode,
+  type SyncErrorView,
+  type SyncStateValue,
+} from "./sync-state.js";
+export {
+  normalizePercent,
+  usageProgressFromRemainingPercent,
+  usageProgressFromTokens,
+  usageProgressFromUsedPercent,
+  usageProgressSeverity,
+  type UsageProgressSeverity,
+  type UsageProgressView,
+} from "./usage-progress.js";
 export {
   cloneNotificationPreferences,
   DEFAULT_LOCAL_CLI_DASHBOARD_METRIC_KEYS,

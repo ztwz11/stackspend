@@ -9,7 +9,6 @@ import { withAppLoading } from "./AppLoadingOverlay";
 
 type SaveState = "idle" | "saving" | "saved" | "error";
 type HudWindowAction = "close" | "minimize";
-const HUD_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 
 interface HudWindowControlsProps {
   initialPreferences: NotificationPreferences;
@@ -27,6 +26,8 @@ interface HudWindowControlsProps {
     toolLoadingPreparingView: string;
   };
   locale: Locale;
+  onRefresh?: () => void;
+  refreshBusy?: boolean;
 }
 
 interface TauriWindow {
@@ -36,7 +37,7 @@ interface TauriWindow {
   setAlwaysOnTop: (alwaysOnTop: boolean) => Promise<void>;
 }
 
-export function HudWindowControls({ initialPreferences, labels, locale }: HudWindowControlsProps) {
+export function HudWindowControls({ initialPreferences, labels, locale, onRefresh, refreshBusy = false }: HudWindowControlsProps) {
   const router = useRouter();
   const [controlsOpen, setControlsOpen] = useState(false);
   const [draftAlwaysOnTop, setDraftAlwaysOnTop] = useState(initialPreferences.hud.alwaysOnTop);
@@ -96,23 +97,22 @@ export function HudWindowControls({ initialPreferences, labels, locale }: HudWin
     hudPage?.style.setProperty("--hud-opacity", String(draftOpacity));
   }, [draftFontScale, draftOpacity]);
 
-  useEffect(() => {
-    const interval = window.setInterval(() => {
-      router.refresh();
-    }, HUD_REFRESH_INTERVAL_MS);
-
-    return () => {
-      window.clearInterval(interval);
-    };
-  }, [router]);
-
   return (
     <>
       <div className="hud-window-controls" aria-label={labels.settings}>
         <button
           aria-label={labels.refresh}
+          aria-busy={refreshBusy}
           className="hud-control-button"
-          onClick={() => router.refresh()}
+          disabled={refreshBusy}
+          onClick={() => {
+            if (onRefresh === undefined) {
+              router.refresh();
+              return;
+            }
+
+            onRefresh();
+          }}
           title={labels.refresh}
           type="button"
         >
