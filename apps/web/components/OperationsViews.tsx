@@ -4,7 +4,6 @@ import {
   AlertTriangle,
   CalendarDays,
   ExternalLink,
-  Gauge,
   MoreVertical,
 } from "lucide-react";
 import type { Messages, Locale } from "../lib/i18n";
@@ -595,37 +594,10 @@ function LocalAiCliServiceDetail({
   const contextValue = usageMetricValue(summary, "context_percent", locale) ??
     usageMetricValue(summary, "context_tokens", locale) ??
     messages.services.noCurrentUsage;
-  const remainingRows = localCliRemainingRowsFromSummary(summary, locale, dashboard.timezone, messages, provider.providerKey);
-  const learnMoreHref = provider.setupLinks[0]?.href;
 
   return (
     <div className="stack">
       <ServiceRemediationPanel locale={locale} service={provider} />
-      {remainingRows.length === 0 ? null : (
-        <section className="local-cli-usage-menu" aria-label={messages.settings.localCliRemaining}>
-          <div className="local-cli-usage-header">
-            <span>
-              <Gauge aria-hidden="true" size={14} strokeWidth={1.9} />
-              <strong>{messages.settings.localCliRemaining}</strong>
-            </span>
-          </div>
-          <div className="local-cli-usage-rows">
-            {remainingRows.map((row) => (
-              <div className="local-cli-usage-row" key={row.label}>
-                <span>{row.label}</span>
-                <span className="local-cli-usage-value">{row.percent}</span>
-                <span className="local-cli-usage-reset">{row.resetAt}</span>
-              </div>
-            ))}
-          </div>
-          {learnMoreHref === undefined ? null : (
-            <a className="local-cli-learn-more" href={learnMoreHref} rel="noreferrer" target="_blank">
-              <span>{messages.settings.localCliLearnMore}</span>
-              <ExternalLink aria-hidden="true" size={13} strokeWidth={1.9} />
-            </a>
-          )}
-        </section>
-      )}
       <section className="metric-grid">
         <MetricCard
           label={messages.services.fiveHourLimit}
@@ -2195,112 +2167,11 @@ function dashboardMetricKeysForRow(
   return isLocalAiCliProvider(row.providerKey) ? dashboard.displayPreferences.localCliMetricKeys : undefined;
 }
 
-function localCliRemainingRowsFromSummary(
-  summary: OperationsProvider["currentUsageSummary"],
-  locale: Locale,
-  timezone: string,
-  messages: Messages,
-  providerKey?: string,
-): Array<{ label: string; percent: string; resetAt: string }> {
-  if (summary === null) {
-    return [];
-  }
-
-  const rows: Array<{ label: string; percent: string; resetAt: string }> = [
-    {
-      label: messages.settings.localCliFiveHourWindow,
-      percent: formatRemainingUsagePercent(summary, "five_hour_remaining_tokens", "five_hour_limit_percent", locale),
-      resetAt: formatUsageResetAt(usageMetric(summary, "five_hour_remaining_tokens")?.resetAt, locale, timezone),
-    },
-    {
-      label: messages.settings.localCliWeeklyWindow,
-      percent: formatRemainingUsagePercent(summary, "weekly_remaining_tokens", "weekly_limit_percent", locale),
-      resetAt: formatUsageResetAt(usageMetric(summary, "weekly_remaining_tokens")?.resetAt, locale, timezone),
-    },
-  ];
-
-  const resetCreditEstimateMetrics = usageMetrics(summary, "usage_reset_credit_estimate");
-  const resetCreditMetrics = usageMetrics(summary, "usage_reset_credit");
-
-  if (resetCreditEstimateMetrics.length > 0) {
-    rows.push(...resetCreditEstimateMetrics.map((metric, index) => ({
-      label: `${messages.services.usageResetCreditEstimate} ${index + 1}`,
-      percent: formatUsageResetRemaining(metric, locale),
-      resetAt: formatUsageResetWindow(metric, locale, timezone),
-    })));
-  }
-
-  if (resetCreditMetrics.length > 0) {
-    rows.push(...resetCreditMetrics.map((metric, index) => ({
-      label: `${messages.settings.localCliUsageResetCredit} ${index + 1}`,
-      percent: formatUsageResetRemaining(metric, locale),
-      resetAt: formatUsageResetAt(metric.resetAt, locale, timezone),
-    })));
-    return rows;
-  }
-
-  const resetCreditCount = usageMetric(summary, "usage_reset_credits");
-
-  if (resetCreditCount !== undefined) {
-    rows.push({
-      label: messages.settings.localCliUsageResetCredits,
-      percent: formatUsageMetric(resetCreditCount.value, resetCreditCount.unit, locale),
-      resetAt: "-",
-    });
-  } else if (providerKey !== undefined && isCodexLocalProvider(providerKey)) {
-    rows.push({
-      label: messages.settings.localCliUsageResetCredits,
-      percent: "-",
-      resetAt: "-",
-    });
-  }
-
-  return rows;
-}
-
-function isCodexLocalProvider(providerKey: string): boolean {
-  return providerKey === "codex-cli" || providerKey === "codex-app";
-}
-
-function formatRemainingUsagePercent(
-  summary: NonNullable<OperationsProvider["currentUsageSummary"]>,
-  remainingKey: string,
-  usedPercentKey: string,
-  locale: Locale,
-): string {
-  const remainingMetric = usageMetric(summary, remainingKey);
-  const usedPercentMetric = usageMetric(summary, usedPercentKey);
-
-  if (remainingMetric !== undefined) {
-    const usedTokenMetric = remainingKey === "five_hour_remaining_tokens"
-      ? usageMetric(summary, "five_hour_tokens")
-      : usageMetric(summary, "weekly_tokens");
-    const denominator = usedTokenMetric === undefined ? null : usedTokenMetric.value + remainingMetric.value;
-
-    if (denominator !== null && denominator > 0) {
-      return formatUsageMetric((remainingMetric.value / denominator) * 100, "percent", locale);
-    }
-  }
-
-  if (usedPercentMetric !== undefined) {
-    return formatUsageMetric(Math.max(100 - usedPercentMetric.value, 0), "percent", locale);
-  }
-
-  return "-";
-}
-
 function usageMetric(
   summary: OperationsProvider["currentUsageSummary"],
   key: string,
 ): UsageMetric | undefined {
   return summary?.metrics.find((item) => item.key === key);
-}
-
-function usageMetrics(
-  summary: OperationsProvider["currentUsageSummary"],
-  key: string,
-): UsageMetric[] {
-  return summary?.metrics.filter((item) => item.key === key) ?? [];
 }
 
 function rowTodayLiveLabel(row: OperationsRow, locale: Locale, messages: Messages): string {
@@ -2692,25 +2563,6 @@ function formatUsageResetRemaining(metric: Pick<UsageMetric, "resetAt" | "resetA
   }
 
   return formatResetCreditDuration(remainingMs, locale);
-}
-
-function formatUsageResetWindow(
-  metric: Pick<UsageMetric, "resetAt" | "resetAtLatest">,
-  locale: Locale,
-  timezone: string,
-): string {
-  const earliest = formatUsageResetAt(metric.resetAt, locale, timezone);
-  const latest = formatUsageResetAt(metric.resetAtLatest, locale, timezone);
-
-  if (latest === "-" || latest === earliest) {
-    return earliest;
-  }
-
-  if (earliest === "-") {
-    return latest;
-  }
-
-  return `${earliest} - ${latest}`;
 }
 
 function parseUsageResetDate(value: string | undefined): Date | null {
