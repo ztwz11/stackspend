@@ -9,7 +9,7 @@ on:
       tag:
         description: "Release tag to create or update"
         required: true
-        default: "v0.1.0-alpha.4"
+        default: "v0.1.0-alpha.5"
       create_release:
         description: "Create/update the GitHub Release and upload assets"
         required: true
@@ -234,12 +234,21 @@ jobs:
         shell: bash
         run: security delete-keychain build.keychain || true
 
-      - name: Collect Windows installer
+      - name: Collect Windows desktop artifacts
         if: runner.os == 'Windows' && (github.event_name != 'workflow_dispatch' || inputs.desktop_targets == 'all' || inputs.desktop_targets == matrix.name)
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
           New-Item -ItemType Directory -Force dist\desktop-release | Out-Null
+          $trayPackage = Get-Content -Raw apps\tray\package.json | ConvertFrom-Json
+          $portableSource = 'apps\tray\src-tauri\target\release\moneysiren-tray.exe'
+          if (-not (Test-Path -LiteralPath $portableSource)) {
+            throw "No Windows portable HUD executable was produced by Tauri at $portableSource."
+          }
+
+          $portableName = "MoneySiren.Tray_$($trayPackage.version)_x64-portable.exe"
+          Copy-Item -LiteralPath $portableSource -Destination (Join-Path 'dist\desktop-release' $portableName)
+
           $sourceInstallers = @(Get-ChildItem -LiteralPath apps\tray\src-tauri\target\release\bundle\nsis -Filter *.exe)
           if ($sourceInstallers.Count -eq 0) {
             throw 'No Windows installer was produced by Tauri.'
@@ -254,34 +263,34 @@ jobs:
             ForEach-Object { "$($_.Hash.ToLower())  $([System.IO.Path]::GetFileName($_.Path))" } |
             Set-Content dist\desktop-release\moneysiren-tray-windows-SHA256SUMS.txt
 
-      - name: Verify Windows installer signature
+      - name: Verify Windows desktop artifact signature
         if: runner.os == 'Windows' && env.WINDOWS_SIGNING_READY == 'true' && (github.event_name != 'workflow_dispatch' || inputs.desktop_targets == 'all' || inputs.desktop_targets == matrix.name)
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $installers = @(Get-ChildItem -LiteralPath dist\desktop-release -Filter *.exe)
-          if ($installers.Count -eq 0) {
-            throw 'No Windows installer was collected for signature verification.'
+          $windowsArtifacts = @(Get-ChildItem -LiteralPath dist\desktop-release -Filter *.exe)
+          if ($windowsArtifacts.Count -eq 0) {
+            throw 'No Windows desktop artifact was collected for signature verification.'
           }
 
-          foreach ($installer in $installers) {
-            $signature = Get-AuthenticodeSignature -LiteralPath $installer.FullName
+          foreach ($artifact in $windowsArtifacts) {
+            $signature = Get-AuthenticodeSignature -LiteralPath $artifact.FullName
             if ($signature.Status -ne 'Valid') {
-              throw "Windows installer signature is not valid for $($installer.Name): $($signature.Status) $($signature.StatusMessage)"
+              throw "Windows desktop artifact signature is not valid for $($artifact.Name): $($signature.Status) $($signature.StatusMessage)"
             }
             if ($null -eq $signature.SignerCertificate) {
-              throw "Windows installer has no signer certificate: $($installer.Name)"
+              throw "Windows desktop artifact has no signer certificate: $($artifact.Name)"
             }
             if ($signature.SignerCertificate.Thumbprint -ne $env:WINDOWS_CERTIFICATE_THUMBPRINT) {
-              throw "Windows installer signer thumbprint does not match the imported release certificate for $($installer.Name)."
+              throw "Windows desktop artifact signer thumbprint does not match the imported release certificate for $($artifact.Name)."
             }
           }
 
           $signatureManifest = @()
-          foreach ($installer in $installers) {
-            $signature = Get-AuthenticodeSignature -LiteralPath $installer.FullName
+          foreach ($artifact in $windowsArtifacts) {
+            $signature = Get-AuthenticodeSignature -LiteralPath $artifact.FullName
             $signatureManifest += [pscustomobject]@{
-              assetName = $installer.Name
+              assetName = $artifact.Name
               signerThumbprint = $signature.SignerCertificate.Thumbprint
               signerSubject = $signature.SignerCertificate.Subject
               signatureStatus = [string]$signature.Status
@@ -368,23 +377,13 @@ jobs:
           fi
 
           if gh release view "$tag" >/dev/null 2>&1; then
-            if [ "$desktop_targets" = "windows" ]; then
-              while IFS= read -r asset_name; do
-                case "$asset_name" in
-                  *macos*|moneysiren-tray-macos-SHA256SUMS.txt)
-                    gh release delete-asset "$tag" "$asset_name" -y || true
-                    ;;
-                esac
-              done < <(gh release view "$tag" --json assets --jq '.assets[].name')
-            elif [ "$desktop_targets" = "macos" ]; then
-              while IFS= read -r asset_name; do
-                case "$asset_name" in
-                  MoneySiren.Tray*.exe|MoneySiren.Tray*.msi|moneysiren-tray-windows-SHA256SUMS.txt|moneysiren-tray-windows-SIGNATURE.json)
-                    gh release delete-asset "$tag" "$asset_name" -y || true
-                    ;;
-                esac
-              done < <(gh release view "$tag" --json assets --jq '.assets[].name')
-            fi
+            while IFS= read -r asset_name; do
+              case "$asset_name" in
+                moneysiren-web-runtime-*.tar.gz|moneysiren-web-runtime-SHA256SUMS.txt|MoneySiren.Tray*.exe|MoneySiren.Tray*.msi|*macos*|moneysiren-tray-windows-SHA256SUMS.txt|moneysiren-tray-windows-SIGNATURE.json|moneysiren-tray-macos-SHA256SUMS.txt)
+                  gh release delete-asset "$tag" "$asset_name" -y || true
+                  ;;
+              esac
+            done < <(gh release view "$tag" --json assets --jq '.assets[].name')
             gh release upload "$tag" dist/release-assets/* --clobber
           else
             gh release create "$tag" dist/release-assets/* \

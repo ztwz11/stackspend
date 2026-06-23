@@ -12,6 +12,8 @@ const tag = args.tag ?? `v${packageJson.version}`;
 const installDir = resolve(args.dir ?? ".tmp/release-readiness");
 const downloadLimit = Number.parseInt(args.maxBytes ?? `${256 * 1024 * 1024}`, 10);
 const metadataDownloadLimit = 1024 * 1024;
+const allowUnsignedPrereleaseWindows =
+  args.allowUnsignedPrereleaseWindows === true && /-(?:alpha|beta|rc)(?:[.\d-]*)?$/i.test(tag);
 const failures = [];
 
 await rm(installDir, { recursive: true, force: true });
@@ -73,7 +75,12 @@ async function readWindowsSignatureMetadata() {
   }
 
   if (windowsSignatureAsset === undefined) {
-    failures.push("Missing moneysiren-tray-windows-SIGNATURE.json for Windows installer asset(s).");
+    if (allowUnsignedPrereleaseWindows) {
+      console.warn(`Skipping Windows signature metadata check for unsigned prerelease ${tag}.`);
+      return metadataByAsset;
+    }
+
+    failures.push("Missing moneysiren-tray-windows-SIGNATURE.json for Windows desktop artifact(s).");
     return metadataByAsset;
   }
 
@@ -105,12 +112,21 @@ async function verifyWindowsSignatureMetadata() {
       entry.signerThumbprint.trim().length === 0 ||
       entry.signatureStatus !== "Valid"
     ) {
-      failures.push(`Missing valid signature metadata entry for ${asset.name}.`);
+      if (allowUnsignedPrereleaseWindows) {
+        console.warn(`Skipping missing Windows signature metadata for unsigned prerelease asset ${asset.name}.`);
+      } else {
+        failures.push(`Missing valid signature metadata entry for ${asset.name}.`);
+      }
     }
   }
 }
 
 async function verifyWindowsAuthenticode(assetName, path, metadataEntry) {
+  if (metadataEntry === undefined && allowUnsignedPrereleaseWindows) {
+    console.warn(`Skipping local Authenticode verification for unsigned prerelease asset ${assetName}.`);
+    return;
+  }
+
   if (process.platform !== "win32") {
     console.log(`Skipping local Authenticode verification for ${assetName} on ${process.platform}.`);
     return;
@@ -274,6 +290,8 @@ function parseArgs(values) {
       parsed.dir = values[++index];
     } else if (value === "--max-bytes") {
       parsed.maxBytes = values[++index];
+    } else if (value === "--allow-unsigned-prerelease-windows") {
+      parsed.allowUnsignedPrereleaseWindows = true;
     } else if (!value.startsWith("--") && parsed.tag === undefined) {
       parsed.tag = value;
     } else {

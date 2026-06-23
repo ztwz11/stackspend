@@ -10,7 +10,7 @@ const execFileAsync = promisify(execFile);
 
 export const DEFAULT_RELEASE_REPOSITORY = "ztwz11/moneysiren";
 // Keep the source-free installer pinned to the latest published desktop/web release tag.
-export const DEFAULT_RELEASE_TAG = "v0.1.0-alpha.4";
+export const DEFAULT_RELEASE_TAG = "v0.1.0-alpha.5";
 
 export interface ReleaseInstallOptions {
   env?: Record<string, string | undefined>;
@@ -322,7 +322,9 @@ function selectSurfaceAsset(
   }
 
   if (platform === "win32") {
-    return candidates.find((asset) => /\.(exe|msi)$/i.test(asset.name)) ?? null;
+    return candidates.find(isDirectWindowsHudAsset) ??
+      candidates.find((asset) => isWindowsHudAsset(asset.name)) ??
+      null;
   }
 
   if (platform === "darwin") {
@@ -330,6 +332,20 @@ function selectSurfaceAsset(
   }
 
   return null;
+}
+
+function isDirectWindowsHudAsset(asset: GitHubReleaseAsset): boolean {
+  return isWindowsHudAsset(asset.name) &&
+    /\.exe$/i.test(asset.name) &&
+    !isInstallerLikeWindowsAsset(asset.name);
+}
+
+function isWindowsHudAsset(name: string): boolean {
+  return /\.(exe|msi)$/i.test(name);
+}
+
+function isInstallerLikeWindowsAsset(name: string): boolean {
+  return /\.msi$/i.test(name) || /(?:^|[._ -])(?:setup|install|installer)(?:[._ -]|$)/i.test(name);
 }
 
 async function findChecksum(input: {
@@ -435,7 +451,7 @@ const defaultReleaseAssetSignatureVerifier: ReleaseAssetSignatureVerifier = {
       return {
         verified: false,
         status: "unsupported",
-        message: "Windows HUD release assets must be .exe or .msi installers.",
+        message: "Windows HUD release assets must be .exe or .msi artifacts.",
       };
     }
 

@@ -3,7 +3,8 @@
 This prerelease publishes source-free alpha artifacts for local review:
 
 - `moneysiren-web-runtime-*.tar.gz`: built Next.js dashboard runtime.
-- Windows desktop installer: Tauri NSIS `.exe`.
+- Windows desktop portable executable: runnable Tauri `.exe` for `msiren hud`.
+- Windows desktop installer: Tauri NSIS `.exe` for manual installation.
 - macOS desktop app archive: Tauri `.app` in `.tar.gz`.
 - SHA256 checksum files for the release assets.
 
@@ -15,13 +16,18 @@ This prerelease publishes source-free alpha artifacts for local review:
    npm install -g @moneysiren/cli@alpha
    ```
 
-2. Download and extract `moneysiren-web-runtime-*.tar.gz`, then start the local dashboard runtime:
+2. Install the source-free dashboard and HUD release assets:
 
    ```bash
-   node start.mjs
+   msiren install --all
    ```
 
-3. Install or open the desktop app for your OS.
+3. Start the local dashboard or HUD:
+
+   ```bash
+   msiren start
+   msiren hud
+   ```
 
 The desktop shell opens the local dashboard and HUD at `http://127.0.0.1:3000`. In this alpha, the native desktop app does not yet embed or auto-start the web runtime.
 
