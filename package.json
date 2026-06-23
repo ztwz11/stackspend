@@ -1,6 +1,6 @@
 {
   "name": "moneysiren-workspace",
-  "version": "0.1.0-alpha.8",
+  "version": "0.1.0-alpha.9",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.5.0",
@@ -27,6 +27,8 @@
     "secret:scan:all": "node tools/scripts/secret-scan.mjs --history",
     "publish:cli:dry-run": "node tools/scripts/publish-cli-alpha.mjs",
     "publish:cli:alpha": "node tools/scripts/publish-cli-alpha.mjs --publish",
+    "publish:app:dry-run": "node tools/scripts/publish-app-alpha.mjs",
+    "publish:app:alpha": "node tools/scripts/publish-app-alpha.mjs --publish",
     "release:check": "node tools/scripts/check-release-readiness.mjs",
     "release:signing:encode-windows": "node tools/scripts/encode-windows-certificate.mjs",
     "release:signing:check": "node tools/scripts/check-signing-readiness.mjs",

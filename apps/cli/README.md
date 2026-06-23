@@ -12,7 +12,15 @@ MoneySiren is local-first. The CLI reads configuration and secrets from the proc
 
 ## Published Alpha Usage
 
-After an alpha is published:
+For normal source-free installs, prefer the app package because it downloads the matching Web/HUD release assets during global npm install:
+
+```bash
+npm install -g @moneysiren/app@alpha
+msiren start
+msiren hud
+```
+
+For CLI-only automation:
 
 ```bash
 npm install -g @moneysiren/cli@alpha
@@ -67,7 +75,7 @@ Install the generated tarball into a temporary project:
 mkdir -p /tmp/moneysiren-alpha-review
 cd /tmp/moneysiren-alpha-review
 npm init -y
-npm install /path/to/moneysiren-cli-0.1.0-alpha.8.tgz
+npm install /path/to/moneysiren-cli-0.1.0-alpha.9.tgz
 npm exec moneysiren
 npm exec moneysiren -- --version
 npm exec moneysiren -- /version
@@ -83,7 +91,7 @@ PowerShell equivalent for the temporary project:
 New-Item -ItemType Directory -Force -Path $env:TEMP\moneysiren-alpha-review
 Set-Location $env:TEMP\moneysiren-alpha-review
 npm init -y
-npm install C:\path\to\moneysiren-cli-0.1.0-alpha.8.tgz
+npm install C:\path\to\moneysiren-cli-0.1.0-alpha.9.tgz
 npm exec moneysiren
 npm exec moneysiren -- --version
 npm exec moneysiren -- modes

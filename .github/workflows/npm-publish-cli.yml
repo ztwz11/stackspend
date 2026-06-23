@@ -19,7 +19,7 @@ permissions:
 
 jobs:
   publish:
-    name: publish-cli
+    name: publish-cli-and-app
     runs-on: ubuntu-latest
     env:
       NPM_CONFIG_CACHE: ${{ github.workspace }}/.tmp/npm-cache
@@ -55,8 +55,14 @@ jobs:
       - run: node tools/scripts/run-pnpm.mjs --filter @moneysiren/cli test -- cli.test.ts release-installer.test.ts
       - run: node tools/scripts/run-pnpm.mjs --filter @moneysiren/cli typecheck
       - run: npm run publish:cli:dry-run
+      - run: npm run publish:app:dry-run
 
       - name: Publish CLI to npm
         working-directory: apps/cli
+        shell: bash
+        run: npm publish --tag "${NPM_DIST_TAG}" --access public
+
+      - name: Publish app installer to npm
+        working-directory: apps/app
         shell: bash
         run: npm publish --tag "${NPM_DIST_TAG}" --access public

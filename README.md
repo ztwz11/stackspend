@@ -6,7 +6,7 @@ MoneySiren reads provider usage into local SQLite, shows expected billing and us
 
 ## Current Status
 
-MoneySiren is preparing `v0.1.0-alpha.8` for local review.
+MoneySiren is preparing `v0.1.0-alpha.9` for local review.
 
 The current alpha supports:
 
@@ -190,28 +190,29 @@ pnpm --filter moneysiren dev -- /report ko
 
 Home/help never creates `.env`, prints secret values, calls provider APIs, or enables telemetry.
 
-## NPM Alpha CLI Preview
+## NPM Alpha App Preview
 
-After `@moneysiren/cli@alpha` is published:
+For normal source-free installs, use the app package. During alpha, the `@alpha` dist-tag tracks the newest alpha build:
 
 ```bash
-npm install -g @moneysiren/cli@alpha
-moneysiren --version
-moneysiren install --status
-moneysiren install --all
-moneysiren modes
-moneysiren doctor
-moneysiren sync --provider mock
+npm install -g @moneysiren/app@alpha
+msiren --version
+msiren start
+msiren hud
 ```
 
-Maintainers can verify and publish the alpha package from the repository root:
+`@moneysiren/app` bundles the CLI command and runs `msiren install --all` during global npm installs so the matching GitHub Release web runtime and HUD artifact are downloaded immediately. For CLI-only automation, install `@moneysiren/cli@alpha` and run `msiren install --all` only when Web/HUD assets are needed.
+
+Maintainers can verify and publish the alpha npm packages from the repository root:
 
 ```bash
 npm run publish:cli:dry-run
+npm run publish:app:dry-run
 npm run publish:cli:alpha
+npm run publish:app:alpha
 ```
 
-The dry run checks the full secret scan, npm package metadata, registry version availability, and tarball contents. The publish command requires a local npm login and publishes `apps/cli` with the `alpha` tag and public access.
+The dry runs check the full secret scan, npm package metadata, registry version availability, and tarball contents. The publish commands require a local npm login and publish `apps/cli` plus the one-command `apps/app` installer with the `alpha` tag and public access.
 
 During an interactive PowerShell, cmd, or shell install, the package asks which local surfaces to enable:
 
@@ -228,8 +229,7 @@ The same source tree supports Windows and macOS. Local config paths and native d
 After a `desktop-release` GitHub Actions run publishes assets, users can review MoneySiren without cloning the repository:
 
 ```bash
-npm install -g @moneysiren/cli@alpha
-msiren install --all
+npm install -g @moneysiren/app@alpha
 msiren sync --provider mock
 msiren start
 msiren hud
@@ -242,7 +242,7 @@ msiren stop
 To install from a specific release tag or into a custom directory:
 
 ```bash
-msiren install --all --tag v0.1.0-alpha.8 --dir ./moneysiren-release
+msiren install --all --tag v0.1.0-alpha.9 --dir ./moneysiren-release
 ```
 
 If the desktop installer was installed to a non-default location, point the CLI at it before opening HUD:
@@ -258,7 +258,7 @@ Release maintainers should verify published assets before announcing a desktop b
 ```bash
 npm run release:signing:encode-windows -- "<path-to-windows-code-signing.pfx>"
 npm run release:signing:check -- windows
-npm run release:check -- v0.1.0-alpha.8
+npm run release:check -- v0.1.0-alpha.9
 ```
 
 The encode helper writes the base64 certificate payload to `.tmp/codesign/windows-certificate.base64.txt` so maintainers can set the `WINDOWS_CERTIFICATE` repository secret without printing the private certificate to the terminal. Set `WINDOWS_CERTIFICATE_PASSWORD` to the PFX/P12 password in GitHub Secrets and in the local shell before running the signing readiness check. The signing check verifies local/CI signing inputs before a release run. The release check downloads the published assets, verifies SHA256 entries, requires Windows signature metadata, and validates Windows Authenticode signatures when run on Windows. If only one desktop signing identity is ready, run the `desktop-release` workflow with `desktop_targets=windows` or `desktop_targets=macos`; the publish step removes stale desktop assets for the skipped OS. Self-signed certificates are acceptable only for local smoke tests and do not fix public Windows publisher trust warnings.
@@ -266,7 +266,7 @@ The encode helper writes the base64 certificate payload to `.tmp/codesign/window
 Alpha releases can publish unsigned HUD artifacts when signing secrets are not ready. Keep that path explicit in validation:
 
 ```bash
-npm run release:check -- v0.1.0-alpha.8 --allow-unsigned-prerelease-windows
+npm run release:check -- v0.1.0-alpha.9 --allow-unsigned-prerelease-windows
 ```
 
 The CLI accepts unsigned HUD artifacts only for prerelease tags such as `alpha`; set `MONEYSIREN_ALLOW_UNSIGNED_HUD=false` to require signed HUD metadata even for alpha builds.

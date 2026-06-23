@@ -1,7 +1,7 @@
 {
-  "name": "@moneysiren/cli",
+  "name": "@moneysiren/app",
   "version": "0.1.0-alpha.9",
-  "description": "Local-first cloud/SaaS usage, status, and expected billing CLI for MoneySiren.",
+  "description": "One-command installer for the MoneySiren CLI, local web dashboard, and HUD.",
   "private": false,
   "license": "MIT",
   "type": "module",
@@ -12,15 +12,6 @@
   "bin": {
     "moneysiren": "dist/apps/cli/src/index.js",
     "msiren": "dist/apps/cli/src/index.js"
-  },
-  "main": "dist/apps/cli/src/cli.js",
-  "types": "dist/apps/cli/src/cli.d.ts",
-  "exports": {
-    ".": {
-      "types": "./dist/apps/cli/src/cli.d.ts",
-      "import": "./dist/apps/cli/src/cli.js"
-    },
-    "./package.json": "./package.json"
   },
   "dependencies": {
     "@aws-sdk/client-cost-explorer": "^3.1061.0"
@@ -38,13 +29,12 @@
     "access": "public"
   },
   "scripts": {
-    "dev": "node --import tsx src/index.ts",
-    "build": "node ../../tools/scripts/build-cli.mjs",
-    "prepack": "node ../../tools/scripts/build-cli.mjs",
+    "build": "node ../../tools/scripts/build-app-package.mjs",
+    "prepack": "node ../../tools/scripts/build-app-package.mjs",
     "postinstall": "node scripts/postinstall.mjs",
     "pack:dry-run": "npm pack --dry-run",
-    "test": "vitest run --passWithNoTests",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
-    "lint": "tsc -p tsconfig.json --noEmit"
+    "test": "node --check scripts/postinstall.mjs",
+    "typecheck": "node --check scripts/postinstall.mjs",
+    "lint": "node --check scripts/postinstall.mjs"
   }
 }
