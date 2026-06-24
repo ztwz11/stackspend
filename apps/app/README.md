@@ -12,19 +12,19 @@ msiren start
 msiren hud
 ```
 
-The package installs both commands:
+The package creates both global command shims during postinstall:
 
 - `moneysiren`
 - `msiren`
 
-If npm reports `EEXIST` for `moneysiren` or `msiren`, an older global MoneySiren install left command shims behind. Remove the old global packages and reinstall:
+If npm reports `EEXIST` for `moneysiren` or `msiren`, an older alpha app package may still be installed. Remove the old global packages and reinstall:
 
 ```powershell
 npm uninstall -g @moneysiren/cli @moneysiren/app
 npm install -g @moneysiren/app@alpha --force
 ```
 
-The app package also removes stale MoneySiren-owned command shims during global install when npm exposes the global prefix.
+Current app packages do not use npm's `bin` field for these aliases, so stale MoneySiren-owned command shims can be replaced during postinstall without tripping npm's bin conflict check.
 
 ## What It Installs
 

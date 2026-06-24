@@ -1,6 +1,6 @@
 {
   "name": "@moneysiren/app",
-  "version": "0.1.0-alpha.11",
+  "version": "0.1.0-alpha.12",
   "description": "One-command installer for the MoneySiren CLI, local web dashboard, and HUD.",
   "private": false,
   "license": "MIT",
@@ -8,10 +8,6 @@
   "packageManager": "pnpm@11.5.0",
   "engines": {
     "node": ">=20.11.0"
-  },
-  "bin": {
-    "moneysiren": "dist/apps/cli/src/index.js",
-    "msiren": "dist/apps/cli/src/index.js"
   },
   "dependencies": {
     "@aws-sdk/client-cost-explorer": "^3.1061.0"
@@ -21,7 +17,6 @@
     "dist/apps/cli/src/**/*.d.ts",
     "dist/packages/**/*.js",
     "dist/packages/**/*.d.ts",
-    "scripts/preinstall.mjs",
     "scripts/postinstall.mjs",
     "README.md",
     "LICENSE"
@@ -32,11 +27,10 @@
   "scripts": {
     "build": "node ../../tools/scripts/build-app-package.mjs",
     "prepack": "node ../../tools/scripts/build-app-package.mjs",
-    "preinstall": "node scripts/preinstall.mjs",
     "postinstall": "node scripts/postinstall.mjs",
     "pack:dry-run": "npm pack --dry-run",
-    "test": "node --check scripts/preinstall.mjs && node --check scripts/postinstall.mjs",
-    "typecheck": "node --check scripts/preinstall.mjs && node --check scripts/postinstall.mjs",
-    "lint": "node --check scripts/preinstall.mjs && node --check scripts/postinstall.mjs"
+    "test": "node --check scripts/postinstall.mjs",
+    "typecheck": "node --check scripts/postinstall.mjs",
+    "lint": "node --check scripts/postinstall.mjs"
   }
 }
