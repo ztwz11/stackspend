@@ -1,10 +1,6 @@
-import {
-  ForecastView,
-  PageHeader,
-  type DashboardGrouping,
-} from "../../../../components/OperationsViews";
+import { AsyncDashboardView } from "../../../../components/AsyncDashboardView";
+import type { DashboardGrouping } from "../../../../components/OperationsViews";
 import { getMessages, isLocale, type Locale } from "../../../../lib/i18n";
-import { readOperationsDashboard } from "../../../../lib/operations-data";
 
 interface PageProps {
   params: Promise<{
@@ -21,19 +17,15 @@ export default async function ForecastPage({ params, searchParams }: PageProps) 
   const locale = await readLocale(params);
   const grouping = await readGrouping(searchParams);
   const messages = getMessages(locale);
-  const dashboard = await readOperationsDashboard();
 
   return (
-    <>
-      <PageHeader title={messages.dashboard.forecastTitle} subtitle={messages.dashboard.forecastSubtitle} />
-      <ForecastView
-        dashboard={dashboard}
-        locale={locale}
-        messages={messages}
-        grouping={grouping}
-        groupingBasePath={`/${locale}/dashboard/forecast`}
-      />
-    </>
+    <AsyncDashboardView
+      locale={locale}
+      messages={messages}
+      screen="forecast"
+      grouping={grouping}
+      groupingBasePath={`/${locale}/dashboard/forecast`}
+    />
   );
 }
 

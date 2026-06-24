@@ -3343,6 +3343,29 @@ body:has(.hud-page)::-webkit-scrollbar {
   gap: 12px;
 }
 
+.dashboard-async-shell {
+  display: grid;
+  gap: 12px;
+}
+
+.dashboard-async-copy {
+  color: var(--muted);
+  display: grid;
+  gap: 3px;
+  font-size: 12px;
+}
+
+.dashboard-async-copy strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.dashboard-async-error {
+  color: var(--muted);
+  display: grid;
+  gap: 8px;
+}
+
 .dashboard-loading-bar,
 .dashboard-loading-card,
 .dashboard-loading-panel {

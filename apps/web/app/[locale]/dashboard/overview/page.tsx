@@ -1,9 +1,6 @@
-import {
-  type DashboardGrouping,
-  OverviewView,
-} from "../../../../components/OperationsViews";
+import { AsyncDashboardView } from "../../../../components/AsyncDashboardView";
+import type { DashboardGrouping } from "../../../../components/OperationsViews";
 import { getMessages, isLocale, type Locale } from "../../../../lib/i18n";
-import { readOperationsDashboard } from "../../../../lib/operations-data";
 
 interface PageProps {
   params: Promise<{
@@ -20,13 +17,12 @@ export default async function DashboardOverviewPage({ params, searchParams }: Pa
   const locale = await readLocale(params);
   const grouping = await readGrouping(searchParams);
   const messages = getMessages(locale);
-  const dashboard = await readOperationsDashboard();
 
   return (
-    <OverviewView
-      dashboard={dashboard}
+    <AsyncDashboardView
       locale={locale}
       messages={messages}
+      screen="overview"
       grouping={grouping}
       groupingBasePath={`/${locale}/dashboard/overview`}
     />

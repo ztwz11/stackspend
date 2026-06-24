@@ -53,7 +53,7 @@ type HudDragWindow = {
 };
 
 interface HudDashboardProps {
-  initialModel: HudViewModel;
+  initialModel?: HudViewModel;
   initialPreferences: NotificationPreferences;
   controlLabels: Parameters<typeof HudWindowControls>[0]["labels"];
   labels: HudDashboardLabels;
@@ -67,8 +67,8 @@ export function HudDashboard({
   labels,
   locale,
 }: HudDashboardProps) {
-  const [model, setModel] = useState(initialModel);
-  const [polling, setPolling] = useState(false);
+  const [model, setModel] = useState(() => initialModel ?? createEmptyHudViewModel());
+  const [polling, setPolling] = useState(initialModel === undefined);
   const [manualRefreshBusy, setManualRefreshBusy] = useState(false);
   const [transportError, setTransportError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -131,6 +131,7 @@ export function HudDashboard({
       }
     };
 
+    void loadHud();
     schedule();
     window.addEventListener("focus", loadIfVisible);
     window.addEventListener("online", loadIfVisible);
@@ -174,7 +175,7 @@ export function HudDashboard({
         <section className="hud-item-list" aria-label={labels.items}>
           {model.items.length === 0 ? (
             <div className="hud-empty">
-              <strong>{labels.empty}</strong>
+              <strong>{polling ? controlLabels.toolLoadingPreparingView : labels.empty}</strong>
             </div>
           ) : model.items.map((item) => (
             <HudItemCard
@@ -374,6 +375,31 @@ function isHudViewModel(value: unknown): value is HudViewModel {
     Array.isArray(record.items) &&
     typeof record.sync === "object" &&
     record.sync !== null;
+}
+
+function createEmptyHudViewModel(): HudViewModel {
+  const generatedAt = new Date().toISOString();
+
+  return {
+    generatedAt,
+    localOnly: true,
+    secretsReturned: false,
+    dataRevision: `empty:${generatedAt}`,
+    sync: {
+      status: "empty",
+      freshCount: 0,
+      staleCount: 0,
+      errorCount: 0,
+      neutralCount: 0,
+      lastSuccessAt: null,
+    },
+    risk: {
+      severity: "info",
+      warningCount: 0,
+      criticalCount: 0,
+    },
+    items: [],
+  };
 }
 
 function useHudWindowDrag(): () => boolean {

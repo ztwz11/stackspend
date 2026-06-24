@@ -1,10 +1,6 @@
-import {
-  PageHeader,
-  type DashboardGrouping,
-  TodayLiveView,
-} from "../../../../components/OperationsViews";
+import { AsyncDashboardView } from "../../../../components/AsyncDashboardView";
+import type { DashboardGrouping } from "../../../../components/OperationsViews";
 import { getMessages, isLocale, type Locale } from "../../../../lib/i18n";
-import { readOperationsDashboard } from "../../../../lib/operations-data";
 
 interface PageProps {
   params: Promise<{
@@ -21,19 +17,15 @@ export default async function TodayLivePage({ params, searchParams }: PageProps)
   const locale = await readLocale(params);
   const grouping = await readGrouping(searchParams);
   const messages = getMessages(locale);
-  const dashboard = await readOperationsDashboard();
 
   return (
-    <>
-      <PageHeader title={messages.dashboard.todayTitle} subtitle={messages.dashboard.todaySubtitle} />
-      <TodayLiveView
-        dashboard={dashboard}
-        locale={locale}
-        messages={messages}
-        grouping={grouping}
-        groupingBasePath={`/${locale}/dashboard/today`}
-      />
-    </>
+    <AsyncDashboardView
+      locale={locale}
+      messages={messages}
+      screen="today"
+      grouping={grouping}
+      groupingBasePath={`/${locale}/dashboard/today`}
+    />
   );
 }
 

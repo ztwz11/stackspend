@@ -4,7 +4,6 @@ import {
 } from "../../lib/local-notification-model";
 import { AppLoadingOverlay } from "../../components/AppLoadingOverlay";
 import { HudDashboard, type HudDashboardLabels } from "../../components/HudDashboard";
-import { readLocalHudViewModel } from "../../lib/local-hud-model";
 import type { CSSProperties } from "react";
 
 interface HudPageProps {
@@ -19,9 +18,6 @@ export default async function HudPage({ searchParams }: HudPageProps) {
   const locale = await readLocale(searchParams);
   const messages = getMessages(locale);
   const preferences = await readWebNotificationPreferences();
-  const hud = await readLocalHudViewModel({
-    selectedWidgets: preferences.hud.selectedWidgets,
-  });
   const hudStyle = {
     "--hud-background-color": preferences.hud.backgroundColor,
     "--hud-font-color": preferences.hud.fontColor,
@@ -64,7 +60,6 @@ export default async function HudPage({ searchParams }: HudPageProps) {
           toolLoadingPreparingView: messages.settings.toolLoadingPreparingView,
         }}
         initialPreferences={preferences}
-        initialModel={hud}
         labels={hudLabels(locale, messages)}
         locale={locale}
       />
