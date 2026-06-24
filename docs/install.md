@@ -2,24 +2,28 @@
 
 MoneySiren is a local-first cloud, SaaS, and AI usage dashboard. The alpha has three local surfaces:
 
-- CLI automation through `moneysiren`.
+- CLI automation through `moneysiren` or the shorter `msiren` alias.
 - Local web dashboard through Next.js.
 - Desktop tray/notifier and HUD through the native Tauri shell.
 
-The npm app alpha installs the CLI command and downloads source-free alpha artifacts for the built web dashboard runtime and native desktop tray/HUD shell from GitHub Releases.
+The recommended npm app alpha installs all three surfaces without cloning this repository. It creates the command aliases and downloads source-free alpha artifacts for the built web dashboard runtime and native desktop tray/HUD shell from GitHub Releases.
 
 ## Requirements
 
-Use Node.js 20.11 or newer and pnpm 11.5.0.
+Use Node.js 20.11 or newer for source-free npm installs.
 
-Required for the CLI and web dashboard:
+Required for `npm install -g @moneysiren/app@alpha`:
+
+- Node.js 20.11 or newer.
+
+Required only for source development:
 
 - Node.js 20.11 or newer.
 - pnpm 11.5.0 through Corepack.
 - Git.
 - Node.js with the SQLite runtime, or `sqlite3` on `PATH`/`MONEYSIREN_SQLITE_BIN` as a fallback.
 
-Required for the native desktop tray/HUD:
+Required only when building the native desktop tray/HUD from source:
 
 - Rust and Cargo.
 - Windows: WebView2 Runtime and Visual Studio Build Tools with the Desktop development with C++ workload.
@@ -67,6 +71,13 @@ If npm reports `EEXIST` for `moneysiren` or `msiren`, an older alpha `@moneysire
 ```powershell
 npm uninstall -g @moneysiren/cli @moneysiren/app
 npm install -g @moneysiren/app@alpha --force
+```
+
+If Web/HUD asset download fails during postinstall, npm still installs the command. Fix network or release access, then rerun:
+
+```bash
+msiren install --all
+msiren install --status
 ```
 
 For CLI-only automation, install `@moneysiren/cli@alpha` instead. Run `msiren install --all` only when Web/HUD assets are needed.

@@ -6,7 +6,7 @@ MoneySiren reads provider usage into local SQLite, shows expected billing and us
 
 ## Current Status
 
-MoneySiren is preparing `v0.1.0-alpha.12` for local review.
+MoneySiren `v0.1.0-alpha.12` is published for local alpha review.
 
 The current alpha supports:
 
@@ -21,7 +21,7 @@ The current alpha supports:
 - Local Codex CLI and Claude CLI usage estimates from local logs.
 - Korean daily reports and optional Slack webhook delivery.
 
-The npm alpha package is prepared as `moneysiren` so users can install the CLI without cloning this repository after the first npm publish. GitHub Releases can also attach a built web runtime archive plus signed Windows/macOS desktop artifacts for source-free alpha review once release signing secrets are configured.
+The recommended source-free install is `@moneysiren/app@alpha`. It installs the CLI aliases (`moneysiren` and `msiren`) and downloads the matching GitHub Release web runtime plus HUD desktop artifact. Use `@moneysiren/cli@alpha` only for CLI-only automation.
 
 ## Screenshots
 
@@ -191,7 +191,7 @@ Home/help never creates `.env`, prints secret values, calls provider APIs, or en
 
 ## NPM Alpha App Preview
 
-For normal source-free installs, use the app package. During alpha, the `@alpha` dist-tag tracks the newest alpha build:
+For normal source-free installs, use the app package. During alpha, keep the `@alpha` dist-tag because the unqualified `latest` channel can lag behind prerelease builds:
 
 ```bash
 npm install -g @moneysiren/app@alpha
@@ -200,7 +200,14 @@ msiren start
 msiren hud
 ```
 
-`@moneysiren/app` bundles the CLI command, creates the `moneysiren` and `msiren` global shims during postinstall, and runs `msiren install --all` during global npm installs so the matching GitHub Release web runtime and HUD artifact are downloaded immediately. For CLI-only automation, install `@moneysiren/cli@alpha` and run `msiren install --all` only when Web/HUD assets are needed.
+`@moneysiren/app` is the all-in-one package for the CLI, local web dashboard, and HUD. It creates the `moneysiren` and shorter `msiren` global command shims during postinstall, then runs `msiren install --all` during global npm installs so the matching GitHub Release web runtime and HUD artifact are downloaded immediately. The current app package no longer uses npm-managed `bin` aliases, which avoids npm's `EEXIST` bin conflict with older alpha installs.
+
+If Web/HUD asset download cannot complete during postinstall, npm still leaves the command installed. Rerun the asset installer after network or release access is fixed:
+
+```bash
+msiren install --all
+msiren install --status
+```
 
 If npm reports `EEXIST` for `moneysiren` or `msiren`, remove the older global MoneySiren packages and reinstall the app package:
 
@@ -236,6 +243,7 @@ After a `desktop-release` GitHub Actions run publishes assets, users can review 
 
 ```bash
 npm install -g @moneysiren/app@alpha
+msiren install --status
 msiren sync --provider mock
 msiren start
 msiren hud

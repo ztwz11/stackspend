@@ -2,15 +2,18 @@
 
 One-command alpha installer for MoneySiren.
 
-This package bundles the MoneySiren CLI entrypoints and, on global npm installs, runs `msiren install --all` to download the local web dashboard runtime and HUD desktop artifacts from the matching GitHub Release.
+This is the recommended npm package for users who want all three local MoneySiren surfaces: CLI, web dashboard, and HUD. It bundles the MoneySiren CLI entrypoints and, on global npm installs, runs `msiren install --all` to download the local web dashboard runtime and HUD desktop artifacts from the matching GitHub Release.
 
 ## Install
 
 ```bash
 npm install -g @moneysiren/app@alpha
+msiren --version
 msiren start
 msiren hud
 ```
+
+During alpha, keep `@alpha` in the install command. Stable releases will use the unqualified package name.
 
 The package creates both global command shims during postinstall:
 
@@ -26,6 +29,13 @@ npm install -g @moneysiren/app@alpha --force
 
 Current app packages do not use npm's `bin` field for these aliases, so stale MoneySiren-owned command shims can be replaced during postinstall without tripping npm's bin conflict check.
 
+If Web/HUD asset download fails during postinstall, fix network or release access and rerun:
+
+```bash
+msiren install --all
+msiren install --status
+```
+
 ## What It Installs
 
 - CLI command surface.
@@ -33,6 +43,8 @@ Current app packages do not use npm's `bin` field for these aliases, so stale Mo
 - HUD desktop artifact.
 
 The Web/HUD artifacts are verified against published SHA256 checksums. Alpha Windows HUD artifacts may be unsigned until release signing is fully configured.
+
+For CLI-only automation, install `@moneysiren/cli@alpha` instead.
 
 ## Opt Out
 
