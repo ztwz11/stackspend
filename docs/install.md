@@ -6,7 +6,7 @@ MoneySiren is a local-first cloud, SaaS, and AI usage dashboard. The alpha has t
 - Local web dashboard through Next.js.
 - Desktop tray/notifier and HUD through the native Tauri shell.
 
-The npm alpha installs the CLI surface. GitHub Releases can publish source-free alpha artifacts for the built web dashboard runtime and signed native desktop tray/HUD shell when maintainer signing credentials are configured.
+The npm app alpha installs the CLI command and downloads source-free alpha artifacts for the built web dashboard runtime and native desktop tray/HUD shell from GitHub Releases.
 
 ## Requirements
 
@@ -27,43 +27,51 @@ Required for the native desktop tray/HUD:
 
 Do not create `.env` files with live credentials. For v0.1, use process-local environment variables only.
 
-## Install The CLI From npm
+## Install The App From npm
 
-After `@moneysiren/cli@alpha` is published, install the CLI with npm.
+For normal source-free installs, install the app package with npm.
 
 Windows PowerShell:
 
 ```powershell
-npm install -g @moneysiren/cli@alpha
-moneysiren --version
-moneysiren install --status
-moneysiren install --all
-moneysiren modes
-moneysiren doctor
-moneysiren sync --provider mock
+npm install -g @moneysiren/app@alpha
+msiren --version
+msiren install --status
+msiren modes
+msiren doctor
+msiren sync --provider mock
+msiren start
+msiren hud
 ```
 
 macOS zsh:
 
 ```bash
-npm install -g @moneysiren/cli@alpha
-moneysiren --version
-moneysiren install --status
-moneysiren install --all
-moneysiren modes
-moneysiren doctor
-moneysiren sync --provider mock
+npm install -g @moneysiren/app@alpha
+msiren --version
+msiren install --status
+msiren modes
+msiren doctor
+msiren sync --provider mock
+msiren start
+msiren hud
 ```
 
-During a PowerShell, cmd, or shell install with an interactive TTY, npm `postinstall` asks which local surfaces to enable:
+During global npm installs, `@moneysiren/app` runs `msiren install --all` so the matching GitHub Release web runtime and HUD desktop shell are downloaded immediately. The app package installs both command aliases:
 
-- CLI
-- Web dashboard
-- HUD
+- `moneysiren`
+- `msiren`
 
-Press Enter to accept the recommended default, which selects all three. In CI or non-interactive npm installs, MoneySiren writes that same all-selected profile automatically. Run `moneysiren install --all` to download the matching GitHub Release assets for the web runtime and HUD desktop shell, or `moneysiren install --profile-only` to only change the profile later.
+If npm reports `EEXIST` for `moneysiren` or `msiren`, an older global `@moneysiren/cli` or `@moneysiren/app` install left command shims behind. Remove the old global packages and reinstall:
 
-`moneysiren modes` should show the selected install profile plus the CLI, local web dashboard/runtime, and desktop tray/notifier surfaces. The same source tree supports Windows and macOS; npm installs the cross-platform CLI, while native tray/HUD artifacts are built per OS.
+```powershell
+npm uninstall -g @moneysiren/cli @moneysiren/app
+npm install -g @moneysiren/app@alpha --force
+```
+
+For CLI-only automation, install `@moneysiren/cli@alpha` instead. Run `msiren install --all` only when Web/HUD assets are needed.
+
+`msiren modes` should show the selected install profile plus the CLI, local web dashboard/runtime, and desktop tray/notifier surfaces. The same source tree supports Windows and macOS; npm installs the cross-platform command surface, while native tray/HUD artifacts are built per OS.
 
 ## Install Desktop Alpha Without Cloning Source
 
@@ -89,7 +97,7 @@ For CLI-only automation, install `@moneysiren/cli@alpha` instead and run `msiren
 To pin a release tag or choose a directory:
 
 ```bash
-msiren install --all --tag v0.1.0-alpha.10 --dir ./moneysiren-release
+msiren install --all --tag v0.1.0-alpha.11 --dir ./moneysiren-release
 ```
 
 If the desktop installer was installed to a non-default location, point the CLI at it before opening HUD:
@@ -300,8 +308,8 @@ WINDOWS_CERTIFICATE_PASSWORD="<pfx-or-p12-password>" npm run release:signing:che
 Create or update a prerelease from a tag:
 
 ```bash
-git tag v0.1.0-alpha.10
-git push origin v0.1.0-alpha.10
+git tag v0.1.0-alpha.11
+git push origin v0.1.0-alpha.11
 ```
 
 Or run the workflow manually from GitHub Actions with a release tag. If only one signing identity is ready, set `desktop_targets` to `windows` or `macos`; skipped desktop assets are removed from the updated GitHub Release so stale unsigned desktop artifacts do not remain published. The workflow uploads SHA256 checksum files and Windows signature metadata next to the release artifacts when signing is configured.
@@ -309,7 +317,7 @@ Or run the workflow manually from GitHub Actions with a release tag. If only one
 Alpha releases can publish unsigned HUD artifacts when signing secrets are not ready. Keep unsigned validation explicit:
 
 ```bash
-npm run release:check -- v0.1.0-alpha.10 --allow-unsigned-prerelease-windows
+npm run release:check -- v0.1.0-alpha.11 --allow-unsigned-prerelease-windows
 ```
 
 The CLI accepts unsigned HUD artifacts only for prerelease tags such as `alpha`; set `MONEYSIREN_ALLOW_UNSIGNED_HUD=false` to require signed HUD metadata even for alpha builds.

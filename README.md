@@ -6,7 +6,7 @@ MoneySiren reads provider usage into local SQLite, shows expected billing and us
 
 ## Current Status
 
-MoneySiren is preparing `v0.1.0-alpha.10` for local review.
+MoneySiren is preparing `v0.1.0-alpha.11` for local review.
 
 The current alpha supports:
 
@@ -45,24 +45,24 @@ Notification and HUD settings:
 
 ![MoneySiren notification and HUD settings](docs/assets/install/moneysiren-english-mock-hud-settings.png)
 
-### ?�국??
-?�래 ?�크린샷?� ?�일??fixture 기반 목업 SQLite ?�이?�베?�스?�서 ?�국??UI�??�시 캡처???�면?�니?? FAKE ?�경 값�? 로컬 UI?�서 provider가 ?�결??것처???�시?�기 ?�한 ?�벨?�며, ?�제 credential, provider 계정 ?�별?? webhook URL, 로컬 Codex/Claude ?�션 ?�이?�는 ?�함?��? ?�습?�다.
+### ?�국??
+?�래 ?�크린샷?� ?�일??fixture 기반 목업 SQLite ?�이?�베?�스?�서 ?�국??UI�??�시 캡처???�면?�니?? FAKE ?�경 값�? 로컬 UI?�서 provider가 ?�결??것처???�시?�기 ?�한 ?�벨?�며, ?�제 credential, provider 계정 ?�별?? webhook URL, 로컬 Codex/Claude ?�션 ?�이?�는 ?�함?��? ?�습?�다.
 
-?�?�보??개요:
+?�?�보??개요:
 
-![MoneySiren ?�국??목업 ?�?�보??(docs/assets/install/moneysiren-korean-mock-dashboard.png)
+![MoneySiren ?�국??목업 ?�?�보??(docs/assets/install/moneysiren-korean-mock-dashboard.png)
 
-CLI ?�?�보????�� ?�정:
+CLI ?�?�보????�� ?�정:
 
-![MoneySiren ?�국??CLI ?�?�보????�� ?�정](docs/assets/install/moneysiren-korean-mock-dashboard-settings.png)
+![MoneySiren ?�국??CLI ?�?�보????�� ?�정](docs/assets/install/moneysiren-korean-mock-dashboard-settings.png)
 
-?�스?�톱 HUD:
+?�스?�톱 HUD:
 
-![MoneySiren ?�국??목업 HUD](docs/assets/install/moneysiren-korean-mock-hud.png)
+![MoneySiren ?�국??목업 HUD](docs/assets/install/moneysiren-korean-mock-hud.png)
 
-?�림 �?HUD ?�정:
+?�림 �?HUD ?�정:
 
-![MoneySiren ?�국???�림 �?HUD ?�정](docs/assets/install/moneysiren-korean-mock-hud-settings.png)
+![MoneySiren ?�국???�림 �?HUD ?�정](docs/assets/install/moneysiren-korean-mock-hud-settings.png)
 
 ## Provider Model
 
@@ -202,6 +202,13 @@ msiren hud
 
 `@moneysiren/app` bundles the CLI command and runs `msiren install --all` during global npm installs so the matching GitHub Release web runtime and HUD artifact are downloaded immediately. For CLI-only automation, install `@moneysiren/cli@alpha` and run `msiren install --all` only when Web/HUD assets are needed.
 
+If npm reports `EEXIST` for `moneysiren` or `msiren`, remove the older global MoneySiren packages and reinstall the app package:
+
+```powershell
+npm uninstall -g @moneysiren/cli @moneysiren/app
+npm install -g @moneysiren/app@alpha --force
+```
+
 Maintainers can verify and publish the alpha npm packages from the repository root:
 
 ```bash
@@ -241,7 +248,7 @@ msiren stop
 To install from a specific release tag or into a custom directory:
 
 ```bash
-msiren install --all --tag v0.1.0-alpha.10 --dir ./moneysiren-release
+msiren install --all --tag v0.1.0-alpha.11 --dir ./moneysiren-release
 ```
 
 If the desktop installer was installed to a non-default location, point the CLI at it before opening HUD:
@@ -257,7 +264,7 @@ Release maintainers should verify published assets before announcing a desktop b
 ```bash
 npm run release:signing:encode-windows -- "<path-to-windows-code-signing.pfx>"
 npm run release:signing:check -- windows
-npm run release:check -- v0.1.0-alpha.10
+npm run release:check -- v0.1.0-alpha.11
 ```
 
 The encode helper writes the base64 certificate payload to `.tmp/codesign/windows-certificate.base64.txt` so maintainers can set the `WINDOWS_CERTIFICATE` repository secret without printing the private certificate to the terminal. Set `WINDOWS_CERTIFICATE_PASSWORD` to the PFX/P12 password in GitHub Secrets and in the local shell before running the signing readiness check. The signing check verifies local/CI signing inputs before a release run. The release check downloads the published assets, verifies SHA256 entries, requires Windows signature metadata, and validates Windows Authenticode signatures when run on Windows. If only one desktop signing identity is ready, run the `desktop-release` workflow with `desktop_targets=windows` or `desktop_targets=macos`; the publish step removes stale desktop assets for the skipped OS. Self-signed certificates are acceptable only for local smoke tests and do not fix public Windows publisher trust warnings.
@@ -265,7 +272,7 @@ The encode helper writes the base64 certificate payload to `.tmp/codesign/window
 Alpha releases can publish unsigned HUD artifacts when signing secrets are not ready. Keep that path explicit in validation:
 
 ```bash
-npm run release:check -- v0.1.0-alpha.10 --allow-unsigned-prerelease-windows
+npm run release:check -- v0.1.0-alpha.11 --allow-unsigned-prerelease-windows
 ```
 
 The CLI accepts unsigned HUD artifacts only for prerelease tags such as `alpha`; set `MONEYSIREN_ALLOW_UNSIGNED_HUD=false` to require signed HUD metadata even for alpha builds.

@@ -17,6 +17,15 @@ The package installs both commands:
 - `moneysiren`
 - `msiren`
 
+If npm reports `EEXIST` for `moneysiren` or `msiren`, an older global MoneySiren install left command shims behind. Remove the old global packages and reinstall:
+
+```powershell
+npm uninstall -g @moneysiren/cli @moneysiren/app
+npm install -g @moneysiren/app@alpha --force
+```
+
+The app package also removes stale MoneySiren-owned command shims during global install when npm exposes the global prefix.
+
 ## What It Installs
 
 - CLI command surface.
