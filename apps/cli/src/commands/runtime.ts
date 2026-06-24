@@ -110,6 +110,7 @@ export async function runStartCommand(args: readonly string[], context: CliExecu
   }
 
   const adapter = desktopRuntimeAdapter(context);
+  context.stdout("Starting MoneySiren dashboard runtime...");
   const web = await adapter.startWebRuntime({
     openBrowser: parsed.openBrowser,
     ...(parsed.port === undefined ? {} : { port: parsed.port }),
@@ -130,6 +131,7 @@ export async function runStartCommand(args: readonly string[], context: CliExecu
     return 0;
   }
 
+  context.stdout("Opening MoneySiren HUD...");
   const hud = await adapter.startHud({
     ...(parsed.port === undefined ? {} : { port: parsed.port }),
   });
@@ -216,6 +218,7 @@ export async function runHudCommand(args: readonly string[], context: CliExecuti
   }
 
   const adapter = desktopRuntimeAdapter(context);
+  context.stdout("Starting MoneySiren dashboard runtime for HUD...");
   const web = await adapter.startWebRuntime({
     openBrowser: false,
     ...(parsed.port === undefined ? {} : { port: parsed.port }),
@@ -226,6 +229,7 @@ export async function runHudCommand(args: readonly string[], context: CliExecuti
     return webExitCode;
   }
 
+  context.stdout("Opening MoneySiren HUD...");
   const hud = await adapter.startHud({
     ...(parsed.port === undefined ? {} : { port: parsed.port }),
   });

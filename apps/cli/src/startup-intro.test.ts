@@ -26,9 +26,10 @@ describe("MoneySiren startup intro", () => {
     expect(shouldRenderStartupIntro(["summary", "--json"], {}, true)).toBe(false);
   });
 
-  it("renders a short ASCII logo with version information", () => {
+  it("renders a compact readable logo with version information", () => {
     const logo = renderStartupLogo(false);
 
+    expect(logo).toContain("MoneySiren");
     expect(logo).toContain("local spend radar");
     expect(logo).toContain("CLI . Web . HUD");
     expect(logo).toContain(CLI_VERSION);

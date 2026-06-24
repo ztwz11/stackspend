@@ -22,14 +22,6 @@ const INTRO_SKIP_COMMANDS = new Set([
   "/version",
 ]);
 
-const ASCII_LOGO = [
-  " __  __                      ____  _              ",
-  "|  \\/  | ___  _ __   ___ _  / ___|(_)_ __ ___ _ __ ",
-  "| |\\/| |/ _ \\| '_ \\ / _ \\ | \\___ \\| | '__/ _ \\ '_ \\",
-  "| |  | | (_) | | | |  __/ |  ___) | | | |  __/ | | |",
-  "|_|  |_|\\___/|_| |_|\\___|_| |____/|_|_|  \\___|_| |_|",
-];
-
 const INTRO_FRAMES = [
   "warming local radar",
   "checking CLI, Web, HUD",
@@ -94,8 +86,8 @@ export function shouldRenderStartupIntro(
 
 export function renderStartupLogo(colorEnabled: boolean): string {
   return [
-    ...ASCII_LOGO.map((line) => paint(colorEnabled, "brand", line)),
-    `       ${paint(colorEnabled, "muted", `local spend radar | CLI . Web . HUD | ${CLI_VERSION}`)}`,
+    paint(colorEnabled, "brand", "MoneySiren"),
+    paint(colorEnabled, "muted", `local spend radar | CLI . Web . HUD | ${CLI_VERSION}`),
   ].join("\n");
 }
 

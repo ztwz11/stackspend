@@ -173,8 +173,10 @@ export function createFallbackDesktopRuntimeAdapter(context: CliExecutionContext
         };
       }
 
+      let webNotes = startScript.notes;
+
       if (child.pid !== undefined) {
-        await updateDesktopRuntimeState(context, (state) => ({
+        const stateNote = await updateDesktopRuntimeState(context, (state) => ({
           ...state,
           web: {
             pid: child.pid as number,
@@ -183,29 +185,36 @@ export function createFallbackDesktopRuntimeAdapter(context: CliExecutionContext
             startedAt: new Date().toISOString(),
           },
         }));
+
+        if (stateNote !== null) {
+          webNotes = [...webNotes, stateNote];
+        }
       }
 
       return {
         status: "started",
         dashboardUrl,
         ...(child.pid === undefined ? {} : { pid: child.pid }),
-        notes: startScript.notes,
+        notes: webNotes,
       };
     },
 
     async startHud(options) {
+      const executable = await resolveDesktopExecutable(context);
       const status = await readDesktopRuntimeStatus(context);
 
       if (status.hud.status === "running" && status.hud.pid !== undefined) {
-        return {
-          status: "opened",
-          executablePath: status.hud.detail,
-          pid: status.hud.pid,
-          notes: ["Existing desktop HUD shell is already running."],
-        };
-      }
+        if (isUnavailable(executable) || sameDesktopExecutable(status.hud.detail, executable.executablePath)) {
+          return {
+            status: "opened",
+            executablePath: status.hud.detail,
+            pid: status.hud.pid,
+            notes: ["Existing desktop HUD shell is already running."],
+          };
+        }
 
-      const executable = await resolveDesktopExecutable(context);
+        context.stdout("Existing HUD record points to an older executable; launching the installed HUD artifact.");
+      }
 
       if (isUnavailable(executable)) {
         return executable;
@@ -225,7 +234,7 @@ export function createFallbackDesktopRuntimeAdapter(context: CliExecutionContext
       child.unref();
 
       if (child.pid !== undefined) {
-        await updateDesktopRuntimeState(context, (state) => ({
+        const stateNote = await updateDesktopRuntimeState(context, (state) => ({
           ...state,
           hud: {
             executablePath: executable.executablePath,
@@ -233,12 +242,23 @@ export function createFallbackDesktopRuntimeAdapter(context: CliExecutionContext
             startedAt: new Date().toISOString(),
           },
         }));
+        const notes = ["Desktop HUD shell launched with MONEYSIREN_DESKTOP_MODE=hud."];
+
+        if (stateNote !== null) {
+          notes.push(stateNote);
+        }
+
+        return {
+          status: "started",
+          executablePath: executable.executablePath,
+          pid: child.pid,
+          notes,
+        };
       }
 
       return {
         status: "started",
         executablePath: executable.executablePath,
-        ...(child.pid === undefined ? {} : { pid: child.pid }),
         notes: ["Desktop HUD shell launched with MONEYSIREN_DESKTOP_MODE=hud."],
       };
     },
@@ -316,7 +336,7 @@ async function stopDesktopRuntime(
     }
   }
 
-  await writeOrRemoveDesktopRuntimeState(context, nextState);
+  await updateDesktopRuntimeState(context, () => nextState);
   return results;
 }
 
@@ -724,6 +744,14 @@ function isUnavailable(value: ResolvedExecutable | DesktopRuntimeUnavailableResu
   return "status" in value && value.status === "unavailable";
 }
 
+function sameDesktopExecutable(left: string, right: string): boolean {
+  const normalize = process.platform === "win32"
+    ? (value: string) => value.replace(/\//g, "\\").toLowerCase()
+    : (value: string) => value;
+
+  return normalize(left) === normalize(right);
+}
+
 async function findStartScript(root: string): Promise<string | null> {
   const candidates = [
     join(root, "start.mjs"),
@@ -860,8 +888,21 @@ async function readDesktopRuntimeState(context: CliExecutionContext): Promise<De
 async function updateDesktopRuntimeState(
   context: CliExecutionContext,
   update: (state: DesktopRuntimeState) => DesktopRuntimeState,
-): Promise<void> {
-  await writeOrRemoveDesktopRuntimeState(context, update(await readDesktopRuntimeState(context) ?? emptyDesktopRuntimeState()));
+): Promise<string | null> {
+  try {
+    await writeOrRemoveDesktopRuntimeState(context, update(await readDesktopRuntimeState(context) ?? emptyDesktopRuntimeState()));
+    return null;
+  } catch (error) {
+    return formatDesktopRuntimeStateWarning(error);
+  }
+}
+
+function formatDesktopRuntimeStateWarning(error: unknown): string {
+  if (isNodeError(error) && typeof error.code === "string") {
+    return `Runtime state could not be saved (${error.code}); the process was still launched.`;
+  }
+
+  return "Runtime state could not be saved; the process was still launched.";
 }
 
 async function writeOrRemoveDesktopRuntimeState(
