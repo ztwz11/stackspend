@@ -7,7 +7,6 @@ import type { Locale } from "../lib/i18n";
 import type { NotificationPreferences } from "./NotificationSettingsModel";
 import { refreshLocalLive } from "../lib/local-client";
 import { HudWindowControls } from "./HudWindowControls";
-import { UsageProgress } from "./UsageProgress";
 
 const HUD_POLL_INTERVAL_MS = 5 * 60_000;
 const HUD_TIME_ZONE = "Asia/Seoul";
@@ -159,37 +158,24 @@ export function HudDashboard({
         }}
         refreshBusy={manualRefreshBusy || polling}
       />
-      <header className="hud-header" data-tauri-drag-region>
-        <div>
-          <h1>{labels.title}</h1>
-          <span className="hud-header-meta">
-            {labels.generatedAt}: {formatDateTime(model.generatedAt, locale)}
-          </span>
-        </div>
-        <span className={`badge ${syncStatusBadgeClass(model.sync.status)}`}>
-          {syncStatusLabel(model.sync.status, labels)}
-        </span>
-      </header>
-      <section className="hud-sync-row" aria-live="polite">
-        <span>{labels.freshItems}: {model.sync.freshCount}</span>
-        <span>{labels.staleItems}: {model.sync.staleCount}</span>
-        <span>{labels.errorItems}: {model.sync.errorCount}</span>
-      </section>
-      {transportError === null ? null : (
-        <div className="hud-inline-error" role="status">
-          <AlertTriangle aria-hidden="true" size={13} />
-          <span>{transportError}</span>
-        </div>
-      )}
-      <section className="hud-item-list" aria-label={labels.items}>
-        {model.items.length === 0 ? (
-          <div className="hud-empty">
-            <strong>{labels.empty}</strong>
+      <div className="hud-content">
+        <div className="hud-drag-strip" data-tauri-drag-region aria-hidden="true" />
+        {transportError === null ? null : (
+          <div className="hud-inline-error" role="status">
+            <AlertTriangle aria-hidden="true" size={13} />
+            <span>{transportError}</span>
           </div>
-        ) : model.items.map((item) => (
-          <HudItemCard item={item} key={item.id} labels={labels} locale={locale} modelGeneratedAt={model.generatedAt} />
-        ))}
-      </section>
+        )}
+        <section className="hud-item-list" aria-label={labels.items}>
+          {model.items.length === 0 ? (
+            <div className="hud-empty">
+              <strong>{labels.empty}</strong>
+            </div>
+          ) : model.items.map((item) => (
+            <HudItemCard item={item} key={item.id} labels={labels} locale={locale} modelGeneratedAt={model.generatedAt} />
+          ))}
+        </section>
+      </div>
       {manualRefreshBusy || polling ? (
         <div className="hud-refresh-indicator" role="status">
           <RotateCw aria-hidden="true" size={12} />
@@ -238,8 +224,6 @@ function HudItemCard({
           <span className="hud-item-detail">
             {labels.used} {used} · {labels.remaining} {remaining}
           </span>
-          <UsageProgress compact label={`${providerLabel(item.providerKey)} ${windowLabel}`} progress={item.progress} />
-          <HudSyncDetail error={syncError} item={item} labels={labels} locale={locale} />
         </span>
         <span className={`hud-value hud-value-${item.riskSeverity}`}>{used}</span>
       </a>
