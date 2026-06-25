@@ -117,9 +117,9 @@ export function desktopBackgroundSpawnOptions(platform: NodeJS.Platform = proces
   windowsHide: true;
 } {
   return {
-    // A detached Windows node process can allocate a visible console window.
-    // Ignored stdio plus unref lets the CLI return without opening that window.
-    detached: platform !== "win32",
+    // The local web and HUD shells must outlive the short-lived CLI process.
+    // windowsHide keeps Windows console children hidden while detached lets them survive.
+    detached: true,
     stdio: "ignore",
     windowsHide: true,
   };

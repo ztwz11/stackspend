@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import { desktopBackgroundSpawnOptions } from "./desktop-runtime.js";
 
 describe("desktop runtime launcher", () => {
-  it("keeps Windows runtime processes attached to avoid a visible server console", () => {
+  it("detaches Windows runtime processes while hiding their console windows", () => {
     expect(desktopBackgroundSpawnOptions("win32")).toEqual({
-      detached: false,
+      detached: true,
       stdio: "ignore",
       windowsHide: true,
     });
