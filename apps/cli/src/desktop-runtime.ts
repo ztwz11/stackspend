@@ -108,6 +108,10 @@ interface ManagedDesktopProcess {
   executablePath?: string;
 }
 
+interface StartedBackgroundProcess {
+  pid?: number;
+}
+
 const DESKTOP_STATE_ENV_KEY = "MONEYSIREN_DESKTOP_RUNTIME_STATE_PATH";
 const STOP_TIMEOUT_MS = 3_000;
 
@@ -123,6 +127,57 @@ export function desktopBackgroundSpawnOptions(platform: NodeJS.Platform = proces
     stdio: "ignore",
     windowsHide: true,
   };
+}
+
+async function startHiddenWebRuntimeProcess(input: {
+  command: string;
+  args: readonly string[];
+  cwd: string;
+  env: NodeJS.ProcessEnv;
+}): Promise<StartedBackgroundProcess> {
+  if (process.platform === "win32") {
+    return startWindowsHiddenProcess(input);
+  }
+
+  const child = spawn(input.command, input.args, {
+    cwd: input.cwd,
+    ...desktopBackgroundSpawnOptions(),
+    env: input.env,
+  });
+
+  child.unref();
+  return child.pid === undefined ? {} : { pid: child.pid };
+}
+
+async function startWindowsHiddenProcess(input: {
+  command: string;
+  args: readonly string[];
+  cwd: string;
+  env: NodeJS.ProcessEnv;
+}): Promise<StartedBackgroundProcess> {
+  const argumentList = input.args.map(quoteWindowsCommandLineArgument).join(" ");
+  const script = [
+    "$ErrorActionPreference = 'Stop'",
+    `$p = Start-Process -FilePath ${quotePowerShellString(input.command)} -ArgumentList ${quotePowerShellString(argumentList)} -WorkingDirectory ${quotePowerShellString(input.cwd)} -WindowStyle Hidden -PassThru`,
+    "[Console]::Out.WriteLine($p.Id)",
+  ].join("\n");
+  const encoded = Buffer.from(script, "utf16le").toString("base64");
+  const { stdout } = await execFileAsync("powershell.exe", [
+    "-NoProfile",
+    "-NonInteractive",
+    "-ExecutionPolicy",
+    "Bypass",
+    "-EncodedCommand",
+    encoded,
+  ], {
+    cwd: input.cwd,
+    env: input.env,
+    timeout: 15_000,
+    windowsHide: true,
+  });
+  const pid = Number.parseInt(stdout.trim(), 10);
+
+  return Number.isSafeInteger(pid) && pid > 0 ? { pid } : {};
 }
 
 export function createFallbackDesktopRuntimeAdapter(context: CliExecutionContext): CliDesktopRuntimeAdapter {
@@ -149,9 +204,10 @@ export function createFallbackDesktopRuntimeAdapter(context: CliExecutionContext
         return startScript;
       }
 
-      const child = spawn(process.execPath, [startScript.path], {
+      const webProcess = await startHiddenWebRuntimeProcess({
+        command: process.execPath,
+        args: [startScript.path],
         cwd: dirname(startScript.path),
-        ...desktopBackgroundSpawnOptions(),
         env: {
           ...process.env,
           ...context.env,
@@ -159,8 +215,6 @@ export function createFallbackDesktopRuntimeAdapter(context: CliExecutionContext
           PORT: String(port),
         },
       });
-
-      child.unref();
 
       if (!await waitForWebRuntime(healthUrl, context.fetch, DEFAULT_HEALTH_TIMEOUT_MS)) {
         return {
@@ -175,11 +229,11 @@ export function createFallbackDesktopRuntimeAdapter(context: CliExecutionContext
 
       let webNotes = startScript.notes;
 
-      if (child.pid !== undefined) {
+      if (webProcess.pid !== undefined) {
         const stateNote = await updateDesktopRuntimeState(context, (state) => ({
           ...state,
           web: {
-            pid: child.pid as number,
+            pid: webProcess.pid as number,
             port,
             dashboardUrl,
             startedAt: new Date().toISOString(),
@@ -194,7 +248,7 @@ export function createFallbackDesktopRuntimeAdapter(context: CliExecutionContext
       return {
         status: "started",
         dashboardUrl,
-        ...(child.pid === undefined ? {} : { pid: child.pid }),
+        ...(webProcess.pid === undefined ? {} : { pid: webProcess.pid }),
         notes: webNotes,
       };
     },
@@ -1022,6 +1076,41 @@ function trimToNull(value: string | undefined): string | null {
   const trimmed = value?.trim();
 
   return trimmed === undefined || trimmed.length === 0 ? null : trimmed;
+}
+
+function quotePowerShellString(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
+}
+
+function quoteWindowsCommandLineArgument(value: string): string {
+  if (value.length > 0 && !/[\s"]/u.test(value)) {
+    return value;
+  }
+
+  let result = '"';
+  let backslashes = 0;
+
+  for (const character of value) {
+    if (character === "\\") {
+      backslashes += 1;
+      continue;
+    }
+
+    if (character === '"') {
+      result += "\\".repeat(backslashes * 2 + 1);
+      result += character;
+      backslashes = 0;
+      continue;
+    }
+
+    result += "\\".repeat(backslashes);
+    result += character;
+    backslashes = 0;
+  }
+
+  result += "\\".repeat(backslashes * 2);
+  result += '"';
+  return result;
 }
 
 function errorMessage(error: unknown): string {
