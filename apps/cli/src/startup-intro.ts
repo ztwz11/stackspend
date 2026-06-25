@@ -28,6 +28,15 @@ const INTRO_FRAMES = [
   "ready to watch spend",
 ];
 
+const STARTUP_LOGO_LINES = [
+  " __  __                         ____  _",
+  "|  \\/  | ___  _ __   ___ _   _ / ___|(_)_ __ ___ _ __",
+  "| |\\/| |/ _ \\| '_ \\ / _ \\ | | |\\___ \\| | '__/ _ \\ '_ \\",
+  "| |  | | (_) | | | |  __/ |_| | ___) | | | |  __/ | | |",
+  "|_|  |_|\\___/|_| |_|\\___|\\__, ||____/|_|_|  \\___|_| |_|",
+  "                         |___/",
+] as const;
+
 export async function maybeRenderStartupIntro(options: StartupIntroOptions): Promise<void> {
   if (!shouldRenderStartupIntro(options.args, options.env, options.stdoutIsTTY)) {
     return;
@@ -86,6 +95,7 @@ export function shouldRenderStartupIntro(
 
 export function renderStartupLogo(colorEnabled: boolean): string {
   return [
+    ...STARTUP_LOGO_LINES.map((line) => paint(colorEnabled, "brand", line)),
     paint(colorEnabled, "brand", "MoneySiren"),
     paint(colorEnabled, "muted", `local spend radar | CLI . Web . HUD | ${CLI_VERSION}`),
   ].join("\n");

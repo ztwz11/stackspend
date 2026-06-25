@@ -28,12 +28,17 @@ describe("MoneySiren startup intro", () => {
 
   it("renders a compact readable logo with version information", () => {
     const logo = renderStartupLogo(false);
+    const lines = logo.split("\n");
 
     expect(logo).toContain("MoneySiren");
     expect(logo).toContain("local spend radar");
     expect(logo).toContain("CLI . Web . HUD");
     expect(logo).toContain(CLI_VERSION);
     expect(logo).not.toMatch(ANSI_PATTERN);
+    expect(lines.length).toBeGreaterThanOrEqual(8);
+    expect(lines.at(-2)).toBe("MoneySiren");
+    expect(lines.at(-1)).toBe(`local spend radar | CLI . Web . HUD | ${CLI_VERSION}`);
+    expect(lines.every((line) => /^[\x20-\x7E]*$/.test(line))).toBe(true);
   });
 
   it("writes the animated prelude and final logo to the provided output stream", async () => {
