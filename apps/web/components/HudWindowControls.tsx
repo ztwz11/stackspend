@@ -330,8 +330,10 @@ export function HudWindowControls({
           <button
             className="hud-settings-link"
             data-hud-no-drag
-            onClick={() => {
-              void openHudDashboardRoute(`/${locale}/settings/notifications`);
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              void openNotificationSettings(locale);
             }}
             type="button"
           >
@@ -411,6 +413,20 @@ async function applyAlwaysOnTop(alwaysOnTop: boolean): Promise<void> {
   } catch (error) {
     console.warn("MoneySiren HUD always-on-top apply failed.", error);
   }
+}
+
+async function openNotificationSettings(locale: Locale): Promise<void> {
+  const routePath = `/${locale}/settings/notifications`;
+  const openedExternally = await openHudDashboardRoute(routePath);
+
+  if (openedExternally || typeof window === "undefined") {
+    return;
+  }
+
+  const targetUrl = new URL(routePath, window.location.origin);
+  const opened = window.open(targetUrl.toString(), "_blank", "noopener,noreferrer");
+
+  opened?.focus();
 }
 
 async function getCurrentHudWindow(): Promise<TauriWindow | null> {
