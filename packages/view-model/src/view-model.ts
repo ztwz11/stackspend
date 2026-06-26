@@ -600,6 +600,8 @@ function buildDigestItems(
       severity: "info",
       label: "Month estimate",
       value: formatMinorAmount(overview.summary.totalEstimatedAmountMinor, overview.summary.currency),
+      numericValue: overview.summary.totalEstimatedAmountMinor,
+      unit: overview.summary.currency,
       clickPath: "/ko/dashboard/forecast",
     },
     {
@@ -610,6 +612,10 @@ function buildDigestItems(
       value: todayLive.summary.todayLiveAmountMinor === null
         ? "Not available"
         : formatMinorAmount(todayLive.summary.todayLiveAmountMinor, todayLive.summary.currency),
+      ...(todayLive.summary.todayLiveAmountMinor === null ? {} : {
+        numericValue: todayLive.summary.todayLiveAmountMinor,
+        unit: todayLive.summary.currency,
+      }),
       clickPath: "/ko/dashboard/today",
     },
     {
@@ -636,6 +642,10 @@ function buildDigestItems(
       value: awsOverview === undefined
         ? "Not available"
         : formatMinorAmount(awsOverview.estimatedAmountMinor, awsOverview.currency),
+      ...(awsOverview === undefined ? {} : {
+        numericValue: awsOverview.estimatedAmountMinor,
+        unit: awsOverview.currency,
+      }),
       clickPath: "/ko/services/aws",
     },
     {
@@ -644,6 +654,10 @@ function buildDigestItems(
       severity: "info",
       label: "OpenAI today",
       value: openAiToday === null ? "Not available" : formatMinorAmount(openAiToday.amountMinor, openAiToday.currency),
+      ...(openAiToday === null ? {} : {
+        numericValue: openAiToday.amountMinor,
+        unit: openAiToday.currency,
+      }),
       clickPath: "/ko/services/openai",
     },
     {
@@ -652,6 +666,10 @@ function buildDigestItems(
       severity: "info",
       label: "OpenAI tokens",
       value: openAiTokens === null ? "Not available" : formatTokens(openAiTokens),
+      ...(openAiTokens === null ? {} : {
+        numericValue: openAiTokens,
+        unit: "tokens",
+      }),
       clickPath: "/ko/services/openai",
     },
     cliRemainingPercentItem({
@@ -720,6 +738,17 @@ function buildDigestItems(
           ? "Not available"
           : formatMinorAmount(cloudflareToday.amountMinor, cloudflareToday.currency)
         : formatMinorAmount(cloudflareOverview.estimatedAmountMinor, cloudflareOverview.currency),
+      ...(cloudflareOverview === undefined
+        ? cloudflareToday === null
+          ? {}
+          : {
+              numericValue: cloudflareToday.amountMinor,
+              unit: cloudflareToday.currency,
+            }
+        : {
+            numericValue: cloudflareOverview.estimatedAmountMinor,
+            unit: cloudflareOverview.currency,
+          }),
       clickPath: "/ko/services/cloudflare",
     },
   ];

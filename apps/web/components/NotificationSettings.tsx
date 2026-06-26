@@ -5,6 +5,7 @@ import {
   BellRing,
   Clock3,
   ExternalLink,
+  GalleryHorizontalEnd,
   MonitorCheck,
   Send,
   SlidersHorizontal,
@@ -15,10 +16,12 @@ import {
   DEFAULT_LOCAL_CLI_DASHBOARD_METRIC_KEYS,
   DEFAULT_NOTIFICATION_PREFERENCES,
   DEFAULT_SELECTED_NOTIFICATION_WIDGET_KEYS,
+  HUD_DISPLAY_MODES,
   NOTIFICATION_WIDGET_KEYS,
   type DigestInterval,
   type DashboardBudgetPreferences,
   type DashboardWidgetLayoutPreferences,
+  type HudDisplayMode,
   type LocalCliDashboardMetricKey,
   type NotificationPreferences,
   type NotificationThresholdDraft,
@@ -26,6 +29,11 @@ import {
   type ThresholdOperator,
 } from "./NotificationSettingsModel";
 import { withAppLoading } from "./AppLoadingOverlay";
+import {
+  HUD_DISPLAY_MODE_EXAMPLES,
+  HUD_WIDGET_DISPLAY_EXAMPLES,
+  buildHudCompactPreview,
+} from "../lib/hud-display-options";
 
 type SaveState = "idle" | "loading" | "saving" | "saved" | "error";
 
@@ -38,6 +46,7 @@ export function NotificationSettingsPanel({ locale, messages }: { locale: Locale
   const [quietEnd, setQuietEnd] = useState(DEFAULT_NOTIFICATION_PREFERENCES.quietHours.end);
   const [hudAlwaysOnTop, setHudAlwaysOnTop] = useState(DEFAULT_NOTIFICATION_PREFERENCES.hud.alwaysOnTop);
   const [hudBackgroundColor, setHudBackgroundColor] = useState(DEFAULT_NOTIFICATION_PREFERENCES.hud.backgroundColor);
+  const [hudDisplayMode, setHudDisplayMode] = useState<HudDisplayMode>(DEFAULT_NOTIFICATION_PREFERENCES.hud.displayMode);
   const [hudFontColor, setHudFontColor] = useState(DEFAULT_NOTIFICATION_PREFERENCES.hud.fontColor);
   const [hudFontScale, setHudFontScale] = useState(DEFAULT_NOTIFICATION_PREFERENCES.hud.fontScale);
   const [hudOpacity, setHudOpacity] = useState(DEFAULT_NOTIFICATION_PREFERENCES.hud.opacity);
@@ -330,6 +339,28 @@ export function NotificationSettingsPanel({ locale, messages }: { locale: Locale
                 <ExternalLink aria-hidden="true" size={14} />
                 <span>{messages.settings.hudOpenWindow}</span>
               </button>
+              <label className="notification-field">
+                <span className="metric-label">{hudDisplayCopy(locale).modeLabel}</span>
+                <select
+                  className="notification-select"
+                  onChange={(event) => setHudDisplayMode(event.currentTarget.value as HudDisplayMode)}
+                  value={hudDisplayMode}
+                >
+                  {HUD_DISPLAY_MODES.map((mode) => (
+                    <option key={mode} value={mode}>
+                      {hudDisplayCopy(locale).modes[mode]}
+                    </option>
+                  ))}
+                </select>
+                <span className="metric-meta">{hudDisplayCopy(locale).modeHelp}</span>
+              </label>
+              <div className="notification-hud-mode-preview" aria-label={hudDisplayCopy(locale).previewLabel}>
+                <GalleryHorizontalEnd aria-hidden="true" size={14} />
+                <span>
+                  <strong>{hudDisplayCopy(locale).previewLabel}</strong>
+                  <code>{hudDisplayMode === "summary" ? buildHudCompactPreview(hudSelectedWidgets) : HUD_DISPLAY_MODE_EXAMPLES.rows}</code>
+                </span>
+              </div>
               <div className="notification-field">
                 <span className="metric-label">{messages.settings.hudAlwaysOnTop}</span>
                 <label className="notification-toggle-card notification-hud-toggle-card">
@@ -472,6 +503,10 @@ export function NotificationSettingsPanel({ locale, messages }: { locale: Locale
                         <span className="metric-meta">
                           {messages.settings.widgetOrder}: {selected ? selectedIndex + 1 : "-"}
                         </span>
+                        <span className="notification-hud-widget-example">
+                          <span>{HUD_WIDGET_DISPLAY_EXAMPLES[widgetKey].shortLabel}</span>
+                          <code>{HUD_WIDGET_DISPLAY_EXAMPLES[widgetKey].example}</code>
+                        </span>
                       </span>
                     </label>
                   );
@@ -521,6 +556,7 @@ export function NotificationSettingsPanel({ locale, messages }: { locale: Locale
     setDesktopEnabled(preferences.desktopEnabled);
     setHudAlwaysOnTop(preferences.hud.alwaysOnTop);
     setHudBackgroundColor(preferences.hud.backgroundColor);
+    setHudDisplayMode(preferences.hud.displayMode);
     setHudFontColor(preferences.hud.fontColor);
     setHudFontScale(preferences.hud.fontScale);
     setHudOpacity(preferences.hud.opacity);
@@ -554,6 +590,7 @@ export function NotificationSettingsPanel({ locale, messages }: { locale: Locale
       hud: {
         alwaysOnTop: hudAlwaysOnTop,
         backgroundColor: hudBackgroundColor,
+        displayMode: hudDisplayMode,
         fontColor: hudFontColor,
         fontScale: hudFontScale,
         opacity: hudOpacity,
@@ -677,6 +714,47 @@ function openHudWindow(locale: Locale) {
   const opened = window.open(url, "moneysiren-hud", "popup=yes,width=360,height=520,resizable=yes,scrollbars=no");
 
   opened?.focus();
+}
+
+function hudDisplayCopy(locale: Locale): {
+  modeLabel: string;
+  modeHelp: string;
+  previewLabel: string;
+  modes: Record<HudDisplayMode, string>;
+} {
+  if (locale === "ko") {
+    return {
+      modeLabel: "HUD 표시 방식",
+      modeHelp: "행 목록 또는 시계 옆에 붙일 수 있는 짧은 한 줄 요약으로 표시합니다.",
+      previewLabel: "표시 예시",
+      modes: {
+        rows: "행 목록",
+        summary: "짧은 요약",
+      },
+    };
+  }
+
+  if (locale === "ja") {
+    return {
+      modeLabel: "HUD display",
+      modeHelp: "Show either detailed rows or a short clock-sized summary.",
+      previewLabel: "Preview",
+      modes: {
+        rows: "Rows",
+        summary: "Compact summary",
+      },
+    };
+  }
+
+  return {
+    modeLabel: "HUD display",
+    modeHelp: "Show either detailed rows or a short clock-sized summary.",
+    previewLabel: "Preview",
+    modes: {
+      rows: "Rows",
+      summary: "Compact summary",
+    },
+  };
 }
 
 function KeyValueLine({ label, value }: { label: string; value: string }) {

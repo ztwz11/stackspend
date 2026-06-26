@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_NOTIFICATION_PREFERENCES,
   buildNotificationDigest,
+  buildHudViewModel,
   buildOperationsOverview,
   buildTodayLiveView,
   buildTrayMenuModel,
+  filterHudViewModelByWidgets,
   parseNotificationPreferences,
   readOperationsOverview,
   type ViewModelStore,
@@ -217,6 +219,90 @@ describe("shared view model", () => {
     ]);
   });
 
+  it("includes cost, token, and CLI widgets in selected HUD payload order", () => {
+    const overview = buildOperationsOverview({
+      ...STORE_WITH_SENSITIVE_VALUES,
+      providers: [
+        ...STORE_WITH_SENSITIVE_VALUES.providers,
+        {
+          key: "codex-cli",
+          displayName: "Codex CLI",
+        },
+      ],
+    }, {
+      generatedAt: NOW.toISOString(),
+    });
+    const todayLive = buildTodayLiveView(STORE_WITH_SENSITIVE_VALUES, {
+      generatedAt: NOW.toISOString(),
+      now: NOW,
+      timezone: "UTC",
+      liveProviders: [
+        {
+          providerKey: "openai",
+          displayName: "OpenAI",
+          checkedAt: NOW.toISOString(),
+          freshness: "live",
+          confidence: "low",
+          todayLiveAmountMinor: 420,
+          currency: "USD",
+          included: true,
+          metrics: [
+            {
+              key: "total_tokens",
+              value: 4200,
+              unit: "tokens",
+            },
+          ],
+        },
+        {
+          providerKey: "codex-cli",
+          displayName: "Codex CLI",
+          checkedAt: NOW.toISOString(),
+          freshness: "live",
+          confidence: "low",
+          todayLiveAmountMinor: null,
+          currency: "USD",
+          included: false,
+          metrics: [
+            {
+              key: "five_hour_limit_percent",
+              value: 22,
+              unit: "percent",
+            },
+          ],
+        },
+      ],
+    });
+    const selectedWidgets = [
+      "today_live_cost",
+      "codex_five_hour_percent",
+      "openai_today_tokens",
+    ] as const;
+    const digest = buildNotificationDigest(overview, todayLive, {
+      ...DEFAULT_NOTIFICATION_PREFERENCES,
+      selectedWidgets: selectedWidgets,
+    });
+    const hud = filterHudViewModelByWidgets(buildHudViewModel(todayLive, { digest }), selectedWidgets);
+
+    expect(hud.items.map((item) => [item.kind, item.id])).toEqual([
+      ["widget", "widget:today_live_cost"],
+      ["quota", "codex-cli:five_hour"],
+      ["widget", "widget:openai_today_tokens"],
+    ]);
+    expect(hud.items[0]).toEqual(expect.objectContaining({
+      kind: "widget",
+      value: "USD 4.20",
+      numericValue: 420,
+      unit: "USD",
+    }));
+    expect(hud.items[2]).toEqual(expect.objectContaining({
+      kind: "widget",
+      value: "4,200",
+      numericValue: 4200,
+      unit: "tokens",
+    }));
+  });
+
   it("surfaces conservative Codex reset credit expiry estimates in notifications", () => {
     const overview = buildOperationsOverview(STORE_WITH_SENSITIVE_VALUES, {
       generatedAt: NOW.toISOString(),
@@ -272,6 +358,7 @@ describe("shared view model", () => {
     }).hud).toEqual({
       alwaysOnTop: DEFAULT_NOTIFICATION_PREFERENCES.hud.alwaysOnTop,
       backgroundColor: DEFAULT_NOTIFICATION_PREFERENCES.hud.backgroundColor,
+      displayMode: DEFAULT_NOTIFICATION_PREFERENCES.hud.displayMode,
       fontColor: DEFAULT_NOTIFICATION_PREFERENCES.hud.fontColor,
       fontScale: 1.3,
       opacity: 0,
@@ -285,6 +372,7 @@ describe("shared view model", () => {
       hud: {
         alwaysOnTop: false,
         backgroundColor: "#101820",
+        displayMode: "summary",
         fontColor: "#f5f7fb",
         fontScale: 0.87,
         opacity: 0,
@@ -297,6 +385,7 @@ describe("shared view model", () => {
     }).hud).toEqual({
       alwaysOnTop: false,
       backgroundColor: "#101820",
+      displayMode: "summary",
       fontColor: "#f5f7fb",
       fontScale: 0.87,
       opacity: 0,
@@ -309,6 +398,7 @@ describe("shared view model", () => {
     expect(parseNotificationPreferences({
       hud: {
         backgroundColor: "url(javascript:alert(1))",
+        displayMode: "floating",
         fontColor: "#fff",
         padding: 200,
         rowHeight: 2,
@@ -316,6 +406,7 @@ describe("shared view model", () => {
     }).hud).toEqual({
       alwaysOnTop: DEFAULT_NOTIFICATION_PREFERENCES.hud.alwaysOnTop,
       backgroundColor: DEFAULT_NOTIFICATION_PREFERENCES.hud.backgroundColor,
+      displayMode: DEFAULT_NOTIFICATION_PREFERENCES.hud.displayMode,
       fontColor: DEFAULT_NOTIFICATION_PREFERENCES.hud.fontColor,
       fontScale: DEFAULT_NOTIFICATION_PREFERENCES.hud.fontScale,
       opacity: DEFAULT_NOTIFICATION_PREFERENCES.hud.opacity,
@@ -333,6 +424,7 @@ describe("shared view model", () => {
     }).hud).toEqual({
       alwaysOnTop: DEFAULT_NOTIFICATION_PREFERENCES.hud.alwaysOnTop,
       backgroundColor: DEFAULT_NOTIFICATION_PREFERENCES.hud.backgroundColor,
+      displayMode: DEFAULT_NOTIFICATION_PREFERENCES.hud.displayMode,
       fontColor: DEFAULT_NOTIFICATION_PREFERENCES.hud.fontColor,
       fontScale: 0.95,
       opacity: DEFAULT_NOTIFICATION_PREFERENCES.hud.opacity,

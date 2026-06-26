@@ -47,6 +47,7 @@ export {
   type HudItemView,
   type HudViewModel,
   type QuotaItemView,
+  type WidgetItemView,
 } from "./hud-model.js";
 export {
   createSyncError,
@@ -80,6 +81,7 @@ export {
   DASHBOARD_VIEW_KEYS,
   DASHBOARD_WIDGET_KEYS_BY_VIEW,
   DASHBOARD_WIDGET_SIZES,
+  HUD_DISPLAY_MODES,
   LOCAL_CLI_DASHBOARD_METRIC_KEYS,
   NOTIFICATION_WIDGET_KEYS,
   parseNotificationPreferences,
@@ -94,6 +96,7 @@ export {
   type DashboardWidgetLayoutPreferences,
   type DashboardWidgetSize,
   type DigestInterval,
+  type HudDisplayMode,
   type LocalCliDashboardMetricKey,
   type NotificationPreferenceFileOptions,
   type NotificationPreferences,

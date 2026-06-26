@@ -5,6 +5,7 @@ import { AlertTriangle, Clock, ExternalLink, RotateCw } from "lucide-react";
 import type { CreditAccuracy, HudItemView, HudViewModel, QuotaItemView } from "../../../packages/view-model/src/hud-model";
 import type { Locale } from "../lib/i18n";
 import type { NotificationPreferences } from "./NotificationSettingsModel";
+import { HUD_WIDGET_DISPLAY_EXAMPLES } from "../lib/hud-display-options";
 import { refreshLocalLive } from "../lib/local-client";
 import { openHudDashboardRoute } from "../lib/hud-navigation";
 import { HudWindowControls } from "./HudWindowControls";
@@ -182,6 +183,15 @@ export function HudDashboard({
             <div className="hud-empty">
               <strong>{polling ? controlLabels.toolLoadingPreparingView : labels.empty}</strong>
             </div>
+          ) : initialPreferences.hud.displayMode === "summary" ? (
+            <HudSummaryCard
+              hudPreferences={initialPreferences.hud}
+              items={model.items}
+              labels={labels}
+              locale={locale}
+              modelGeneratedAt={model.generatedAt}
+              wasRecentDrag={wasRecentDrag}
+            />
           ) : model.items.map((item) => (
             <HudItemCard
               hudPreferences={initialPreferences.hud}
@@ -215,6 +225,53 @@ export function HudDashboard({
       setManualRefreshBusy(false);
     }
   }
+}
+
+function HudSummaryCard({
+  hudPreferences,
+  items,
+  labels,
+  locale,
+  modelGeneratedAt,
+  wasRecentDrag,
+}: {
+  hudPreferences: NotificationPreferences["hud"];
+  items: readonly HudItemView[];
+  labels: HudDashboardLabels;
+  locale: Locale;
+  modelGeneratedAt: string;
+  wasRecentDrag: () => boolean;
+}) {
+  const [popoverOpen, setPopoverOpen] = useState(false);
+  const summaryParts = compactSummaryParts(items, hudPreferences, labels, locale, modelGeneratedAt);
+  const summary = summaryParts.length === 0 ? labels.empty : summaryParts.join(HUD_DETAIL_SEPARATOR);
+
+  return (
+    <div className={popoverOpen ? "hud-item-shell hud-item-shell-open" : "hud-item-shell"}>
+      <button
+        aria-expanded={popoverOpen}
+        className="hud-item hud-item-summary"
+        onClick={() => {
+          if (!wasRecentDrag()) {
+            setPopoverOpen((current) => !current);
+          }
+        }}
+        type="button"
+      >
+        <span>{summary}</span>
+      </button>
+      <HudItemOpenLink href={`/${locale}/dashboard/overview`} label={labels.openTarget} />
+      {popoverOpen ? (
+        <div className="hud-item-popover" data-hud-no-drag role="status">
+          {items.map((item) => (
+            <span className="hud-sync-detail" key={item.id}>
+              {summaryDetail(item, hudPreferences, labels, locale, modelGeneratedAt)}
+            </span>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function HudItemCard({
@@ -279,6 +336,39 @@ function HudItemCard({
             {hudPreferences.showUsagePercent ? <span>{labels.used}: {used}</span> : null}
             {hudPreferences.showRemainingPercent ? <span>{labels.remaining}: {remaining}</span> : null}
             {item.resetAt === null ? null : <span>{labels.resetAt}: {formatDateTime(item.resetAt, locale)}</span>}
+            <HudSyncDetail error={syncError} item={item} labels={labels} locale={locale} />
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  if (item.kind === "widget") {
+    const visibleValue = compactWidgetValue(item, locale);
+
+    return (
+      <div className={popoverOpen ? "hud-item-shell hud-item-shell-open" : "hud-item-shell"}>
+        <button
+          aria-expanded={popoverOpen}
+          className="hud-item hud-item-rich"
+          onClick={() => {
+            if (!wasRecentDrag()) {
+              setPopoverOpen((current) => !current);
+            }
+          }}
+          type="button"
+        >
+          <span className="hud-item-copy">
+            <strong>{item.label}</strong>
+            <span className="hud-item-detail">{item.value}</span>
+          </span>
+          <span className={`hud-value hud-value-${item.riskSeverity}`}>{visibleValue}</span>
+        </button>
+        <HudItemOpenLink href={href} label={labels.openTarget} />
+        {popoverOpen ? (
+          <div className="hud-item-popover" data-hud-no-drag role="status">
+            <span><strong>{item.label}</strong></span>
+            <span>{item.value}</span>
             <HudSyncDetail error={syncError} item={item} labels={labels} locale={locale} />
           </div>
         ) : null}
@@ -496,11 +586,23 @@ async function startHudWindowDrag(): Promise<void> {
 }
 
 function targetHref(item: HudItemView, locale: Locale): string {
+  if (item.target.type === "path") {
+    return localizePath(item.target.path, locale);
+  }
+
   if (item.target.type === "service" && item.target.providerKey !== undefined) {
     return `/${locale}/services/${item.target.providerKey}`;
   }
 
   return `/${locale}/dashboard/overview`;
+}
+
+function localizePath(path: string, locale: Locale): string {
+  if (path.startsWith("/ko/") || path.startsWith("/en/") || path.startsWith("/ja/")) {
+    return `/${locale}${path.slice(3)}`;
+  }
+
+  return path.startsWith("/") ? path : `/${locale}/dashboard/overview`;
 }
 
 function providerLabel(providerKey: string): string {
@@ -525,6 +627,253 @@ function providerLabel(providerKey: string): string {
   }
 
   return providerKey;
+}
+
+function compactSummaryParts(
+  items: readonly HudItemView[],
+  hudPreferences: NotificationPreferences["hud"],
+  labels: HudDashboardLabels,
+  locale: Locale,
+  modelGeneratedAt: string,
+): string[] {
+  const parts: string[] = [];
+  let previousProviderKey: string | null = null;
+
+  for (const item of items) {
+    const providerPrefix = item.providerKey === previousProviderKey ? "" : `${compactProviderLabel(item.providerKey)} `;
+    const part = item.kind === "quota"
+      ? compactQuotaPart(item, providerPrefix, hudPreferences, locale)
+      : item.kind === "credit_pool"
+        ? compactCreditPart(item, providerPrefix, labels, locale, modelGeneratedAt)
+        : compactWidgetPart(item, locale);
+
+    if (part.length === 0) {
+      continue;
+    }
+
+    parts.push(part);
+    previousProviderKey = item.providerKey;
+  }
+
+  return parts;
+}
+
+function compactQuotaPart(
+  item: QuotaItemView,
+  providerPrefix: string,
+  hudPreferences: NotificationPreferences["hud"],
+  locale: Locale,
+): string {
+  const percent = hudPreferences.showRemainingPercent
+    ? item.progress.remainingPercent
+    : hudPreferences.showUsagePercent
+      ? item.progress.usedPercent
+      : null;
+  const formattedPercent = percent === null ? "" : ` ${formatPercent(percent, locale)}`;
+
+  return `${providerPrefix}${compactWindowLabel(item.window)}${formattedPercent}`.trim();
+}
+
+function compactCreditPart(
+  item: Extract<HudItemView, { kind: "credit_pool" }>,
+  providerPrefix: string,
+  labels: HudDashboardLabels,
+  locale: Locale,
+  modelGeneratedAt: string,
+): string {
+  if (item.variant === "count") {
+    const count = item.availableCount === null ? labels.unknown : new Intl.NumberFormat(locale).format(item.availableCount);
+
+    return `${providerPrefix}R${count}`.trim();
+  }
+
+  const expiry = item.nearestExpiryAt === null
+    ? labels.noExpiry
+    : formatCompactRelative(item.nearestExpiryAt, modelGeneratedAt, locale);
+
+  return `${providerPrefix}R ${expiry}`.trim();
+}
+
+function compactWidgetPart(
+  item: Extract<HudItemView, { kind: "widget" }>,
+  locale: Locale,
+): string {
+  const label = HUD_WIDGET_DISPLAY_EXAMPLES[item.widgetKey].shortLabel;
+  const value = compactWidgetValue(item, locale);
+
+  if (item.widgetKey === "codex_reset_credit_count") {
+    return `${label}${value}`;
+  }
+
+  return `${label} ${value}`.trim();
+}
+
+function compactWidgetValue(
+  item: Extract<HudItemView, { kind: "widget" }>,
+  locale: Locale,
+): string {
+  if (item.numericValue !== null) {
+    if (isCurrencyUnit(item.unit)) {
+      return compactAmount(item.numericValue / 100, item.unit, locale);
+    }
+
+    if (item.unit === "tokens") {
+      return compactNumber(item.numericValue, locale);
+    }
+
+    if (item.unit === "count") {
+      return new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(item.numericValue);
+    }
+
+    if (item.unit === "percent") {
+      return formatPercent(item.numericValue, locale);
+    }
+  }
+
+  const amount = parseDigestAmount(item.value);
+
+  if (amount !== null) {
+    return compactAmount(amount.amountMajor, amount.currency, locale);
+  }
+
+  return item.value === "Not available" ? "N/A" : item.value;
+}
+
+function parseDigestAmount(value: string): { currency: string; amountMajor: number } | null {
+  const match = /^([A-Z]{3})\s+(-?\d+(?:\.\d+)?)$/.exec(value.trim());
+
+  if (match === null) {
+    return null;
+  }
+
+  const currency = match[1];
+  const amountText = match[2];
+
+  if (currency === undefined || amountText === undefined) {
+    return null;
+  }
+
+  const amountMajor = Number(amountText);
+
+  return Number.isFinite(amountMajor)
+    ? {
+        currency,
+        amountMajor,
+      }
+    : null;
+}
+
+function isCurrencyUnit(value: string | null): value is string {
+  return typeof value === "string" && /^[A-Z]{3}$/.test(value);
+}
+
+function compactAmount(amountMajor: number, currency: string, locale: Locale): string {
+  const maximumFractionDigits = Math.abs(amountMajor) < 1 ? 2 : Math.abs(amountMajor) < 100 ? 1 : 0;
+  const amount = new Intl.NumberFormat(locale, {
+    maximumFractionDigits,
+    minimumFractionDigits: 0,
+  }).format(amountMajor);
+
+  return currency === "USD" ? `$${amount}` : `${currency} ${amount}`;
+}
+
+function compactNumber(value: number, locale: Locale): string {
+  const absolute = Math.abs(value);
+  const formatter = new Intl.NumberFormat(locale, {
+    maximumFractionDigits: 1,
+    minimumFractionDigits: 0,
+  });
+
+  if (absolute >= 1_000_000) {
+    return `${formatter.format(value / 1_000_000)}m`;
+  }
+
+  if (absolute >= 1_000) {
+    return `${formatter.format(value / 1_000)}k`;
+  }
+
+  return new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(value);
+}
+
+function summaryDetail(
+  item: HudItemView,
+  hudPreferences: NotificationPreferences["hud"],
+  labels: HudDashboardLabels,
+  locale: Locale,
+  modelGeneratedAt: string,
+): string {
+  if (item.kind === "quota") {
+    const used = item.progress.usedPercent === null ? labels.unknown : formatPercent(item.progress.usedPercent, locale);
+    const remaining = item.progress.remainingPercent === null ? labels.unknown : formatPercent(item.progress.remainingPercent, locale);
+    const summaryParts = [
+      hudPreferences.showUsagePercent ? `${labels.used}: ${used}` : null,
+      hudPreferences.showRemainingPercent ? `${labels.remaining}: ${remaining}` : null,
+    ].filter((part): part is string => part !== null);
+
+    return [
+      providerLabel(item.providerKey),
+      quotaWindowLabel(item.window, labels),
+      summaryParts.length === 0 ? `${labels.used}: ${used}` : summaryParts.join(HUD_DETAIL_SEPARATOR),
+      item.resetAt === null ? null : `${labels.resetAt}: ${formatDateTime(item.resetAt, locale)}`,
+    ].filter((part): part is string => part !== null).join(HUD_DETAIL_SEPARATOR);
+  }
+
+  if (item.kind === "widget") {
+    return [
+      item.label,
+      item.value,
+      item.providerKey,
+    ].filter((part): part is string => part !== null).join(HUD_DETAIL_SEPARATOR);
+  }
+
+  const count = item.availableCount === null ? labels.unknown : new Intl.NumberFormat(locale).format(item.availableCount);
+  const expiry = item.nearestExpiryAt === null
+    ? labels.noExpiry
+    : formatRelative(item.nearestExpiryAt, modelGeneratedAt, locale);
+
+  return [
+    providerLabel(item.providerKey),
+    item.variant === "count" ? labels.resetCredits : labels.resetCreditExpiry,
+    `${labels.resetCredits}: ${count}`,
+    expiry,
+    accuracyLabel(item.accuracy, labels),
+  ].join(HUD_DETAIL_SEPARATOR);
+}
+
+function compactProviderLabel(providerKey: string | null): string {
+  if (providerKey === null) {
+    return "";
+  }
+
+  if (providerKey.startsWith("codex-")) {
+    return "MS";
+  }
+
+  if (providerKey.startsWith("claude-")) {
+    return "CL";
+  }
+
+  if (providerKey === "antigravity") {
+    return "AG";
+  }
+
+  return providerKey.slice(0, 3).toUpperCase();
+}
+
+function compactWindowLabel(window: QuotaItemView["window"]): string {
+  if (window === "five_hour") {
+    return "5h";
+  }
+
+  if (window === "weekly") {
+    return "W";
+  }
+
+  if (window === "budget") {
+    return "B";
+  }
+
+  return "Ctx";
 }
 
 function quotaWindowLabel(window: QuotaItemView["window"], labels: HudDashboardLabels): string {
@@ -665,4 +1014,29 @@ function formatRelative(value: string, base: string, locale: Locale): string {
   }
 
   return new Intl.RelativeTimeFormat(locale, { numeric: "always" }).format(Math.round(seconds / 60), "minute");
+}
+
+function formatCompactRelative(value: string, base: string, locale: Locale): string {
+  const target = Date.parse(value);
+  const now = Date.parse(base);
+
+  if (!Number.isFinite(target) || !Number.isFinite(now)) {
+    return value;
+  }
+
+  const seconds = Math.max(0, Math.round((target - now) / 1000));
+
+  if (seconds >= 86_400) {
+    return `${Math.ceil(seconds / 86_400)}d`;
+  }
+
+  if (seconds >= 3_600) {
+    return `${Math.ceil(seconds / 3_600)}h`;
+  }
+
+  if (seconds >= 60) {
+    return `${Math.ceil(seconds / 60)}m`;
+  }
+
+  return locale === "ko" ? "곧" : "soon";
 }

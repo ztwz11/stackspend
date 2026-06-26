@@ -39,6 +39,7 @@ export const LOCAL_CLI_DASHBOARD_METRIC_KEYS = [
 
 export const DASHBOARD_VIEW_KEYS = ["overview", "today", "forecast", "risks"] as const;
 export const DASHBOARD_WIDGET_SIZES = ["compact", "normal", "wide", "full"] as const;
+export const HUD_DISPLAY_MODES = ["rows", "summary"] as const;
 export const DASHBOARD_WIDGET_KEYS_BY_VIEW = {
   overview: [
     "overview_meta",
@@ -68,6 +69,7 @@ export type LocalCliDashboardMetricKey = (typeof LOCAL_CLI_DASHBOARD_METRIC_KEYS
 export type DashboardViewKey = (typeof DASHBOARD_VIEW_KEYS)[number];
 export type DashboardWidgetSize = (typeof DASHBOARD_WIDGET_SIZES)[number];
 export type DashboardWidgetKey = (typeof DASHBOARD_WIDGET_KEYS_BY_VIEW)[DashboardViewKey][number];
+export type HudDisplayMode = (typeof HUD_DISPLAY_MODES)[number];
 export type ThresholdOperator = "gte" | "lte" | "eq";
 export type DigestInterval = "six-hours" | "daily" | "weekly";
 
@@ -119,6 +121,7 @@ export interface DashboardWidgetLayoutItem {
 export interface HudPreferences {
   alwaysOnTop: boolean;
   backgroundColor: string;
+  displayMode: HudDisplayMode;
   fontColor: string;
   fontScale: number;
   opacity: number;
@@ -225,6 +228,7 @@ export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
   hud: {
     alwaysOnTop: true,
     backgroundColor: "#ffffff",
+    displayMode: "rows",
     fontColor: "#1f2937",
     fontScale: 0.95,
     opacity: 0.94,
@@ -401,6 +405,7 @@ function parseHudPreferences(
       ? record.alwaysOnTop
       : DEFAULT_NOTIFICATION_PREFERENCES.hud.alwaysOnTop,
     backgroundColor: parseHexColor(record.backgroundColor, DEFAULT_NOTIFICATION_PREFERENCES.hud.backgroundColor),
+    displayMode: parseHudDisplayMode(record.displayMode),
     fontColor: parseHexColor(record.fontColor, DEFAULT_NOTIFICATION_PREFERENCES.hud.fontColor),
     fontScale: clampNumber(record.fontScale, 0.8, 1.3, DEFAULT_NOTIFICATION_PREFERENCES.hud.fontScale),
     opacity: clampNumber(record.opacity, 0, 1, DEFAULT_NOTIFICATION_PREFERENCES.hud.opacity),
@@ -424,6 +429,12 @@ function parseHexColor(value: unknown, fallback: string): string {
   const normalized = value.trim();
 
   return /^#[0-9a-fA-F]{6}$/.test(normalized) ? normalized.toLowerCase() : fallback;
+}
+
+function parseHudDisplayMode(value: unknown): HudDisplayMode {
+  return typeof value === "string" && HUD_DISPLAY_MODES.includes(value as HudDisplayMode)
+    ? value as HudDisplayMode
+    : DEFAULT_NOTIFICATION_PREFERENCES.hud.displayMode;
 }
 
 function parseLocalCliDashboardMetricKeys(

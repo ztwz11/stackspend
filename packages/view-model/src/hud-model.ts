@@ -11,7 +11,7 @@ import {
   usageProgressFromUsedPercent,
   usageProgressSeverity,
 } from "./usage-progress.js";
-import type { TodayLiveMetric, TodayLiveProviderView, TodayLiveView } from "./view-model.js";
+import type { NotificationDigest, NotificationDigestItem, TodayLiveMetric, TodayLiveProviderView, TodayLiveView } from "./view-model.js";
 import type { NotificationWidgetKey } from "./notification-preferences-model.js";
 
 export type CreditAccuracy = "exact" | "estimated" | "bounded" | "unknown";
@@ -60,7 +60,24 @@ export interface QuotaItemView {
   };
 }
 
-export type HudItemView = QuotaItemView | CreditPoolView;
+export interface WidgetItemView {
+  kind: "widget";
+  id: string;
+  widgetKey: NotificationWidgetKey;
+  label: string;
+  value: string;
+  numericValue: number | null;
+  unit: string | null;
+  providerKey: string | null;
+  sync: ItemSyncView;
+  riskSeverity: RiskSeverity;
+  target: {
+    type: "path";
+    path: string;
+  };
+}
+
+export type HudItemView = QuotaItemView | CreditPoolView | WidgetItemView;
 
 export interface HudViewModel {
   generatedAt: string;
@@ -87,11 +104,28 @@ export const CODEX_APP_PROVIDER_KEY = "codex-app";
 export const CODEX_CLI_PROVIDER_KEY = "codex-cli";
 
 const CODEX_PROVIDER_KEYS = [CODEX_APP_PROVIDER_KEY, CODEX_CLI_PROVIDER_KEY] as const;
+const CLI_HUD_WIDGET_KEYS = new Set<NotificationWidgetKey>([
+  "claude_five_hour_percent",
+  "claude_weekly_percent",
+  "codex_five_hour_percent",
+  "codex_weekly_percent",
+  "codex_reset_credit_count",
+  "codex_reset_credit_expiry",
+]);
 const CREDIT_WARNING_MS = 7 * 24 * 60 * 60 * 1000;
 const CREDIT_CRITICAL_MS = 24 * 60 * 60 * 1000;
 
-export function buildHudViewModel(todayLive: TodayLiveView): HudViewModel {
-  const items = todayLive.providers.flatMap((provider) => hudItemsForProvider(provider, todayLive.generatedAt));
+export interface BuildHudViewModelOptions {
+  digest?: NotificationDigest;
+}
+
+export function buildHudViewModel(
+  todayLive: TodayLiveView,
+  options: BuildHudViewModelOptions = {},
+): HudViewModel {
+  const providerItems = todayLive.providers.flatMap((provider) => hudItemsForProvider(provider, todayLive.generatedAt));
+  const widgetItems = options.digest === undefined ? [] : hudItemsForDigest(options.digest);
+  const items = [...providerItems, ...widgetItems];
   const sync = summarizeAggregateSync(items.map((item) => item.sync));
   const warningCount = items.filter((item) => item.riskSeverity === "warning").length;
   const criticalCount = items.filter((item) => item.riskSeverity === "critical").length;
@@ -275,6 +309,10 @@ function quotaItemForProvider(
 }
 
 function hudWidgetKeysForItem(item: HudItemView): NotificationWidgetKey[] {
+  if (item.kind === "widget") {
+    return [item.widgetKey];
+  }
+
   if (item.kind === "credit_pool") {
     return item.variant === "count"
       ? ["codex_reset_credit_count"]
@@ -302,6 +340,38 @@ function hudWidgetKeysForItem(item: HudItemView): NotificationWidgetKey[] {
   }
 
   return [];
+}
+
+function hudItemsForDigest(digest: NotificationDigest): WidgetItemView[] {
+  return digest.items
+    .filter((item) => !CLI_HUD_WIDGET_KEYS.has(item.widgetKey))
+    .map((item) => hudItemForDigestItem(item, digest.generatedAt));
+}
+
+function hudItemForDigestItem(item: NotificationDigestItem, generatedAt: string): WidgetItemView {
+  const freshness = item.freshness ?? "live";
+
+  return {
+    kind: "widget",
+    id: `widget:${item.widgetKey}`,
+    widgetKey: item.widgetKey,
+    label: item.label,
+    value: item.value,
+    numericValue: item.numericValue ?? null,
+    unit: item.unit ?? null,
+    providerKey: item.providerKey ?? null,
+    sync: syncViewFromFreshness({
+      freshness,
+      checkedAt: null,
+      generatedAt,
+      source: item.providerKey ?? item.widgetKey,
+    }),
+    riskSeverity: item.severity,
+    target: {
+      type: "path",
+      path: item.clickPath ?? "/ko/dashboard/overview",
+    },
+  };
 }
 
 function creditItemFromMetric(metric: TodayLiveMetric, index: number, generatedAt: string): CreditItemView {

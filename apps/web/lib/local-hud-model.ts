@@ -1,11 +1,15 @@
 import "server-only";
 
 import {
+  buildNotificationDigest,
   buildHudViewModel,
+  DEFAULT_NOTIFICATION_PREFERENCES,
   filterHudViewModelByWidgets,
   type HudViewModel,
+  NOTIFICATION_WIDGET_KEYS,
   type NotificationWidgetKey,
 } from "../../../packages/view-model/src/index";
+import { readDashboardSnapshot } from "./dashboard-data";
 import {
   readLiveTodaySnapshot,
   refreshLiveToday,
@@ -13,7 +17,11 @@ import {
   type LiveTodaySnapshot,
   type RefreshScope,
 } from "./live-today";
-import { readWebNotificationPreferences, todayLiveViewFromSnapshot } from "./local-notification-model";
+import {
+  operationsOverviewFromDashboard,
+  readWebNotificationPreferences,
+  todayLiveViewFromSnapshot,
+} from "./local-notification-model";
 
 type LocalHudLiveOptions = Pick<
   LiveTodayOptions,
@@ -41,25 +49,41 @@ export interface LocalRefreshLiveResult {
 export async function readLocalHudViewModel(
   options: LocalHudOptions = {},
 ): Promise<HudViewModel> {
-  const [liveToday, selectedWidgets] = await Promise.all([
+  const [liveToday, dashboardSnapshot, preferences] = await Promise.all([
     readLiveTodaySnapshot({
       ...options,
       scope: "hud",
     }),
-    readHudSelectedWidgets(options),
+    readDashboardSnapshot(dashboardSnapshotOptions(options)),
+    readWebNotificationPreferences(options.env === undefined ? {} : { env: options.env }),
   ]);
+  const todayLive = todayLiveViewFromSnapshot(liveToday);
+  const overview = operationsOverviewFromDashboard(dashboardSnapshot);
+  const digest = buildNotificationDigest(overview, todayLive, {
+    ...DEFAULT_NOTIFICATION_PREFERENCES,
+    selectedWidgets: NOTIFICATION_WIDGET_KEYS,
+  });
+  const selectedWidgets = options.selectedWidgets ?? preferences.hud.selectedWidgets;
 
-  return filterHudViewModelByWidgets(buildHudViewModel(todayLiveViewFromSnapshot(liveToday)), selectedWidgets);
+  return filterHudViewModelByWidgets(buildHudViewModel(todayLive, { digest }), selectedWidgets);
 }
 
 export async function refreshLocalLiveData(options: {
   scope: RefreshScope;
 } & LocalHudOptions): Promise<LocalRefreshLiveResult> {
-  const [liveToday, selectedWidgets] = await Promise.all([
+  const [liveToday, dashboardSnapshot, preferences] = await Promise.all([
     refreshLiveToday(options),
-    readHudSelectedWidgets(options),
+    readDashboardSnapshot(dashboardSnapshotOptions(options)),
+    readWebNotificationPreferences(options.env === undefined ? {} : { env: options.env }),
   ]);
-  const hud = filterHudViewModelByWidgets(buildHudViewModel(todayLiveViewFromSnapshot(liveToday)), selectedWidgets);
+  const todayLive = todayLiveViewFromSnapshot(liveToday);
+  const overview = operationsOverviewFromDashboard(dashboardSnapshot);
+  const digest = buildNotificationDigest(overview, todayLive, {
+    ...DEFAULT_NOTIFICATION_PREFERENCES,
+    selectedWidgets: NOTIFICATION_WIDGET_KEYS,
+  });
+  const selectedWidgets = options.selectedWidgets ?? preferences.hud.selectedWidgets;
+  const hud = filterHudViewModelByWidgets(buildHudViewModel(todayLive, { digest }), selectedWidgets);
   const refreshedProviders = refreshedProviderKeys(liveToday);
   const failedProviders = failedProviderSummaries(liveToday);
   const status = failedProviders.length === 0
@@ -79,25 +103,31 @@ export async function refreshLocalLiveData(options: {
   };
 }
 
-async function readHudSelectedWidgets(options: LocalHudOptions): Promise<readonly NotificationWidgetKey[]> {
-  if (options.selectedWidgets !== undefined) {
-    return options.selectedWidgets;
-  }
-
-  return (await readWebNotificationPreferences(
-    options.env === undefined ? {} : { env: options.env },
-  )).hud.selectedWidgets;
-}
-
 export async function readUnfilteredLocalHudViewModel(
   options: LocalHudLiveOptions = {},
 ): Promise<HudViewModel> {
-  const liveToday = await readLiveTodaySnapshot({
-    ...options,
-    scope: "hud",
+  const [liveToday, dashboardSnapshot] = await Promise.all([
+    readLiveTodaySnapshot({
+      ...options,
+      scope: "hud",
+    }),
+    readDashboardSnapshot(dashboardSnapshotOptions(options)),
+  ]);
+  const todayLive = todayLiveViewFromSnapshot(liveToday);
+  const overview = operationsOverviewFromDashboard(dashboardSnapshot);
+  const digest = buildNotificationDigest(overview, todayLive, {
+    ...DEFAULT_NOTIFICATION_PREFERENCES,
+    selectedWidgets: NOTIFICATION_WIDGET_KEYS,
   });
 
-  return buildHudViewModel(todayLiveViewFromSnapshot(liveToday));
+  return buildHudViewModel(todayLive, { digest });
+}
+
+function dashboardSnapshotOptions(options: LocalHudLiveOptions): Parameters<typeof readDashboardSnapshot>[0] {
+  return {
+    ...(options.env === undefined ? {} : { env: options.env }),
+    ...(options.now === undefined ? {} : { now: options.now }),
+  };
 }
 
 export function parseRefreshScope(value: unknown): RefreshScope | null {
