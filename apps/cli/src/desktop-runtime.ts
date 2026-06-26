@@ -1,6 +1,7 @@
 import { execFile, spawn } from "node:child_process";
 import { constants } from "node:fs";
 import { access, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { createServer } from "node:net";
 import { homedir } from "node:os";
 import { basename, dirname, extname, join, posix, resolve, win32 } from "node:path";
 import { promisify } from "node:util";
@@ -10,6 +11,7 @@ import { resolveReleaseInstallDir } from "./release-installer.js";
 const execFileAsync = promisify(execFile);
 const DEFAULT_WEB_PORT = 3000;
 const DEFAULT_HEALTH_TIMEOUT_MS = 30_000;
+const DEFAULT_PORT_FALLBACK_ATTEMPTS = 20;
 
 export interface StartWebRuntimeOptions {
   openBrowser: boolean;
@@ -49,6 +51,7 @@ export type DesktopRuntimeResult =
   | {
       status: "running" | "started";
       dashboardUrl: string;
+      port: number;
       pid?: number;
       notes: readonly string[];
     }
@@ -183,20 +186,47 @@ async function startWindowsHiddenProcess(input: {
 export function createFallbackDesktopRuntimeAdapter(context: CliExecutionContext): CliDesktopRuntimeAdapter {
   return {
     async startWebRuntime(options) {
-      const port = options.port ?? configuredPort(context.env);
-      const dashboardUrl = `http://127.0.0.1:${port}/ko/dashboard/overview`;
-      const healthUrl = `http://127.0.0.1:${port}/api/local/health`;
+      const existingStatus = await readDesktopRuntimeStatus(context);
+      const existingPort = parsePortFromUrl(existingStatus.web.detail);
 
-      if (await isWebRuntimeHealthy(healthUrl, context.fetch)) {
+      if (existingStatus.web.status === "running" && existingPort !== null) {
+        return {
+          status: "running",
+          dashboardUrl: existingStatus.web.detail,
+          port: existingPort,
+          ...(existingStatus.web.pid === undefined ? {} : { pid: existingStatus.web.pid }),
+          notes: ["Existing local dashboard runtime is healthy."],
+        };
+      }
+
+      const requestedPort = options.port ?? configuredPort(context.env);
+      const requestedDashboardUrl = `http://127.0.0.1:${requestedPort}/ko/dashboard/overview`;
+      const requestedHealthUrl = `http://127.0.0.1:${requestedPort}/api/local/health`;
+
+      if (await isWebRuntimeHealthy(requestedHealthUrl, context.fetch)) {
         const status = await readDesktopRuntimeStatus(context);
 
         return {
           status: "running",
-          dashboardUrl,
+          dashboardUrl: requestedDashboardUrl,
+          port: requestedPort,
           ...(status.web.status === "running" && status.web.pid !== undefined ? { pid: status.web.pid } : {}),
           notes: ["Existing local dashboard runtime is healthy."],
         };
       }
+
+      const portSelection = await selectWebRuntimePort({
+        explicitPort: options.port !== undefined || trimToNull(context.env.PORT) !== null,
+        requestedPort,
+      });
+
+      if (portSelection.status === "unavailable") {
+        return portSelection;
+      }
+
+      const { port } = portSelection;
+      const dashboardUrl = `http://127.0.0.1:${port}/ko/dashboard/overview`;
+      const healthUrl = `http://127.0.0.1:${port}/api/local/health`;
 
       const startScript = await resolveWebRuntimeStartScript(context);
 
@@ -227,7 +257,10 @@ export function createFallbackDesktopRuntimeAdapter(context: CliExecutionContext
         };
       }
 
-      let webNotes = startScript.notes;
+      let webNotes = [
+        ...portSelection.notes,
+        ...startScript.notes,
+      ];
 
       if (webProcess.pid !== undefined) {
         const stateNote = await updateDesktopRuntimeState(context, (state) => ({
@@ -248,6 +281,7 @@ export function createFallbackDesktopRuntimeAdapter(context: CliExecutionContext
       return {
         status: "started",
         dashboardUrl,
+        port,
         ...(webProcess.pid === undefined ? {} : { pid: webProcess.pid }),
         notes: webNotes,
       };
@@ -331,11 +365,13 @@ async function readDesktopRuntimeStatus(context: CliExecutionContext): Promise<D
   const statePath = resolveDesktopRuntimeStatePath(context);
   const state = await readDesktopRuntimeState(context);
   const port = configuredPort(context.env);
+  const statePort = state?.web?.port ?? port;
   const webHealthUrl = `http://127.0.0.1:${port}/api/local/health`;
+  const managedWebHealthUrl = `http://127.0.0.1:${statePort}/api/local/health`;
   const web = await processStatus({
     context,
     detail: state?.web?.dashboardUrl ?? `http://127.0.0.1:${port}`,
-    healthUrl: webHealthUrl,
+    healthUrl: state?.web === undefined ? webHealthUrl : managedWebHealthUrl,
     process: state?.web,
     target: "web",
   });
@@ -426,11 +462,72 @@ async function processStatus(input: {
     };
   }
 
+  if (input.target === "web" && input.healthUrl !== undefined && !await isWebRuntimeHealthy(input.healthUrl, input.context.fetch)) {
+    return {
+      target: input.target,
+      status: "stale",
+      pid: input.process.pid,
+      detail: `${input.detail} is not responding to health checks.`,
+    };
+  }
+
   return {
     target: input.target,
     status: "running",
     pid: input.process.pid,
     detail: input.detail,
+  };
+}
+
+async function selectWebRuntimePort(input: {
+  explicitPort: boolean;
+  requestedPort: number;
+}): Promise<
+  | {
+      status: "ready";
+      port: number;
+      notes: readonly string[];
+    }
+  | DesktopRuntimeUnavailableResult
+> {
+  const requestedAvailable = await isTcpPortAvailable(input.requestedPort);
+
+  if (requestedAvailable) {
+    return {
+      status: "ready",
+      port: input.requestedPort,
+      notes: [],
+    };
+  }
+
+  if (input.explicitPort) {
+    return {
+      status: "unavailable",
+      reason: `Port ${input.requestedPort} is already in use, but the MoneySiren health check is not responding.`,
+      guidance: [
+        `Stop the process using port ${input.requestedPort}, or run \`msiren start --port <port>\`.`,
+        "On Windows you can inspect the owner with `netstat -ano | findstr :3000`.",
+      ],
+    };
+  }
+
+  const fallbackPort = await findAvailablePort(input.requestedPort + 1, DEFAULT_PORT_FALLBACK_ATTEMPTS);
+
+  if (fallbackPort === null) {
+    return {
+      status: "unavailable",
+      reason: `Port ${input.requestedPort} is already in use, and no fallback port was available.`,
+      guidance: [
+        `Stop the process using port ${input.requestedPort}, or run \`msiren start --port <port>\`.`,
+        "On Windows you can inspect the owner with `netstat -ano | findstr :3000`.",
+      ],
+    };
+  }
+
+  return {
+    status: "ready",
+    port: fallbackPort,
+    notes: [`Default port ${input.requestedPort} was in use by an unresponsive process; using ${fallbackPort}.`],
   };
 }
 
@@ -890,6 +987,39 @@ async function isWebRuntimeHealthy(url: string, fetchImpl: typeof fetch): Promis
   }
 }
 
+async function findAvailablePort(startPort: number, attempts: number): Promise<number | null> {
+  const maxPort = Math.min(65_535, startPort + attempts - 1);
+
+  for (let port = startPort; port <= maxPort; port += 1) {
+    if (await isTcpPortAvailable(port)) {
+      return port;
+    }
+  }
+
+  return null;
+}
+
+async function isTcpPortAvailable(port: number): Promise<boolean> {
+  return new Promise((resolveAvailable) => {
+    const server = createServer();
+
+    server.once("error", () => {
+      resolveAvailable(false);
+    });
+
+    server.once("listening", () => {
+      server.close(() => {
+        resolveAvailable(true);
+      });
+    });
+
+    server.listen({
+      host: "127.0.0.1",
+      port,
+    });
+  });
+}
+
 async function isReadableFile(path: string): Promise<boolean> {
   try {
     const pathStat = await stat(path);
@@ -1070,6 +1200,17 @@ function configuredPort(env: Record<string, string | undefined>): number {
   const parsed = Number.parseInt(env.PORT ?? "", 10);
 
   return Number.isSafeInteger(parsed) && parsed > 0 && parsed <= 65_535 ? parsed : DEFAULT_WEB_PORT;
+}
+
+function parsePortFromUrl(value: string): number | null {
+  try {
+    const parsed = new URL(value);
+    const port = Number.parseInt(parsed.port, 10);
+
+    return Number.isSafeInteger(port) && port > 0 && port <= 65_535 ? port : null;
+  } catch {
+    return null;
+  }
 }
 
 function trimToNull(value: string | undefined): string | null {

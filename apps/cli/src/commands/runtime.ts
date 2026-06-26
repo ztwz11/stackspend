@@ -121,7 +121,11 @@ export async function runStartCommand(args: readonly string[], context: CliExecu
     return webExitCode;
   }
 
-  if (web.status !== "unavailable" && parsed.openBrowser) {
+  if (web.status === "unavailable") {
+    return webExitCode;
+  }
+
+  if (parsed.openBrowser) {
     await context.openUrl(web.dashboardUrl);
     context.stdout(`Dashboard URL: ${web.dashboardUrl}`);
   }
@@ -133,7 +137,7 @@ export async function runStartCommand(args: readonly string[], context: CliExecu
 
   context.stdout("Opening MoneySiren HUD...");
   const hud = await adapter.startHud({
-    ...(parsed.port === undefined ? {} : { port: parsed.port }),
+    port: web.port,
   });
 
   return writeDesktopShellResult(context, hud, "MoneySiren HUD");
@@ -229,9 +233,13 @@ export async function runHudCommand(args: readonly string[], context: CliExecuti
     return webExitCode;
   }
 
+  if (web.status === "unavailable") {
+    return webExitCode;
+  }
+
   context.stdout("Opening MoneySiren HUD...");
   const hud = await adapter.startHud({
-    ...(parsed.port === undefined ? {} : { port: parsed.port }),
+    port: web.port,
   });
 
   return writeDesktopShellResult(context, hud, "MoneySiren HUD");

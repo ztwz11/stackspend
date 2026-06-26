@@ -105,7 +105,14 @@ export async function openUrlInBrowser(url: string): Promise<void> {
   }
 
   const child = process.platform === "win32"
-    ? spawn("rundll32.exe", ["url.dll,FileProtocolHandler", parsedUrl.toString()], {
+    ? spawn("powershell.exe", [
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-EncodedCommand",
+        encodePowerShellCommand(`Start-Process -FilePath ${quotePowerShellString(parsedUrl.toString())}`),
+      ], {
         detached: true,
         stdio: "ignore",
         windowsHide: true,
@@ -121,6 +128,14 @@ export async function openUrlInBrowser(url: string): Promise<void> {
         });
 
   child.unref();
+}
+
+function encodePowerShellCommand(command: string): string {
+  return Buffer.from(command, "utf16le").toString("base64");
+}
+
+function quotePowerShellString(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
 }
 
 function isLoopbackHttpUrl(url: URL): boolean {
