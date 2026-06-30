@@ -6,36 +6,37 @@ use tauri::{
     tray::TrayIconBuilder,
     AppHandle, Emitter, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent, Wry,
 };
+#[cfg(target_os = "windows")]
+use windows::Win32::Globalization::GetUserDefaultLocaleName;
 
 const DEFAULT_DASHBOARD_BASE_URL: &str = "http://127.0.0.1:3000";
 const DESKTOP_MODE_ENV_KEY: &str = "MONEYSIREN_DESKTOP_MODE";
 const WEB_URL_ENV_KEY: &str = "MONEYSIREN_WEB_URL";
+const LOCALE_ENV_KEY: &str = "MONEYSIREN_LOCALE";
 const HUD_WINDOW_STATE_FILE: &str = "hud-window-state.json";
 const HUD_DEFAULT_WIDTH: f64 = 340.0;
 const HUD_DEFAULT_HEIGHT: f64 = 360.0;
 const HUD_MIN_WIDTH: u32 = 280;
 const HUD_MIN_HEIGHT: u32 = 240;
-const TRAY_ACTIONS: [TrayAction; 12] = [
-    TrayAction::new("show-hud", "Show HUD", "/hud"),
-    TrayAction::new("open-dashboard", "Open Dashboard", "/"),
-    TrayAction::new("open-today-live", "Open Today Live", "/ko/dashboard/today"),
-    TrayAction::new(
-        "open-connections",
-        "Open Connections",
-        "/ko/settings/connections",
-    ),
+const LOCALE_ENV_KEYS: [&str; 6] = [
+    LOCALE_ENV_KEY,
+    "LANGUAGE",
+    "LC_ALL",
+    "LC_MESSAGES",
+    "LANG",
+    "MONEYSIREN_LANGUAGE",
+];
+const TRAY_ACTIONS: [TrayAction; 6] = [
+    TrayAction::new("show-hud", TrayRoute::Hud, false),
+    TrayAction::new("open-dashboard", TrayRoute::DashboardOverview, false),
+    TrayAction::new("open-today-live", TrayRoute::TodayLive, false),
+    TrayAction::new("open-connections", TrayRoute::Connections, false),
     TrayAction::new(
         "open-notification-settings",
-        "Notification Settings",
-        "/ko/settings/notifications",
+        TrayRoute::NotificationSettings,
+        false,
     ),
-    TrayAction::new("refresh-now", "Refresh Now", ""),
-    TrayAction::new("pause-30m", "Pause Notifications 30m", ""),
-    TrayAction::new("pause-1h", "Pause Notifications 1h", ""),
-    TrayAction::new("pause-until-tomorrow", "Pause Until Tomorrow", ""),
-    TrayAction::new("start-at-login-toggle", "Start at Login", ""),
-    TrayAction::new("run-doctor", "Run Doctor", ""),
-    TrayAction::new("quit", "Quit MoneySiren", ""),
+    TrayAction::new("quit", TrayRoute::None, true),
 ];
 
 const LOCAL_API_ENDPOINTS: [&str; 3] = [
@@ -44,22 +45,39 @@ const LOCAL_API_ENDPOINTS: [&str; 3] = [
     "/api/local/notification-digest",
 ];
 
-#[derive(Clone, Copy, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Copy)]
 struct TrayAction {
     id: &'static str,
-    label: &'static str,
-    url_path: &'static str,
+    route: TrayRoute,
+    separator_before: bool,
 }
 
 impl TrayAction {
-    const fn new(id: &'static str, label: &'static str, url_path: &'static str) -> Self {
+    const fn new(id: &'static str, route: TrayRoute, separator_before: bool) -> Self {
         Self {
             id,
-            label,
-            url_path,
+            route,
+            separator_before,
         }
     }
+}
+
+#[derive(Clone, Copy)]
+enum TrayRoute {
+    Hud,
+    DashboardOverview,
+    TodayLive,
+    Connections,
+    NotificationSettings,
+    None,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct TrayNativeAction {
+    id: &'static str,
+    label: &'static str,
+    url_path: String,
 }
 
 #[derive(Serialize)]
@@ -70,7 +88,8 @@ struct TrayNativeStatus {
     dashboard_base_url: String,
     hud_available: bool,
     notifications_available: bool,
-    actions: &'static [TrayAction],
+    locale: &'static str,
+    actions: Vec<TrayNativeAction>,
     allowed_local_api_endpoints: &'static [&'static str],
 }
 
@@ -111,7 +130,11 @@ fn main() {
                 }
                 open_hud_window(app.handle());
             } else {
-                navigate_dashboard_route(app.handle(), "/");
+                let locale = current_locale();
+                navigate_dashboard_route(
+                    app.handle(),
+                    &format!("/{}/dashboard/overview", locale.code()),
+                );
             }
 
             Ok(())
@@ -131,6 +154,23 @@ enum DesktopMode {
     Hud,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Locale {
+    En,
+    Ko,
+    Ja,
+}
+
+impl Locale {
+    const fn code(self) -> &'static str {
+        match self {
+            Self::En => "en",
+            Self::Ko => "ko",
+            Self::Ja => "ja",
+        }
+    }
+}
+
 fn desktop_mode() -> DesktopMode {
     match std::env::var(DESKTOP_MODE_ENV_KEY) {
         Ok(value) if value.trim().eq_ignore_ascii_case("hud") => DesktopMode::Hud,
@@ -138,15 +178,141 @@ fn desktop_mode() -> DesktopMode {
     }
 }
 
+fn current_locale() -> Locale {
+    for key in LOCALE_ENV_KEYS {
+        if let Ok(value) = std::env::var(key) {
+            if let Some(locale) = parse_locale_hint(&value) {
+                return locale;
+            }
+        }
+    }
+
+    if let Some(value) = system_locale_hint() {
+        if let Some(locale) = parse_locale_hint(&value) {
+            return locale;
+        }
+    }
+
+    Locale::En
+}
+
+#[cfg(target_os = "windows")]
+fn system_locale_hint() -> Option<String> {
+    let mut buffer = [0u16; 85];
+    let length = unsafe { GetUserDefaultLocaleName(&mut buffer) };
+
+    if length <= 1 {
+        return None;
+    }
+
+    String::from_utf16(&buffer[..length as usize - 1]).ok()
+}
+
+#[cfg(not(target_os = "windows"))]
+fn system_locale_hint() -> Option<String> {
+    None
+}
+
+fn parse_locale_hint(value: &str) -> Option<Locale> {
+    for part in value.split(',') {
+        let normalized = part
+            .trim()
+            .split(';')
+            .next()
+            .unwrap_or_default()
+            .trim()
+            .to_ascii_lowercase()
+            .replace('_', "-");
+
+        if normalized.is_empty() {
+            continue;
+        }
+
+        let primary = normalized.split('-').next().unwrap_or_default();
+
+        match primary {
+            "ko" => return Some(Locale::Ko),
+            "ja" => return Some(Locale::Ja),
+            "en" => return Some(Locale::En),
+            _ => {}
+        }
+    }
+
+    None
+}
+
+fn tray_action_label(action_id: &str, locale: Locale) -> &'static str {
+    match locale {
+        Locale::Ko => match action_id {
+            "show-hud" => "HUD 열기",
+            "open-dashboard" => "대시보드 열기",
+            "open-today-live" => "오늘 실시간",
+            "open-connections" => "연결 설정",
+            "open-notification-settings" => "알림 설정",
+            "quit" => "MoneySiren 종료",
+            _ => "MoneySiren",
+        },
+        Locale::Ja => match action_id {
+            "show-hud" => "HUDを開く",
+            "open-dashboard" => "ダッシュボードを開く",
+            "open-today-live" => "今日のライブ",
+            "open-connections" => "接続設定",
+            "open-notification-settings" => "通知設定",
+            "quit" => "MoneySirenを終了",
+            _ => "MoneySiren",
+        },
+        Locale::En => match action_id {
+            "show-hud" => "Open HUD",
+            "open-dashboard" => "Open Dashboard",
+            "open-today-live" => "Today Live",
+            "open-connections" => "Connections",
+            "open-notification-settings" => "Notification Settings",
+            "quit" => "Quit MoneySiren",
+            _ => "MoneySiren",
+        },
+    }
+}
+
+fn tray_action_url_path(action: TrayAction, locale: Locale) -> Option<String> {
+    match action.route {
+        TrayRoute::Hud => Some(format!("/hud?locale={}", locale.code())),
+        TrayRoute::DashboardOverview => Some(format!("/{}/dashboard/overview", locale.code())),
+        TrayRoute::TodayLive => Some(format!("/{}/dashboard/today", locale.code())),
+        TrayRoute::Connections => Some(format!("/{}/settings/connections", locale.code())),
+        TrayRoute::NotificationSettings => {
+            Some(format!("/{}/settings/notifications", locale.code()))
+        }
+        TrayRoute::None => None,
+    }
+}
+
+fn localized_tray_actions(locale: Locale) -> Vec<TrayNativeAction> {
+    TRAY_ACTIONS
+        .iter()
+        .map(|action| TrayNativeAction {
+            id: action.id,
+            label: tray_action_label(action.id, locale),
+            url_path: tray_action_url_path(*action, locale).unwrap_or_default(),
+        })
+        .collect()
+}
+
 fn build_tray_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
     let menu = Menu::new(app)?;
+    let locale = current_locale();
 
     for action in TRAY_ACTIONS {
-        if action.id == "quit" {
+        if action.separator_before {
             menu.append(&PredefinedMenuItem::separator(app)?)?;
         }
 
-        let item = MenuItem::with_id(app, action.id, action.label, true, None::<&str>)?;
+        let item = MenuItem::with_id(
+            app,
+            action.id,
+            tray_action_label(action.id, locale),
+            true,
+            None::<&str>,
+        )?;
         menu.append(&item)?;
     }
 
@@ -166,8 +332,8 @@ fn handle_tray_action(app: &AppHandle, action_id: &str) {
     }
 
     if let Some(action) = TRAY_ACTIONS.iter().find(|action| action.id == action_id) {
-        if !action.url_path.is_empty() {
-            navigate_dashboard_route(app, action.url_path);
+        if let Some(url_path) = tray_action_url_path(*action, current_locale()) {
+            navigate_dashboard_route(app, &url_path);
             return;
         }
     }
@@ -244,7 +410,11 @@ fn open_hud_window(app: &AppHandle) {
         return;
     }
 
-    let url = format!("{}/hud", dashboard_base_url());
+    let url = format!(
+        "{}/hud?locale={}",
+        dashboard_base_url(),
+        current_locale().code()
+    );
     let Ok(parsed_url) = url.parse() else {
         return;
     };
@@ -262,7 +432,7 @@ fn open_hud_window(app: &AppHandle) {
             .decorations(false)
             .transparent(true)
             .always_on_top(true)
-            .skip_taskbar(true)
+            .skip_taskbar(false)
             .visible(true);
 
     if let Some(state) = saved_state {
@@ -349,13 +519,16 @@ fn normalize_hud_window_state(state: HudWindowState) -> Option<HudWindowState> {
 
 #[tauri::command]
 fn tray_native_status() -> TrayNativeStatus {
+    let locale = current_locale();
+
     TrayNativeStatus {
         local_only: true,
         secrets_returned: false,
         dashboard_base_url: dashboard_base_url(),
         hud_available: true,
         notifications_available: true,
-        actions: &TRAY_ACTIONS,
+        locale: locale.code(),
+        actions: localized_tray_actions(locale),
         allowed_local_api_endpoints: &LOCAL_API_ENDPOINTS,
     }
 }

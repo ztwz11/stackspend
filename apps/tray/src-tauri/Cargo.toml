@@ -1,6 +1,6 @@
 [package]
 name = "moneysiren-tray"
-version = "0.1.0-alpha.35"
+version = "0.1.0-alpha.36"
 description = "MoneySiren local desktop tray notifier"
 authors = ["MoneySiren contributors"]
 license = "MIT"
@@ -14,3 +14,6 @@ tauri-build = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri = { version = "2", features = ["image-ico", "image-png", "macos-private-api", "tray-icon"] }
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.61", features = ["Win32_Globalization"] }

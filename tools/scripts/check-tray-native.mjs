@@ -22,12 +22,6 @@ const actionIds = [
   "open-today-live",
   "open-connections",
   "open-notification-settings",
-  "refresh-now",
-  "pause-30m",
-  "pause-1h",
-  "pause-until-tomorrow",
-  "start-at-login-toggle",
-  "run-doctor",
   "quit",
 ];
 const allowedEndpoints = [
@@ -85,12 +79,15 @@ assert(mainRs.includes("TrayIconBuilder"), "Rust entrypoint must build a tray ic
 assert(mainRs.includes("show_menu_on_left_click(true)"), "Tray menu should open from the tray icon.");
 assert(mainRs.includes("get_webview_window(\"main\")"), "Tray menu actions must target the main Tauri GUI window.");
 assert(mainRs.includes("WebviewWindowBuilder"), "Rust entrypoint must build a HUD webview window.");
-assert(mainRs.includes('TrayAction::new("show-hud", "Show HUD", "/hud")'), "Rust HUD action must open the local HUD surface.");
+assert(mainRs.includes('TrayAction::new("show-hud", TrayRoute::Hud'), "Rust HUD action must open the local HUD surface.");
 assert(mainRs.includes("MONEYSIREN_DESKTOP_MODE"), "Rust entrypoint must support HUD-only desktop mode.");
+assert(mainRs.includes("MONEYSIREN_LOCALE"), "Rust entrypoint must support localized tray menus.");
 assert(mainRs.includes("DesktopMode::Hud"), "Rust entrypoint must branch into HUD-only desktop mode.");
-assert(mainRs.includes(".skip_taskbar(true)"), "HUD window must stay out of the taskbar.");
+assert(mainRs.includes(".skip_taskbar(false)"), "HUD window must appear in the taskbar.");
 assert(mainRs.includes("get_webview_window(\"moneysiren-hud\")"), "HUD window controls must target the HUD window label.");
 assert(mainRs.includes("secrets_returned: false"), "Native status must declare secretsReturned=false.");
+assert(mainRs.includes("tray_action_label"), "Rust tray menu labels must be localized.");
+assert(mainRs.includes("tray_action_url_path"), "Rust tray menu routes must be generated from the selected locale.");
 for (const actionId of actionIds) {
   assert(mainRs.includes(actionId), `Rust tray menu is missing action: ${actionId}`);
 }
@@ -105,6 +102,7 @@ const runWebWithTray = readFileSync(resolve(repoRoot, "tools/scripts/run-web-wit
 assert(runWebWithTray.includes("moneysiren-tray.exe"), "Built tray launcher must support the Windows executable.");
 assert(runWebWithTray.includes("MoneySiren Tray.app/Contents/MacOS/MoneySiren Tray"), "Built tray launcher must support the macOS .app executable.");
 assert(runWebWithTray.includes("MONEYSIREN_DESKTOP_MODE"), "Runtime launcher must pass the desktop mode to Tauri.");
+assert(runWebWithTray.includes("MONEYSIREN_LOCALE"), "Runtime launcher must pass the locale to Tauri.");
 assert(runWebWithTray.includes("--desktop-mode <tray|hud>"), "Runtime launcher usage must document HUD-only mode.");
 
 console.log("Tray native scaffold check passed.");

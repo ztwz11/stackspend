@@ -29,6 +29,7 @@ for (const signal of ["SIGINT", "SIGTERM"]) {
 const dashboardUrl = options.dashboardUrl ??
   process.env.MONEYSIREN_WEB_URL ??
   (options.desktopMode === "hud" ? "http://127.0.0.1:3000/hud?locale=ko" : "http://127.0.0.1:3000/ko/dashboard/overview");
+const dashboardLocale = localeFromUrl(dashboardUrl) ?? localeFromEnv(process.env);
 
 if (!options.skipWeb) {
   children.push(startProcess({
@@ -77,6 +78,7 @@ function startTrayProcess(trayMode, desktopMode) {
   const trayEnv = {
     ...process.env,
     MONEYSIREN_DESKTOP_MODE: desktopMode,
+    MONEYSIREN_LOCALE: dashboardLocale,
   };
 
   if (trayMode === "dev") {
@@ -131,6 +133,63 @@ function builtTrayExecutableCandidates(platform) {
   return [
     resolve(releaseDir, "moneysiren-tray"),
   ];
+}
+
+function localeFromUrl(value) {
+  try {
+    const parsedUrl = new URL(value);
+    const queryLocale = parseLocaleHint(parsedUrl.searchParams.get("locale"));
+
+    if (queryLocale !== null) {
+      return queryLocale;
+    }
+
+    const firstSegment = parsedUrl.pathname.split("/").filter(Boolean)[0];
+
+    return parseLocaleHint(firstSegment);
+  } catch {
+    return null;
+  }
+}
+
+function localeFromEnv(env) {
+  for (const key of ["MONEYSIREN_LOCALE", "LANGUAGE", "LC_ALL", "LC_MESSAGES", "LANG", "MONEYSIREN_LANGUAGE"]) {
+    const locale = parseLocaleHint(env[key]);
+
+    if (locale !== null) {
+      return locale;
+    }
+  }
+
+  const systemLocale = parseLocaleHint(Intl.DateTimeFormat().resolvedOptions().locale);
+
+  if (systemLocale !== null) {
+    return systemLocale;
+  }
+
+  return "en";
+}
+
+function parseLocaleHint(value) {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    return null;
+  }
+
+  for (const part of value.split(",")) {
+    const primary = part
+      .trim()
+      .split(";")[0]
+      ?.trim()
+      .toLowerCase()
+      .replaceAll("_", "-")
+      .split("-")[0];
+
+    if (primary === "ko" || primary === "en" || primary === "ja") {
+      return primary;
+    }
+  }
+
+  return null;
 }
 
 function parseArgs(args) {

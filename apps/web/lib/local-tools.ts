@@ -1015,7 +1015,7 @@ function readCodexAppServerRateLimitStatusUncached(context: {
         clientInfo: {
           name: "moneysiren",
           title: "MoneySiren",
-          version: "0.1.0-alpha.35",
+          version: "0.1.0-alpha.36",
         },
       },
     };

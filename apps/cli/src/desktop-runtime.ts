@@ -120,6 +120,15 @@ interface StartedBackgroundProcess {
 }
 
 const DESKTOP_STATE_ENV_KEY = "MONEYSIREN_DESKTOP_RUNTIME_STATE_PATH";
+const LOCALE_ENV_KEY = "MONEYSIREN_LOCALE";
+const LOCALE_ENV_KEYS = [
+  LOCALE_ENV_KEY,
+  "LANGUAGE",
+  "LC_ALL",
+  "LC_MESSAGES",
+  "LANG",
+  "MONEYSIREN_LANGUAGE",
+] as const;
 const STOP_TIMEOUT_MS = 3_000;
 
 export function desktopBackgroundSpawnOptions(platform: NodeJS.Platform = process.platform): {
@@ -339,6 +348,7 @@ export function createFallbackDesktopRuntimeAdapter(context: CliExecutionContext
           ...process.env,
           ...context.env,
           MONEYSIREN_DESKTOP_MODE: "hud",
+          MONEYSIREN_LOCALE: desktopLocale(context.env),
           MONEYSIREN_WEB_URL: `http://127.0.0.1:${options.port ?? configuredPort(context.env)}`,
         },
       });
@@ -1233,6 +1243,53 @@ function configuredPort(env: Record<string, string | undefined>): number {
   const parsed = Number.parseInt(env.PORT ?? "", 10);
 
   return Number.isSafeInteger(parsed) && parsed > 0 && parsed <= 65_535 ? parsed : DEFAULT_WEB_PORT;
+}
+
+function desktopLocale(env: Record<string, string | undefined>): "en" | "ko" | "ja" {
+  for (const key of LOCALE_ENV_KEYS) {
+    const locale = parseLocaleHint(env[key]);
+
+    if (locale !== null) {
+      return locale;
+    }
+  }
+
+  const systemLocale = parseLocaleHint(Intl.DateTimeFormat().resolvedOptions().locale);
+
+  if (systemLocale !== null) {
+    return systemLocale;
+  }
+
+  return "en";
+}
+
+function parseLocaleHint(value: string | undefined): "en" | "ko" | "ja" | null {
+  const trimmed = trimToNull(value);
+
+  if (trimmed === null) {
+    return null;
+  }
+
+  for (const part of trimmed.split(",")) {
+    const normalized = part
+      .trim()
+      .split(";")[0]
+      ?.trim()
+      .toLowerCase()
+      .replaceAll("_", "-");
+
+    if (normalized === undefined || normalized.length === 0) {
+      continue;
+    }
+
+    const primary = normalized.split("-")[0];
+
+    if (primary === "en" || primary === "ko" || primary === "ja") {
+      return primary;
+    }
+  }
+
+  return null;
 }
 
 function parsePortFromUrl(value: string): number | null {
