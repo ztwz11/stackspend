@@ -12,6 +12,7 @@ type SaveState = "idle" | "saving" | "saved" | "error";
 type HudWindowAction = "close" | "minimize";
 
 interface HudWindowControlsProps {
+  compactMode?: boolean;
   initialPreferences: NotificationPreferences;
   initialSetupOpen?: boolean;
   labels: {
@@ -34,6 +35,7 @@ interface HudWindowControlsProps {
     toolLoadingPreparingView: string;
   };
   locale: Locale;
+  onMinimizeRequest?: () => Promise<void> | void;
   onRefresh?: () => void;
   refreshBusy?: boolean;
 }
@@ -46,10 +48,12 @@ interface TauriWindow {
 }
 
 export function HudWindowControls({
+  compactMode = false,
   initialPreferences,
   initialSetupOpen = false,
   labels,
   locale,
+  onMinimizeRequest,
   onRefresh,
   refreshBusy = false,
 }: HudWindowControlsProps) {
@@ -66,6 +70,12 @@ export function HudWindowControls({
   const [draftShowUsagePercent, setDraftShowUsagePercent] = useState(initialPreferences.hud.showUsagePercent);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const controlsLayerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (compactMode) {
+      setControlsOpen(false);
+    }
+  }, [compactMode]);
 
   useEffect(() => {
     let mounted = true;
@@ -204,6 +214,11 @@ export function HudWindowControls({
             aria-label={labels.minimize}
             className="hud-control-button"
             onClick={() => {
+              if (onMinimizeRequest !== undefined) {
+                void onMinimizeRequest();
+                return;
+              }
+
               void handleWindowAction("minimize");
             }}
             title={labels.minimize}

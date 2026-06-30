@@ -63,7 +63,12 @@ for (const permission of [
   "core:window:allow-hide",
   "core:window:allow-is-always-on-top",
   "core:window:allow-minimize",
+  "core:window:allow-outer-position",
+  "core:window:allow-outer-size",
   "core:window:allow-set-always-on-top",
+  "core:window:allow-set-focus",
+  "core:window:allow-set-position",
+  "core:window:allow-set-size",
   "core:window:allow-start-dragging",
 ]) {
   assert(capability.permissions?.includes(permission), `Tauri capability is missing permission: ${permission}.`);

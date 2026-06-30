@@ -2730,6 +2730,11 @@ body:has(.hud-page)::-webkit-scrollbar {
   padding-right: 0;
 }
 
+.hud-empty-button {
+  color: inherit;
+  cursor: pointer;
+}
+
 .hud-item-copy {
   display: grid;
   gap: 1px;
@@ -2943,6 +2948,52 @@ body:has(.hud-page)::-webkit-scrollbar {
 
 .hud-refresh-indicator svg {
   animation: hud-refresh-spin 850ms linear infinite;
+}
+
+.hud-page-mini {
+  padding: 0;
+  width: 100vw;
+}
+
+.hud-page-mini .hud-content {
+  align-items: center;
+  align-content: center;
+  border-radius: 999px;
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+  padding: 0 12px;
+}
+
+.hud-page-mini .hud-window-controls,
+.hud-page-mini .hud-drag-strip,
+.hud-page-mini .hud-inline-error,
+.hud-page-mini .hud-settings-dismiss-layer,
+.hud-page-mini .hud-settings-popover,
+.hud-page-mini .hud-refresh-indicator {
+  display: none;
+}
+
+.hud-page-mini .hud-item-list,
+.hud-page-mini .hud-item-shell {
+  min-width: 0;
+  width: 100%;
+}
+
+.hud-page-mini .hud-empty,
+.hud-page-mini .hud-item-summary {
+  border-top: 0;
+  min-height: 100vh;
+  padding: 0;
+}
+
+.hud-page-mini .hud-item-summary {
+  font-weight: 700;
+}
+
+.hud-page-mini .hud-item-open-link,
+.hud-page-mini .hud-item-popover {
+  display: none;
 }
 
 @keyframes hud-refresh-spin {

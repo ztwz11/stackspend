@@ -13,6 +13,9 @@ import { HudWindowControls } from "./HudWindowControls";
 const HUD_POLL_INTERVAL_MS = 5 * 60_000;
 const HUD_TIME_ZONE = "Asia/Seoul";
 const HUD_DETAIL_SEPARATOR = " · ";
+const HUD_MINI_WIDTH = 278;
+const HUD_MINI_HEIGHT = 38;
+const HUD_MINI_MARGIN = 12;
 
 export interface HudDashboardLabels {
   title: string;
@@ -55,6 +58,19 @@ type HudDragWindow = {
   startDragging: () => Promise<void>;
 };
 
+type HudMiniWindow = HudDragWindow & {
+  outerPosition: () => Promise<unknown>;
+  outerSize: () => Promise<unknown>;
+  setFocus: () => Promise<void>;
+  setPosition: (position: unknown) => Promise<void>;
+  setSize: (size: unknown) => Promise<void>;
+};
+
+interface HudWindowRestoreState {
+  position: unknown;
+  size: unknown;
+}
+
 interface HudDashboardProps {
   initialModel?: HudViewModel;
   initialPreferences: NotificationPreferences;
@@ -75,8 +91,10 @@ export function HudDashboard({
   const [model, setModel] = useState(() => initialModel ?? createEmptyHudViewModel());
   const [polling, setPolling] = useState(initialModel === undefined);
   const [manualRefreshBusy, setManualRefreshBusy] = useState(false);
+  const [miniMode, setMiniMode] = useState(false);
   const [transportError, setTransportError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const restoreStateRef = useRef<HudWindowRestoreState | null>(null);
   const wasRecentDrag = useHudWindowDrag();
 
   const loadHud = useCallback(async () => {
@@ -158,13 +176,47 @@ export function HudDashboard({
     };
   }, [loadHud]);
 
+  useEffect(() => {
+    const hudPage = document.querySelector<HTMLElement>(".hud-page");
+
+    hudPage?.classList.toggle("hud-page-mini", miniMode);
+
+    return () => {
+      hudPage?.classList.remove("hud-page-mini");
+    };
+  }, [miniMode]);
+
+  const enterMiniMode = useCallback(async () => {
+    const entered = await enterMiniHudWindow(restoreStateRef);
+
+    if (entered) {
+      setMiniMode(true);
+    }
+  }, []);
+
+  const exitMiniMode = useCallback(async () => {
+    setMiniMode(false);
+    await restoreMiniHudWindow(restoreStateRef);
+  }, []);
+
+  const toggleMiniMode = useCallback(async () => {
+    if (miniMode) {
+      await exitMiniMode();
+      return;
+    }
+
+    await enterMiniMode();
+  }, [enterMiniMode, exitMiniMode, miniMode]);
+
   return (
     <>
       <HudWindowControls
+        compactMode={miniMode}
         initialSetupOpen={initialSetupOpen}
         initialPreferences={initialPreferences}
         labels={controlLabels}
         locale={locale}
+        onMinimizeRequest={toggleMiniMode}
         onRefresh={() => {
           void handleManualRefresh();
         }}
@@ -180,16 +232,32 @@ export function HudDashboard({
         )}
         <section className="hud-item-list" aria-label={labels.items}>
           {model.items.length === 0 ? (
-            <div className="hud-empty">
-              <strong>{polling ? controlLabels.toolLoadingPreparingView : labels.empty}</strong>
-            </div>
-          ) : initialPreferences.hud.displayMode === "summary" ? (
+            miniMode ? (
+              <button
+                className="hud-empty hud-empty-button"
+                onClick={() => {
+                  void exitMiniMode();
+                }}
+                type="button"
+              >
+                <strong>{polling ? controlLabels.toolLoadingPreparingView : labels.empty}</strong>
+              </button>
+            ) : (
+              <div className="hud-empty">
+                <strong>{polling ? controlLabels.toolLoadingPreparingView : labels.empty}</strong>
+              </div>
+            )
+          ) : miniMode || initialPreferences.hud.displayMode === "summary" ? (
             <HudSummaryCard
               hudPreferences={initialPreferences.hud}
               items={model.items}
               labels={labels}
               locale={locale}
+              miniMode={miniMode}
               modelGeneratedAt={model.generatedAt}
+              onMiniRestore={() => {
+                void exitMiniMode();
+              }}
               wasRecentDrag={wasRecentDrag}
             />
           ) : model.items.map((item) => (
@@ -232,14 +300,18 @@ function HudSummaryCard({
   items,
   labels,
   locale,
+  miniMode = false,
   modelGeneratedAt,
+  onMiniRestore,
   wasRecentDrag,
 }: {
   hudPreferences: NotificationPreferences["hud"];
   items: readonly HudItemView[];
   labels: HudDashboardLabels;
   locale: Locale;
+  miniMode?: boolean;
   modelGeneratedAt: string;
+  onMiniRestore?: () => void;
   wasRecentDrag: () => boolean;
 }) {
   const [popoverOpen, setPopoverOpen] = useState(false);
@@ -249,19 +321,26 @@ function HudSummaryCard({
   return (
     <div className={popoverOpen ? "hud-item-shell hud-item-shell-open" : "hud-item-shell"}>
       <button
-        aria-expanded={popoverOpen}
+        aria-expanded={miniMode ? false : popoverOpen}
         className="hud-item hud-item-summary"
         onClick={() => {
-          if (!wasRecentDrag()) {
-            setPopoverOpen((current) => !current);
+          if (wasRecentDrag()) {
+            return;
           }
+
+          if (miniMode) {
+            onMiniRestore?.();
+            return;
+          }
+
+          setPopoverOpen((current) => !current);
         }}
         type="button"
       >
         <span>{summary}</span>
       </button>
-      <HudItemOpenLink href={`/${locale}/dashboard/overview`} label={labels.openTarget} />
-      {popoverOpen ? (
+      {miniMode ? null : <HudItemOpenLink href={`/${locale}/dashboard/overview`} label={labels.openTarget} />}
+      {!miniMode && popoverOpen ? (
         <div className="hud-item-popover" data-hud-no-drag role="status">
           {items.map((item) => (
             <span className="hud-sync-detail" key={item.id}>
@@ -471,6 +550,83 @@ function HudSyncDetail({
   }
 
   return <span className="hud-sync-detail">{labels.lastSuccessAt}: {formatDateTime(item.sync.lastSuccessAt, locale)}</span>;
+}
+
+async function enterMiniHudWindow(restoreStateRef: { current: HudWindowRestoreState | null }): Promise<boolean> {
+  const hudWindow = await getCurrentHudMiniWindow();
+
+  if (hudWindow === null || typeof window === "undefined") {
+    return false;
+  }
+
+  try {
+    if (restoreStateRef.current === null) {
+      restoreStateRef.current = {
+        position: await hudWindow.outerPosition(),
+        size: await hudWindow.outerSize(),
+      };
+    }
+
+    const { LogicalPosition, LogicalSize } = await import("@tauri-apps/api/dpi");
+    const target = bottomRightMiniHudPosition(HUD_MINI_WIDTH, HUD_MINI_HEIGHT);
+
+    await hudWindow.setSize(new LogicalSize(HUD_MINI_WIDTH, HUD_MINI_HEIGHT));
+    await hudWindow.setPosition(new LogicalPosition(target.x, target.y));
+    await hudWindow.setFocus();
+
+    return true;
+  } catch (error) {
+    console.warn("MoneySiren HUD mini mode failed.", error);
+    return false;
+  }
+}
+
+async function restoreMiniHudWindow(restoreStateRef: { current: HudWindowRestoreState | null }): Promise<void> {
+  const hudWindow = await getCurrentHudMiniWindow();
+  const restoreState = restoreStateRef.current;
+  restoreStateRef.current = null;
+
+  if (hudWindow === null || restoreState === null) {
+    return;
+  }
+
+  try {
+    await hudWindow.setSize(restoreState.size);
+    await hudWindow.setPosition(restoreState.position);
+    await hudWindow.setFocus();
+  } catch (error) {
+    console.warn("MoneySiren HUD restore failed.", error);
+  }
+}
+
+function bottomRightMiniHudPosition(width: number, height: number): { x: number; y: number } {
+  const screenInfo = window.screen as Screen & {
+    availLeft?: number;
+    availTop?: number;
+  };
+  const left = screenInfo.availLeft ?? 0;
+  const top = screenInfo.availTop ?? 0;
+  const availableWidth = Math.max(width, screenInfo.availWidth);
+  const availableHeight = Math.max(height, screenInfo.availHeight);
+
+  return {
+    x: Math.max(left, left + availableWidth - width - HUD_MINI_MARGIN),
+    y: Math.max(top, top + availableHeight - height - HUD_MINI_MARGIN),
+  };
+}
+
+async function getCurrentHudMiniWindow(): Promise<HudMiniWindow | null> {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    const { getCurrentWindow } = await import("@tauri-apps/api/window");
+
+    return getCurrentWindow() as HudMiniWindow;
+  } catch {
+    return null;
+  }
 }
 
 function isHudViewModel(value: unknown): value is HudViewModel {
