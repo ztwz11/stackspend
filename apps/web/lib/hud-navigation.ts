@@ -14,8 +14,22 @@ export async function openHudDashboardRoute(href: string, options: OpenHudDashbo
 
   try {
     const { invoke } = await import("@tauri-apps/api/core");
-    await invoke("open_dashboard_route_external", { urlPath: routePath });
+    await invoke("open_dashboard_url_external", { url: targetUrl.toString() });
     preopenedFallback?.close();
+    return true;
+  } catch {
+    // Older desktop shells do not expose the URL-aware command.
+  }
+
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    await invoke("open_dashboard_route_external", { urlPath: routePath });
+
+    if (preopenedFallback !== null) {
+      preopenedFallback.location.href = targetUrl.toString();
+      preopenedFallback.focus();
+    }
+
     return true;
   } catch {
     // Browser-only HUD previews and older desktop shells do not expose this command.

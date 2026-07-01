@@ -92,6 +92,8 @@ assert(mainRs.includes(".skip_taskbar(false)"), "HUD window must appear in the t
 assert(mainRs.includes(".shadow(false)"), "HUD window shadow must be disabled for borderless transparency.");
 assert(!mainRs.includes(".min_inner_size("), "HUD window must not enforce a native minimum size.");
 assert(mainRs.includes("get_webview_window(\"moneysiren-hud\")"), "HUD window controls must target the HUD window label.");
+assert(mainRs.includes("open_dashboard_url_external"), "HUD links must support opening the current loopback URL externally.");
+assert(mainRs.includes("sanitize_loopback_dashboard_url"), "HUD external URL opening must validate loopback URLs.");
 assert(mainRs.includes("explorer.exe"), "Windows external dashboard routes should use explorer.exe before shell fallback.");
 assert(mainRs.includes("secrets_returned: false"), "Native status must declare secretsReturned=false.");
 assert(mainRs.includes("tray_action_label"), "Rust tray menu labels must be localized.");

@@ -140,6 +140,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             open_dashboard_route,
             open_dashboard_route_external,
+            open_dashboard_url_external,
             tray_native_status
         ])
         .run(tauri::generate_context!())
@@ -372,6 +373,15 @@ fn open_dashboard_route_external(url_path: String) -> Result<(), String> {
     open_external_url(&format!("{}{}", dashboard_base_url(), route_path))
 }
 
+#[tauri::command]
+fn open_dashboard_url_external(url: String) -> Result<(), String> {
+    let Some(target_url) = sanitize_loopback_dashboard_url(&url) else {
+        return Err("Invalid dashboard URL.".to_string());
+    };
+
+    open_external_url(target_url)
+}
+
 fn sanitize_dashboard_route_path(url_path: &str) -> Option<&str> {
     if !url_path.starts_with('/') || url_path.starts_with("//") {
         return None;
@@ -382,6 +392,37 @@ fn sanitize_dashboard_route_path(url_path: &str) -> Option<&str> {
     }
 
     Some(url_path)
+}
+
+fn sanitize_loopback_dashboard_url(url: &str) -> Option<&str> {
+    let trimmed = url.trim();
+
+    if trimmed != url || trimmed.chars().any(|character| character.is_control()) {
+        return None;
+    }
+
+    for prefix in ["http://127.0.0.1:", "http://localhost:"] {
+        let Some(rest) = trimmed.strip_prefix(prefix) else {
+            continue;
+        };
+        let (port_text, path) = rest.split_once('/').unwrap_or((rest, ""));
+
+        if port_text.is_empty() || !port_text.chars().all(|character| character.is_ascii_digit()) {
+            return None;
+        }
+
+        if port_text.parse::<u16>().is_err() {
+            return None;
+        }
+
+        if !path.is_empty() && path.starts_with('/') {
+            return None;
+        }
+
+        return Some(trimmed);
+    }
+
+    None
 }
 
 fn open_external_url(url: &str) -> Result<(), String> {
