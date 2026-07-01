@@ -79,6 +79,72 @@ describe("notification polling model", () => {
     }).reason).toBe("no_change");
   });
 
+  it("uses threshold cooldown minutes for repeated threshold digests", () => {
+    const thresholdDigest: LocalNotificationDigest = {
+      ...DIGEST,
+      items: [
+        {
+          key: "openai_today_cost",
+          label: "OpenAI today",
+          value: "USD 3.20",
+          severity: "medium",
+          clickPath: "/ko/services/openai",
+          thresholdTriggered: true,
+          thresholdCooldownMinutes: 45,
+        },
+        {
+          key: "risk_high_count",
+          label: "High risks",
+          value: "1",
+          severity: "info",
+          clickPath: "/ko/dashboard/risks",
+        },
+      ],
+    };
+    const recentDelivery: NotificationDeliveryRecord = {
+      fingerprint: computeDigestFingerprint(thresholdDigest),
+      deliveredAt: "2026-06-10T10:00:00.000Z",
+      severity: "warning",
+      title: "MoneySiren",
+      bodyPreview: "OpenAI today USD 3.20",
+    };
+    const changedValueDigest: LocalNotificationDigest = {
+      ...thresholdDigest,
+      body: "OpenAI today USD 4.20 | High risks 1",
+      items: [
+        {
+          key: "openai_today_cost",
+          label: "OpenAI today",
+          value: "USD 4.20",
+          severity: "medium",
+          clickPath: "/ko/services/openai",
+          thresholdTriggered: true,
+          thresholdCooldownMinutes: 45,
+        },
+        {
+          key: "risk_high_count",
+          label: "High risks",
+          value: "2",
+          severity: "info",
+          clickPath: "/ko/dashboard/risks",
+        },
+      ],
+    };
+
+    expect(evaluateNotificationDigest(thresholdDigest, {
+      now: new Date("2026-06-10T10:30:00.000Z"),
+      recentDeliveries: [recentDelivery],
+    }).reason).toBe("no_change");
+    expect(evaluateNotificationDigest(changedValueDigest, {
+      now: new Date("2026-06-10T10:30:00.000Z"),
+      recentDeliveries: [recentDelivery],
+    }).reason).toBe("no_change");
+    expect(evaluateNotificationDigest(thresholdDigest, {
+      now: new Date("2026-06-10T10:46:00.000Z"),
+      recentDeliveries: [recentDelivery],
+    }).reason).toBe("deliver");
+  });
+
   it("supports quiet-hour windows crossing midnight", () => {
     expect(isWithinQuietHours(new Date(2026, 5, 10, 23, 30), {
       enabled: true,

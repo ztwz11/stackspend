@@ -5,8 +5,12 @@ import {
   readNotificationPreferencesFile,
   resolveNotificationPreferencesPath,
   writeNotificationPreferencesFile,
+  NOTIFICATION_THRESHOLD_MODES,
   type NotificationPreferences,
+  type NotificationAggregateThresholdRule,
+  type NotificationThresholdMode,
   type NotificationThresholdRule,
+  type NotificationThresholdSettings,
   type NotificationWidgetKey,
   type ThresholdOperator,
 } from "../../../../packages/view-model/src/index.js";
@@ -23,6 +27,8 @@ const NOTIFY_USAGE = [
   "  moneysiren notify prefs hud-enable <widget>",
   "  moneysiren notify prefs hud-disable <widget>",
   "  moneysiren notify prefs threshold <widget> --gte|--lte|--eq <value> --cooldown <minutes>",
+  "  moneysiren notify prefs threshold-mode <cost|usage> <aggregate|individual|all>",
+  "  moneysiren notify prefs threshold-aggregate <cost|usage> --gte|--lte|--eq <value> --cooldown <minutes>",
   "  moneysiren notify prefs quiet-hours <start> <end>",
   "  moneysiren notify test",
 ].join("\n");
@@ -35,6 +41,8 @@ const NOTIFY_PREFS_USAGE = [
   "  moneysiren notify prefs hud-enable <widget>",
   "  moneysiren notify prefs hud-disable <widget>",
   "  moneysiren notify prefs threshold <widget> --gte|--lte|--eq <value> --cooldown <minutes>",
+  "  moneysiren notify prefs threshold-mode <cost|usage> <aggregate|individual|all>",
+  "  moneysiren notify prefs threshold-aggregate <cost|usage> --gte|--lte|--eq <value> --cooldown <minutes>",
   "  moneysiren notify prefs quiet-hours <start> <end>",
 ].join("\n");
 
@@ -117,6 +125,14 @@ async function runNotifyPrefs(args: readonly string[], context: CliExecutionCont
     return setNotificationThreshold(rest, context);
   }
 
+  if (subcommand === "threshold-mode" && rest.length === 2) {
+    return setNotificationThresholdMode(rest[0], rest[1], context);
+  }
+
+  if (subcommand === "threshold-aggregate") {
+    return setNotificationAggregateThreshold(rest, context);
+  }
+
   if (subcommand === "quiet-hours" && rest.length === 2) {
     return setNotificationQuietHours(rest[0], rest[1], context);
   }
@@ -152,12 +168,16 @@ async function listNotificationPreferences(context: CliExecutionContext): Promis
     context.stdout(`- ${widgetKey}: ${hudWidgets.has(widgetKey) ? "enabled" : "disabled"}`);
   }
 
+  context.stdout("Thresholds:");
+  context.stdout(`- cost mode: ${preferences.thresholdSettings.cost.mode}`);
+  context.stdout(`- cost aggregate: ${formatAggregateThreshold(preferences.thresholdSettings.cost.aggregateRule)}`);
+  context.stdout(`- usage mode: ${preferences.thresholdSettings.usage.mode}`);
+  context.stdout(`- usage aggregate: ${formatAggregateThreshold(preferences.thresholdSettings.usage.aggregateRule)}`);
+
   if (preferences.thresholdRules.length === 0) {
-    context.stdout("Thresholds: none configured");
+    context.stdout("- widget rules: none configured");
     return 0;
   }
-
-  context.stdout("Thresholds:");
 
   for (const rule of orderThresholdRules(preferences.thresholdRules)) {
     context.stdout(`- ${rule.widgetKey}: ${rule.operator} ${formatRuleValue(rule.value)} cooldown ${rule.cooldownMinutes}m`);
@@ -313,6 +333,65 @@ async function setNotificationThreshold(args: readonly string[], context: CliExe
   return 0;
 }
 
+async function setNotificationThresholdMode(
+  categoryValue: string | undefined,
+  modeValue: string | undefined,
+  context: CliExecutionContext,
+): Promise<number> {
+  const category = parseThresholdCategory(categoryValue);
+  const mode = parseThresholdMode(modeValue);
+
+  if (category === undefined || mode === undefined) {
+    context.stderr("Usage: moneysiren notify prefs threshold-mode <cost|usage> <aggregate|individual|all>");
+    return 1;
+  }
+
+  const preferences = await readPreferences(context);
+  await writePreferences({
+    ...preferences,
+    thresholdSettings: {
+      ...preferences.thresholdSettings,
+      [category]: {
+        ...preferences.thresholdSettings[category],
+        mode,
+      },
+    },
+  }, context);
+
+  context.stdout(`Notification threshold mode set: ${category} ${mode}`);
+  context.stdout("Secrets returned: false");
+  return 0;
+}
+
+async function setNotificationAggregateThreshold(args: readonly string[], context: CliExecutionContext): Promise<number> {
+  const [categoryValue, ...flagArgs] = args;
+  const category = parseThresholdCategory(categoryValue);
+  const aggregateRule = parseAggregateThresholdRuleArgs(flagArgs);
+
+  if (category === undefined || aggregateRule === undefined) {
+    context.stderr("Usage: moneysiren notify prefs threshold-aggregate <cost|usage> --gte|--lte|--eq <value> --cooldown <minutes>");
+    return 1;
+  }
+
+  const preferences = await readPreferences(context);
+  await writePreferences({
+    ...preferences,
+    thresholdSettings: {
+      ...preferences.thresholdSettings,
+      [category]: {
+        ...preferences.thresholdSettings[category],
+        aggregateRule,
+      },
+    },
+  }, context);
+
+  context.stdout(
+    `Notification aggregate threshold set: ${category} ${aggregateRule.operator} ${formatRuleValue(aggregateRule.value)} cooldown ${aggregateRule.cooldownMinutes}m`,
+  );
+  context.stdout("Secrets returned: false");
+  return 0;
+}
+
 async function setNotificationQuietHours(
   start: string | undefined,
   end: string | undefined,
@@ -429,6 +508,21 @@ function parseThresholdRuleArgs(
     return undefined;
   }
 
+  const parsedRule = parseThresholdValueArgs(args);
+
+  return parsedRule === undefined
+    ? undefined
+    : {
+        widgetKey,
+        ...parsedRule,
+      };
+}
+
+function parseAggregateThresholdRuleArgs(args: readonly string[]): NotificationAggregateThresholdRule | undefined {
+  return parseThresholdValueArgs(args);
+}
+
+function parseThresholdValueArgs(args: readonly string[]): NotificationAggregateThresholdRule | undefined {
   let operator: ThresholdOperator | undefined;
   let value: number | undefined;
   let cooldownMinutes: number | undefined;
@@ -479,11 +573,20 @@ function parseThresholdRuleArgs(
   }
 
   return {
-    widgetKey,
     operator,
     value,
     cooldownMinutes,
   };
+}
+
+function parseThresholdCategory(value: string | undefined): keyof NotificationThresholdSettings | undefined {
+  return value === "cost" || value === "usage" ? value : undefined;
+}
+
+function parseThresholdMode(value: string | undefined): NotificationThresholdMode | undefined {
+  return value !== undefined && NOTIFICATION_THRESHOLD_MODES.includes(value as NotificationThresholdMode)
+    ? value as NotificationThresholdMode
+    : undefined;
 }
 
 function parseOperatorFlag(value: string): ThresholdOperator | undefined {
@@ -546,6 +649,10 @@ function enabledLabel(value: boolean): string {
 
 function formatRuleValue(value: number): string {
   return String(value);
+}
+
+function formatAggregateThreshold(rule: NotificationAggregateThresholdRule): string {
+  return `${rule.operator} ${formatRuleValue(rule.value)} cooldown ${rule.cooldownMinutes}m`;
 }
 
 function isValidClockTime(value: string | undefined): value is string {

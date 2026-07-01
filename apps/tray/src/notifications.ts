@@ -148,7 +148,7 @@ export function evaluateNotificationDigest(
     };
   }
 
-  if (wasRecentlyDelivered(fingerprint, now, options)) {
+  if (wasRecentlyDelivered(fingerprint, now, options, digest)) {
     return {
       ...baseDecision,
       shouldNotify: false,
@@ -176,12 +176,14 @@ export function computeDigestFingerprint(digest: LocalNotificationDigest): strin
     return digest.fingerprint.trim();
   }
 
+  const thresholdDigest = digest.items.some((item) => item.thresholdTriggered === true);
+
   return stableJoin([
     digest.title,
-    digest.body ?? "",
+    thresholdDigest ? "" : digest.body ?? "",
     digest.status ?? "",
     digest.severity ?? "",
-    ...digest.items.map(fingerprintItem),
+    ...digest.items.map((item) => fingerprintItem(item, thresholdDigest)),
   ]);
 }
 
@@ -220,9 +222,10 @@ function wasRecentlyDelivered(
   fingerprint: string,
   now: Date,
   options: NotificationEvaluationOptions,
+  digest?: LocalNotificationDigest,
 ): boolean {
   const recentDeliveries = options.recentDeliveries ?? [];
-  const ttlMs = (options.fingerprintTtlMinutes ?? DEFAULT_FINGERPRINT_TTL_MINUTES) * 60 * 1000;
+  const ttlMs = (options.fingerprintTtlMinutes ?? thresholdFingerprintTtlMinutes(digest) ?? DEFAULT_FINGERPRINT_TTL_MINUTES) * 60 * 1000;
 
   return recentDeliveries.some((delivery) => {
     if (delivery.fingerprint !== fingerprint) {
@@ -233,6 +236,19 @@ function wasRecentlyDelivered(
 
     return Number.isFinite(deliveredAt) && now.getTime() - deliveredAt <= ttlMs;
   });
+}
+
+function thresholdFingerprintTtlMinutes(digest: LocalNotificationDigest | undefined): number | null {
+  if (digest === undefined) {
+    return null;
+  }
+
+  const cooldownMinutes = digest.items
+    .filter((item) => item.thresholdTriggered === true)
+    .map((item) => item.thresholdCooldownMinutes)
+    .filter((value): value is number => typeof value === "number" && Number.isFinite(value) && value >= 0);
+
+  return cooldownMinutes.length === 0 ? null : Math.max(...cooldownMinutes);
 }
 
 function buildDeliveryRecord(
@@ -258,13 +274,15 @@ function summarizeDigestItems(items: readonly LocalNotificationDigestItem[]): st
   return items.map((item) => `${item.label}: ${item.value}`).join(" | ");
 }
 
-function fingerprintItem(item: LocalNotificationDigestItem): string {
+function fingerprintItem(item: LocalNotificationDigestItem, thresholdDigest: boolean): string {
+  const value = thresholdDigest ? "threshold-digest" : item.value;
+
   return stableJoin([
     item.key ?? "",
     item.widgetKey ?? "",
     item.kind ?? "",
     item.label,
-    item.value,
+    value,
     item.severity ?? "",
     item.clickPath ?? "",
   ]);

@@ -16,6 +16,24 @@ export const NOTIFICATION_WIDGET_KEYS = [
   "cloudflare_month_to_date",
 ] as const;
 
+export const COST_NOTIFICATION_WIDGET_KEYS = [
+  "month_forecast",
+  "today_live_cost",
+  "aws_month_forecast",
+  "openai_today_cost",
+  "cloudflare_month_to_date",
+] as const;
+
+export const USAGE_NOTIFICATION_WIDGET_KEYS = [
+  "openai_today_tokens",
+  "claude_five_hour_percent",
+  "claude_weekly_percent",
+  "codex_five_hour_percent",
+  "codex_weekly_percent",
+  "codex_reset_credit_count",
+  "codex_reset_credit_expiry",
+] as const;
+
 export const LOCAL_CLI_DASHBOARD_METRIC_KEYS = [
   "context_percent",
   "last_request_tokens",
@@ -42,6 +60,7 @@ export const DASHBOARD_WIDGET_SIZES = ["compact", "normal", "wide", "full"] as c
 export const HUD_DISPLAY_MODES = ["rows", "cells", "singleLine"] as const;
 export const HUD_LABEL_MODES = ["text", "icon"] as const;
 export const HUD_BACKGROUND_NONE = "transparent";
+export const NOTIFICATION_THRESHOLD_MODES = ["aggregate", "individual", "all"] as const;
 export const DASHBOARD_WIDGET_KEYS_BY_VIEW = {
   overview: [
     "overview_meta",
@@ -73,6 +92,7 @@ export type DashboardWidgetSize = (typeof DASHBOARD_WIDGET_SIZES)[number];
 export type DashboardWidgetKey = (typeof DASHBOARD_WIDGET_KEYS_BY_VIEW)[DashboardViewKey][number];
 export type HudDisplayMode = (typeof HUD_DISPLAY_MODES)[number];
 export type HudLabelMode = (typeof HUD_LABEL_MODES)[number];
+export type NotificationThresholdMode = (typeof NOTIFICATION_THRESHOLD_MODES)[number];
 export type ThresholdOperator = "gte" | "lte" | "eq";
 export type DigestInterval = "six-hours" | "daily" | "weekly";
 
@@ -81,6 +101,22 @@ export interface NotificationThresholdRule {
   operator: ThresholdOperator;
   value: number;
   cooldownMinutes: number;
+}
+
+export interface NotificationAggregateThresholdRule {
+  operator: ThresholdOperator;
+  value: number;
+  cooldownMinutes: number;
+}
+
+export interface NotificationThresholdCategoryPreferences {
+  mode: NotificationThresholdMode;
+  aggregateRule: NotificationAggregateThresholdRule;
+}
+
+export interface NotificationThresholdSettings {
+  cost: NotificationThresholdCategoryPreferences;
+  usage: NotificationThresholdCategoryPreferences;
 }
 
 export interface NotificationPreferences {
@@ -93,6 +129,7 @@ export interface NotificationPreferences {
   };
   selectedWidgets: readonly NotificationWidgetKey[];
   thresholdRules: readonly NotificationThresholdRule[];
+  thresholdSettings: NotificationThresholdSettings;
   desktopEnabled: boolean;
   dashboard: DashboardDisplayPreferences;
   hud: HudPreferences;
@@ -208,6 +245,25 @@ export const DEFAULT_NOTIFICATION_THRESHOLD_RULES: readonly NotificationThreshol
   },
 ];
 
+export const DEFAULT_NOTIFICATION_THRESHOLD_SETTINGS: NotificationThresholdSettings = {
+  cost: {
+    mode: "individual",
+    aggregateRule: {
+      operator: "gte",
+      value: 10,
+      cooldownMinutes: 180,
+    },
+  },
+  usage: {
+    mode: "individual",
+    aggregateRule: {
+      operator: "gte",
+      value: 90,
+      cooldownMinutes: 360,
+    },
+  },
+};
+
 export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
   enabled: true,
   digestEnabled: true,
@@ -218,6 +274,7 @@ export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
   },
   selectedWidgets: DEFAULT_SELECTED_NOTIFICATION_WIDGET_KEYS,
   thresholdRules: DEFAULT_NOTIFICATION_THRESHOLD_RULES,
+  thresholdSettings: DEFAULT_NOTIFICATION_THRESHOLD_SETTINGS,
   desktopEnabled: false,
   dashboard: {
     localCliMetricKeys: DEFAULT_LOCAL_CLI_DASHBOARD_METRIC_KEYS,
@@ -261,6 +318,7 @@ export function parseNotificationPreferences(value: unknown): NotificationPrefer
     quietHours: parseQuietHours(value.quietHours),
     selectedWidgets,
     thresholdRules: parseThresholdRules(value.thresholdRules),
+    thresholdSettings: parseThresholdSettings(value.thresholdSettings),
     desktopEnabled: typeof value.desktopEnabled === "boolean"
       ? value.desktopEnabled
       : DEFAULT_NOTIFICATION_PREFERENCES.desktopEnabled,
@@ -279,6 +337,7 @@ export function cloneNotificationPreferences(preferences: NotificationPreference
     },
     selectedWidgets: [...preferences.selectedWidgets],
     thresholdRules: preferences.thresholdRules.map((rule) => ({ ...rule })),
+    thresholdSettings: parseThresholdSettings(preferences.thresholdSettings),
     desktopEnabled: preferences.desktopEnabled,
     dashboard: parseDashboardDisplayPreferences(preferences.dashboard),
     hud: parseHudPreferences(preferences.hud),
@@ -556,6 +615,55 @@ function isLegacySelectedWidgetDefault(selectedWidgets: readonly NotificationWid
   );
 }
 
+function parseThresholdSettings(value: unknown): NotificationThresholdSettings {
+  const record = isRecord(value) ? value : {};
+
+  return {
+    cost: parseThresholdCategoryPreferences(
+      record.cost,
+      DEFAULT_NOTIFICATION_THRESHOLD_SETTINGS.cost,
+    ),
+    usage: parseThresholdCategoryPreferences(
+      record.usage,
+      DEFAULT_NOTIFICATION_THRESHOLD_SETTINGS.usage,
+    ),
+  };
+}
+
+function parseThresholdCategoryPreferences(
+  value: unknown,
+  fallback: NotificationThresholdCategoryPreferences,
+): NotificationThresholdCategoryPreferences {
+  const record = isRecord(value) ? value : {};
+
+  return {
+    mode: parseThresholdMode(record.mode, fallback.mode),
+    aggregateRule: parseAggregateThresholdRule(record.aggregateRule, fallback.aggregateRule),
+  };
+}
+
+function parseAggregateThresholdRule(
+  value: unknown,
+  fallback: NotificationAggregateThresholdRule,
+): NotificationAggregateThresholdRule {
+  const record = isRecord(value) ? value : {};
+  const operator = parseOperator(record.operator);
+  const numericValue = parseNonNegativeNumber(record.value);
+  const cooldownMinutes = parseNonNegativeInteger(record.cooldownMinutes);
+
+  return {
+    operator: operator ?? fallback.operator,
+    value: numericValue ?? fallback.value,
+    cooldownMinutes: cooldownMinutes ?? fallback.cooldownMinutes,
+  };
+}
+
+function parseThresholdMode(value: unknown, fallback: NotificationThresholdMode): NotificationThresholdMode {
+  return typeof value === "string" && NOTIFICATION_THRESHOLD_MODES.includes(value as NotificationThresholdMode)
+    ? value as NotificationThresholdMode
+    : fallback;
+}
+
 function parseThresholdRules(value: unknown): readonly NotificationThresholdRule[] {
   if (!Array.isArray(value)) {
     return DEFAULT_NOTIFICATION_THRESHOLD_RULES.map((rule) => ({ ...rule }));
@@ -568,7 +676,7 @@ function parseThresholdRules(value: unknown): readonly NotificationThresholdRule
       const widgetKey = parseWidgetKey(item.widgetKey);
       const operator = parseOperator(item.operator);
       const numericValue = parseNonNegativeNumber(item.value);
-      const cooldownMinutes = parseNonNegativeNumber(item.cooldownMinutes);
+      const cooldownMinutes = parseNonNegativeInteger(item.cooldownMinutes);
 
       if (widgetKey === null || operator === null || numericValue === null || cooldownMinutes === null) {
         return null;
@@ -602,6 +710,14 @@ function parseNonNegativeNumber(value: unknown): number | null {
   }
 
   return Math.max(0, value);
+}
+
+function parseNonNegativeInteger(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return null;
+  }
+
+  return Math.max(0, Math.round(value));
 }
 
 function parseOptionalPositiveInteger(value: unknown): number | null {

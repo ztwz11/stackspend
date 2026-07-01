@@ -155,6 +155,15 @@ export interface Messages {
     widgetOrder: string;
     thresholdsTitle: string;
     thresholdsSubtitle: string;
+    thresholdCostTitle: string;
+    thresholdUsageTitle: string;
+    thresholdOtherTitle: string;
+    thresholdMode: string;
+    thresholdModeAggregate: string;
+    thresholdModeIndividual: string;
+    thresholdModeAll: string;
+    thresholdAggregateOptions: string;
+    thresholdIndividualOptions: string;
     thresholdWidget: string;
     thresholdOperator: string;
     thresholdValue: string;
@@ -499,6 +508,15 @@ export const messages = {
       widgetOrder: "Order",
       thresholdsTitle: "Threshold rules",
       thresholdsSubtitle: "Threshold rows are stored locally and evaluated by the desktop notifier.",
+      thresholdCostTitle: "Cost alert scope",
+      thresholdUsageTitle: "Usage alert scope",
+      thresholdOtherTitle: "Other alert rules",
+      thresholdMode: "Scope",
+      thresholdModeAggregate: "Aggregate",
+      thresholdModeIndividual: "Individual",
+      thresholdModeAll: "All",
+      thresholdAggregateOptions: "Aggregate options",
+      thresholdIndividualOptions: "Individual options",
       thresholdWidget: "Widget",
       thresholdOperator: "Operator",
       thresholdValue: "Value",
@@ -873,6 +891,15 @@ export const messages = {
       widgetOrder: "순서",
       thresholdsTitle: "Threshold 규칙",
       thresholdsSubtitle: "Threshold 행은 로컬에 저장되고 데스크톱 알리미가 평가합니다.",
+      thresholdCostTitle: "요금 알림 범위",
+      thresholdUsageTitle: "사용량 알림 범위",
+      thresholdOtherTitle: "기타 알림 규칙",
+      thresholdMode: "범위",
+      thresholdModeAggregate: "합산",
+      thresholdModeIndividual: "개별",
+      thresholdModeAll: "모두",
+      thresholdAggregateOptions: "합산 세부 옵션",
+      thresholdIndividualOptions: "개별 세부 옵션",
       thresholdWidget: "위젯",
       thresholdOperator: "연산자",
       thresholdValue: "값",
@@ -1247,6 +1274,15 @@ export const messages = {
       widgetOrder: "順序",
       thresholdsTitle: "Threshold ルール",
       thresholdsSubtitle: "Threshold 行はローカルに保存され、デスクトップ通知側で評価されます。",
+      thresholdCostTitle: "料金通知範囲",
+      thresholdUsageTitle: "使用量通知範囲",
+      thresholdOtherTitle: "その他の通知ルール",
+      thresholdMode: "範囲",
+      thresholdModeAggregate: "合算",
+      thresholdModeIndividual: "個別",
+      thresholdModeAll: "すべて",
+      thresholdAggregateOptions: "合算オプション",
+      thresholdIndividualOptions: "個別オプション",
       thresholdWidget: "ウィジェット",
       thresholdOperator: "演算子",
       thresholdValue: "値",

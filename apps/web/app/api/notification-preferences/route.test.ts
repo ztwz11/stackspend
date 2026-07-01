@@ -79,6 +79,24 @@ describe("notification preference route", () => {
             cooldownMinutes: 45,
           },
         ],
+        thresholdSettings: {
+          cost: {
+            mode: "all",
+            aggregateRule: {
+              operator: "gte",
+              value: 50,
+              cooldownMinutes: 120,
+            },
+          },
+          usage: {
+            mode: "aggregate",
+            aggregateRule: {
+              operator: "gte",
+              value: 85,
+              cooldownMinutes: 240,
+            },
+          },
+        },
         desktopEnabled: true,
         dashboard: {
           localCliMetricKeys: ["last_request_tokens", "unknown", "total_tokens", "last_request_tokens"],
@@ -119,6 +137,24 @@ describe("notification preference route", () => {
       preferences: {
         digestInterval: "six-hours",
         selectedWidgets: ["today_live_cost"],
+        thresholdSettings: {
+          cost: {
+            mode: "all",
+            aggregateRule: {
+              operator: "gte",
+              value: 50,
+              cooldownMinutes: 120,
+            },
+          },
+          usage: {
+            mode: "aggregate",
+            aggregateRule: {
+              operator: "gte",
+              value: 85,
+              cooldownMinutes: 240,
+            },
+          },
+        },
         desktopEnabled: true,
         dashboard: {
           localCliMetricKeys: ["last_request_tokens", "total_tokens"],
@@ -164,6 +200,10 @@ describe("notification preference route", () => {
             value: 15,
           }),
         ],
+        thresholdSettings: {
+          cost: expect.objectContaining({ mode: "all" }),
+          usage: expect.objectContaining({ mode: "aggregate" }),
+        },
       },
     });
   });

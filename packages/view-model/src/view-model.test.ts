@@ -133,6 +133,258 @@ describe("shared view model", () => {
     expect(JSON.stringify({ digest, tray })).not.toContain("dev@example.com");
   });
 
+  it("applies notification thresholds to selected digest items", () => {
+    const overview = buildOperationsOverview({
+      ...STORE_WITH_SENSITIVE_VALUES,
+      alerts: [],
+    }, {
+      generatedAt: NOW.toISOString(),
+    });
+    const todayLive = buildTodayLiveView(STORE_WITH_SENSITIVE_VALUES, {
+      generatedAt: NOW.toISOString(),
+      now: NOW,
+      timezone: "UTC",
+      liveProviders: [
+        {
+          providerKey: "openai",
+          displayName: "OpenAI",
+          checkedAt: NOW.toISOString(),
+          freshness: "live",
+          confidence: "medium",
+          todayLiveAmountMinor: 420,
+          currency: "USD",
+          included: true,
+          metrics: [],
+        },
+        {
+          providerKey: "codex-cli",
+          displayName: "Codex CLI",
+          checkedAt: NOW.toISOString(),
+          freshness: "live",
+          confidence: "medium",
+          todayLiveAmountMinor: null,
+          currency: "USD",
+          included: false,
+          metrics: [
+            {
+              key: "weekly_limit_percent",
+              value: 70,
+              unit: "percent",
+            },
+          ],
+        },
+      ],
+    });
+    const digest = buildNotificationDigest(overview, todayLive, {
+      ...DEFAULT_NOTIFICATION_PREFERENCES,
+      selectedWidgets: [
+        "today_live_cost",
+        "codex_weekly_percent",
+        "risk_high_count",
+      ],
+      thresholdRules: [
+        {
+          widgetKey: "today_live_cost",
+          operator: "gte",
+          value: 10,
+          cooldownMinutes: 180,
+        },
+        {
+          widgetKey: "codex_weekly_percent",
+          operator: "gte",
+          value: 60,
+          cooldownMinutes: 60,
+        },
+        {
+          widgetKey: "risk_high_count",
+          operator: "gte",
+          value: 1,
+          cooldownMinutes: 60,
+        },
+      ],
+    });
+
+    expect(digest.status).toBe("attention");
+    expect(digest.items).toEqual([
+      expect.objectContaining({
+        widgetKey: "today_live_cost",
+        value: "USD 4.20",
+      }),
+      expect.objectContaining({
+        widgetKey: "codex_weekly_percent",
+        severity: "warning",
+        thresholdTriggered: true,
+        thresholdCooldownMinutes: 60,
+        usedPercent: 70,
+        value: "30%",
+      }),
+      expect.objectContaining({
+        widgetKey: "risk_high_count",
+        numericValue: 0,
+      }),
+    ]);
+    expect(digest.items[0]).not.toHaveProperty("thresholdTriggered");
+    expect(digest.items[2]).not.toHaveProperty("thresholdTriggered");
+  });
+
+  it("avoids double counting rollup and detail widgets in aggregate thresholds", () => {
+    const overview = buildOperationsOverview({
+      ...STORE_WITH_SENSITIVE_VALUES,
+      alerts: [],
+    }, {
+      generatedAt: NOW.toISOString(),
+    });
+    const todayLive = buildTodayLiveView(STORE_WITH_SENSITIVE_VALUES, {
+      generatedAt: NOW.toISOString(),
+      now: NOW,
+      timezone: "UTC",
+      liveProviders: [
+        {
+          providerKey: "openai",
+          displayName: "OpenAI",
+          checkedAt: NOW.toISOString(),
+          freshness: "live",
+          confidence: "medium",
+          todayLiveAmountMinor: 420,
+          currency: "USD",
+          included: true,
+          metrics: [
+            {
+              key: "total_tokens",
+              value: 5000,
+              unit: "tokens",
+            },
+          ],
+        },
+      ],
+    });
+    const digest = buildNotificationDigest(overview, todayLive, {
+      ...DEFAULT_NOTIFICATION_PREFERENCES,
+      selectedWidgets: [
+        "today_live_cost",
+        "openai_today_cost",
+        "openai_today_tokens",
+        "supabase_usage_health",
+      ],
+      thresholdSettings: {
+        cost: {
+          mode: "aggregate",
+          aggregateRule: {
+            operator: "gte",
+            value: 8,
+            cooldownMinutes: 180,
+          },
+        },
+        usage: {
+          mode: "aggregate",
+          aggregateRule: {
+            operator: "gte",
+            value: 6000,
+            cooldownMinutes: 180,
+          },
+        },
+      },
+      thresholdRules: [],
+    });
+
+    expect(digest.status).toBe("ok");
+    expect(digest.items).toEqual([
+      expect.objectContaining({
+        widgetKey: "today_live_cost",
+      }),
+      expect.objectContaining({
+        widgetKey: "openai_today_cost",
+      }),
+      expect.objectContaining({
+        widgetKey: "openai_today_tokens",
+      }),
+      expect.objectContaining({
+        widgetKey: "supabase_usage_health",
+      }),
+    ]);
+    expect(digest.items[0]).not.toHaveProperty("thresholdTriggered");
+    expect(digest.items[1]).not.toHaveProperty("thresholdTriggered");
+    expect(digest.items[2]).not.toHaveProperty("thresholdTriggered");
+    expect(digest.items[3]).not.toHaveProperty("thresholdTriggered");
+  });
+
+  it("does not sum unrelated percent quotas for usage aggregate thresholds", () => {
+    const overview = buildOperationsOverview({
+      ...STORE_WITH_SENSITIVE_VALUES,
+      alerts: [],
+    }, {
+      generatedAt: NOW.toISOString(),
+    });
+    const todayLive = buildTodayLiveView(STORE_WITH_SENSITIVE_VALUES, {
+      generatedAt: NOW.toISOString(),
+      now: NOW,
+      timezone: "UTC",
+      liveProviders: [
+        {
+          providerKey: "claude-cli",
+          displayName: "Claude CLI",
+          checkedAt: NOW.toISOString(),
+          freshness: "live",
+          confidence: "medium",
+          todayLiveAmountMinor: null,
+          currency: "USD",
+          included: false,
+          metrics: [
+            {
+              key: "five_hour_limit_percent",
+              value: 45,
+              unit: "percent",
+            },
+          ],
+        },
+        {
+          providerKey: "codex-cli",
+          displayName: "Codex CLI",
+          checkedAt: NOW.toISOString(),
+          freshness: "live",
+          confidence: "medium",
+          todayLiveAmountMinor: null,
+          currency: "USD",
+          included: false,
+          metrics: [
+            {
+              key: "weekly_limit_percent",
+              value: 50,
+              unit: "percent",
+            },
+          ],
+        },
+      ],
+    });
+    const digest = buildNotificationDigest(overview, todayLive, {
+      ...DEFAULT_NOTIFICATION_PREFERENCES,
+      selectedWidgets: [
+        "claude_five_hour_percent",
+        "codex_weekly_percent",
+      ],
+      thresholdSettings: {
+        ...DEFAULT_NOTIFICATION_PREFERENCES.thresholdSettings,
+        usage: {
+          mode: "aggregate",
+          aggregateRule: {
+            operator: "gte",
+            value: 90,
+            cooldownMinutes: 180,
+          },
+        },
+      },
+      thresholdRules: [],
+    });
+
+    expect(digest.status).toBe("ok");
+    expect(digest.items.map((item) => [item.widgetKey, item.usedPercent])).toEqual([
+      ["claude_five_hour_percent", 45],
+      ["codex_weekly_percent", 50],
+    ]);
+    expect(digest.items[0]).not.toHaveProperty("thresholdTriggered");
+    expect(digest.items[1]).not.toHaveProperty("thresholdTriggered");
+  });
+
   it("orders selected CLI and provider widgets for desktop HUD payloads", () => {
     const overview = buildOperationsOverview({
       ...STORE_WITH_SENSITIVE_VALUES,
@@ -342,6 +594,8 @@ describe("shared view model", () => {
         widgetKey: "codex_reset_credit_expiry",
         severity: "warning",
         value: "May expire within 3 days",
+        numericValue: 3,
+        unit: "days",
         freshness: "live",
         confidence: "low",
       }),
@@ -476,6 +730,39 @@ describe("shared view model", () => {
       showUsagePercent: DEFAULT_NOTIFICATION_PREFERENCES.hud.showUsagePercent,
       selectedWidgets: ["risk_high_count"],
     });
+  });
+
+  it("normalizes notification threshold cooldowns to integer minutes", () => {
+    const preferences = parseNotificationPreferences({
+      thresholdSettings: {
+        cost: {
+          mode: "aggregate",
+          aggregateRule: {
+            operator: "gte",
+            value: 10,
+            cooldownMinutes: 22.4,
+          },
+        },
+      },
+      thresholdRules: [
+        {
+          widgetKey: "today_live_cost",
+          operator: "gte",
+          value: 10,
+          cooldownMinutes: 12.7,
+        },
+      ],
+    });
+
+    expect(preferences.thresholdSettings.cost.aggregateRule.cooldownMinutes).toBe(22);
+    expect(preferences.thresholdRules).toEqual([
+      {
+        widgetKey: "today_live_cost",
+        operator: "gte",
+        value: 10,
+        cooldownMinutes: 13,
+      },
+    ]);
   });
 
   it("normalizes dashboard display preferences for local CLI metrics", () => {

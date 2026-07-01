@@ -1,12 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { getMessages, LOCALES } from "../lib/i18n";
 import {
+  COST_NOTIFICATION_WIDGET_KEYS,
   DEFAULT_NOTIFICATION_PREFERENCES,
   DEFAULT_NOTIFICATION_THRESHOLD_RULES,
+  DEFAULT_NOTIFICATION_THRESHOLD_SETTINGS,
   DEFAULT_LOCAL_CLI_DASHBOARD_METRIC_KEYS,
   DEFAULT_SELECTED_NOTIFICATION_WIDGET_KEYS,
   LOCAL_CLI_DASHBOARD_METRIC_KEYS,
+  NOTIFICATION_THRESHOLD_MODES,
   NOTIFICATION_WIDGET_KEYS,
+  USAGE_NOTIFICATION_WIDGET_KEYS,
 } from "./NotificationSettingsModel";
 
 describe("notification settings defaults", () => {
@@ -29,6 +33,7 @@ describe("notification settings defaults", () => {
   it("uses known widgets for selected defaults and threshold rows", () => {
     const widgetKeys = new Set(NOTIFICATION_WIDGET_KEYS);
     const metricKeys = new Set(LOCAL_CLI_DASHBOARD_METRIC_KEYS);
+    const thresholdModes = new Set(NOTIFICATION_THRESHOLD_MODES);
 
     for (const widgetKey of DEFAULT_SELECTED_NOTIFICATION_WIDGET_KEYS) {
       expect(widgetKeys.has(widgetKey)).toBe(true);
@@ -38,9 +43,21 @@ describe("notification settings defaults", () => {
       expect(metricKeys.has(metricKey)).toBe(true);
     }
 
+    for (const widgetKey of COST_NOTIFICATION_WIDGET_KEYS) {
+      expect(widgetKeys.has(widgetKey)).toBe(true);
+    }
+
+    for (const widgetKey of USAGE_NOTIFICATION_WIDGET_KEYS) {
+      expect(widgetKeys.has(widgetKey)).toBe(true);
+    }
+    expect(USAGE_NOTIFICATION_WIDGET_KEYS).not.toContain("supabase_usage_health");
+
     expect(DEFAULT_NOTIFICATION_PREFERENCES.dashboard.localCliMetricKeys).toEqual(
       DEFAULT_LOCAL_CLI_DASHBOARD_METRIC_KEYS,
     );
+    expect(DEFAULT_NOTIFICATION_PREFERENCES.thresholdSettings).toEqual(DEFAULT_NOTIFICATION_THRESHOLD_SETTINGS);
+    expect(thresholdModes.has(DEFAULT_NOTIFICATION_PREFERENCES.thresholdSettings.cost.mode)).toBe(true);
+    expect(thresholdModes.has(DEFAULT_NOTIFICATION_PREFERENCES.thresholdSettings.usage.mode)).toBe(true);
 
     for (const widgetKey of DEFAULT_NOTIFICATION_PREFERENCES.hud.selectedWidgets) {
       expect(widgetKeys.has(widgetKey)).toBe(true);

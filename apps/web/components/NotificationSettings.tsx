@@ -12,22 +12,29 @@ import {
 } from "lucide-react";
 import type { Locale, Messages } from "../lib/i18n";
 import {
+  COST_NOTIFICATION_WIDGET_KEYS,
   DEFAULT_NOTIFICATION_THRESHOLD_RULES,
+  DEFAULT_NOTIFICATION_THRESHOLD_SETTINGS,
   DEFAULT_LOCAL_CLI_DASHBOARD_METRIC_KEYS,
   DEFAULT_NOTIFICATION_PREFERENCES,
   DEFAULT_SELECTED_NOTIFICATION_WIDGET_KEYS,
   HUD_BACKGROUND_NONE,
   HUD_DISPLAY_MODES,
   HUD_LABEL_MODES,
+  NOTIFICATION_THRESHOLD_MODES,
   NOTIFICATION_WIDGET_KEYS,
+  USAGE_NOTIFICATION_WIDGET_KEYS,
   type DigestInterval,
   type DashboardBudgetPreferences,
   type DashboardWidgetLayoutPreferences,
   type HudDisplayMode,
   type HudLabelMode,
   type LocalCliDashboardMetricKey,
+  type NotificationAggregateThresholdRule,
   type NotificationPreferences,
   type NotificationThresholdDraft,
+  type NotificationThresholdMode,
+  type NotificationThresholdSettings,
   type NotificationWidgetKey,
   type ThresholdOperator,
 } from "./NotificationSettingsModel";
@@ -38,6 +45,17 @@ import {
 } from "../lib/hud-display-options";
 
 type SaveState = "idle" | "loading" | "saving" | "saved" | "error";
+type ThresholdCategory = "cost" | "usage";
+type IndexedThresholdRule = {
+  index: number | null;
+  rule: NotificationThresholdDraft;
+};
+
+const COST_NOTIFICATION_WIDGET_KEY_SET = new Set<NotificationWidgetKey>(COST_NOTIFICATION_WIDGET_KEYS);
+const USAGE_NOTIFICATION_WIDGET_KEY_SET = new Set<NotificationWidgetKey>(USAGE_NOTIFICATION_WIDGET_KEYS);
+const OTHER_NOTIFICATION_WIDGET_KEYS = NOTIFICATION_WIDGET_KEYS.filter((widgetKey) =>
+  !COST_NOTIFICATION_WIDGET_KEY_SET.has(widgetKey) && !USAGE_NOTIFICATION_WIDGET_KEY_SET.has(widgetKey)
+);
 
 export function NotificationSettingsPanel({ locale, messages }: { locale: Locale; messages: Messages }) {
   const [notificationsEnabled, setNotificationsEnabled] = useState(DEFAULT_NOTIFICATION_PREFERENCES.enabled);
@@ -74,6 +92,9 @@ export function NotificationSettingsPanel({ locale, messages }: { locale: Locale
   );
   const [thresholdRules, setThresholdRules] = useState<NotificationThresholdDraft[]>(
     DEFAULT_NOTIFICATION_THRESHOLD_RULES.map((rule) => ({ ...rule })),
+  );
+  const [thresholdSettings, setThresholdSettings] = useState<NotificationThresholdSettings>(
+    cloneThresholdSettings(DEFAULT_NOTIFICATION_THRESHOLD_SETTINGS),
   );
   const [lastPreview, setLastPreview] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("loading");
@@ -256,58 +277,44 @@ export function NotificationSettingsPanel({ locale, messages }: { locale: Locale
         </div>
         <div className="panel-body">
           <p className="metric-meta notification-panel-note">{messages.settings.thresholdsSubtitle}</p>
-          <div className="notification-threshold-list">
-            {thresholdRules.map((rule, index) => (
-              <div className="notification-threshold-row" key={`${rule.widgetKey}-${index}`}>
-                <label className="notification-field">
-                  <span className="metric-label">{messages.settings.thresholdWidget}</span>
-                  <select
-                    className="notification-select"
-                    onChange={(event) => updateThresholdRule(index, { widgetKey: event.currentTarget.value as NotificationWidgetKey })}
-                    value={rule.widgetKey}
-                  >
-                    {NOTIFICATION_WIDGET_KEYS.map((widgetKey) => (
-                      <option key={widgetKey} value={widgetKey}>
-                        {messages.notificationWidgets[widgetKey]}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="notification-field">
-                  <span className="metric-label">{messages.settings.thresholdOperator}</span>
-                  <select
-                    className="notification-select"
-                    onChange={(event) => updateThresholdRule(index, { operator: event.currentTarget.value as ThresholdOperator })}
-                    value={rule.operator}
-                  >
-                    <option value="gte">&gt;=</option>
-                    <option value="lte">&lt;=</option>
-                    <option value="eq">=</option>
-                  </select>
-                </label>
-                <label className="notification-field">
-                  <span className="metric-label">{messages.settings.thresholdValue}</span>
-                  <input
-                    className="notification-input"
-                    min="0"
-                    onChange={(event) => updateThresholdRule(index, { value: positiveNumber(event.currentTarget.value) })}
-                    type="number"
-                    value={rule.value}
-                  />
-                </label>
-                <label className="notification-field">
-                  <span className="metric-label">{messages.settings.thresholdCooldown}</span>
-                  <input
-                    className="notification-input"
-                    min="0"
-                    onChange={(event) => updateThresholdRule(index, { cooldownMinutes: positiveNumber(event.currentTarget.value) })}
-                    step="15"
-                    type="number"
-                    value={rule.cooldownMinutes}
-                  />
-                </label>
+          <div className="notification-threshold-groups">
+            <ThresholdCategoryPanel
+              aggregateRule={thresholdSettings.cost.aggregateRule}
+              messages={messages}
+              mode={thresholdSettings.cost.mode}
+              onAggregateRuleChange={(update) => updateAggregateThresholdRule("cost", update)}
+              onModeChange={(mode) => updateThresholdCategory("cost", { mode })}
+              onRuleChange={updateThresholdRule}
+              rules={thresholdRulesForCategory(thresholdRules, "cost")}
+              title={messages.settings.thresholdCostTitle}
+              widgetKeys={COST_NOTIFICATION_WIDGET_KEYS}
+            />
+            <ThresholdCategoryPanel
+              aggregateRule={thresholdSettings.usage.aggregateRule}
+              messages={messages}
+              mode={thresholdSettings.usage.mode}
+              onAggregateRuleChange={(update) => updateAggregateThresholdRule("usage", update)}
+              onModeChange={(mode) => updateThresholdCategory("usage", { mode })}
+              onRuleChange={updateThresholdRule}
+              rules={thresholdRulesForCategory(thresholdRules, "usage")}
+              title={messages.settings.thresholdUsageTitle}
+              widgetKeys={USAGE_NOTIFICATION_WIDGET_KEYS}
+            />
+            <div className="notification-threshold-category">
+              <div className="notification-threshold-category-header">
+                <div>
+                  <strong>{messages.settings.thresholdOtherTitle}</strong>
+                  <span className="metric-meta">{messages.settings.thresholdIndividualOptions}</span>
+                </div>
               </div>
-            ))}
+              <ThresholdRulesPanel
+                messages={messages}
+                onRuleChange={updateThresholdRule}
+                rules={thresholdRulesForOther(thresholdRules)}
+                title={messages.settings.thresholdIndividualOptions}
+                widgetKeys={OTHER_NOTIFICATION_WIDGET_KEYS}
+              />
+            </div>
           </div>
         </div>
       </section>
@@ -593,10 +600,53 @@ export function NotificationSettingsPanel({ locale, messages }: { locale: Locale
     </div>
   );
 
-  function updateThresholdRule(index: number, update: Partial<NotificationThresholdDraft>) {
-    setThresholdRules((current) =>
-      current.map((rule, ruleIndex) => (ruleIndex === index ? { ...rule, ...update } : rule)),
-    );
+  function updateThresholdRule(
+    index: number | null,
+    fallbackRule: NotificationThresholdDraft,
+    update: Partial<NotificationThresholdDraft>,
+  ) {
+    setThresholdRules((current) => {
+      if (index !== null) {
+        return current.map((rule, ruleIndex) => (ruleIndex === index ? { ...rule, ...update } : rule));
+      }
+
+      return [
+        ...current,
+        {
+          ...fallbackRule,
+          ...update,
+        },
+      ];
+    });
+  }
+
+  function updateThresholdCategory(
+    category: ThresholdCategory,
+    update: Partial<NotificationThresholdSettings[ThresholdCategory]>,
+  ) {
+    setThresholdSettings((current) => ({
+      ...current,
+      [category]: {
+        ...current[category],
+        ...update,
+      },
+    }));
+  }
+
+  function updateAggregateThresholdRule(
+    category: ThresholdCategory,
+    update: Partial<NotificationAggregateThresholdRule>,
+  ) {
+    setThresholdSettings((current) => ({
+      ...current,
+      [category]: {
+        ...current[category],
+        aggregateRule: {
+          ...current[category].aggregateRule,
+          ...update,
+        },
+      },
+    }));
   }
 
   function applyPreferences(preferences: NotificationPreferences) {
@@ -607,6 +657,7 @@ export function NotificationSettingsPanel({ locale, messages }: { locale: Locale
     setQuietEnd(preferences.quietHours.end);
     setSelectedWidgets([...preferences.selectedWidgets]);
     setThresholdRules(preferences.thresholdRules.map((rule) => ({ ...rule })));
+    setThresholdSettings(cloneThresholdSettings(preferences.thresholdSettings));
     setDesktopEnabled(preferences.desktopEnabled);
     setHudAlwaysOnTop(preferences.hud.alwaysOnTop);
     setHudBackgroundColor(preferences.hud.backgroundColor);
@@ -636,6 +687,7 @@ export function NotificationSettingsPanel({ locale, messages }: { locale: Locale
       },
       selectedWidgets,
       thresholdRules,
+      thresholdSettings,
       desktopEnabled,
       dashboard: {
         budget: dashboardBudget,
@@ -753,6 +805,10 @@ function positiveNumber(value: string): number {
   return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
 }
 
+function positiveInteger(value: string): number {
+  return Math.round(positiveNumber(value));
+}
+
 function buildPreviewMessage(
   messages: Messages,
   selectedWidgets: readonly NotificationWidgetKey[],
@@ -770,6 +826,339 @@ function openHudWindow(locale: Locale) {
   const opened = window.open(url, "moneysiren-hud", "popup=yes,width=360,height=520,resizable=yes,scrollbars=no");
 
   opened?.focus();
+}
+
+function ThresholdCategoryPanel({
+  aggregateRule,
+  messages,
+  mode,
+  onAggregateRuleChange,
+  onModeChange,
+  onRuleChange,
+  rules,
+  title,
+  widgetKeys,
+}: {
+  aggregateRule: NotificationAggregateThresholdRule;
+  messages: Messages;
+  mode: NotificationThresholdMode;
+  onAggregateRuleChange: (update: Partial<NotificationAggregateThresholdRule>) => void;
+  onModeChange: (mode: NotificationThresholdMode) => void;
+  onRuleChange: (
+    index: number | null,
+    fallbackRule: NotificationThresholdDraft,
+    update: Partial<NotificationThresholdDraft>,
+  ) => void;
+  rules: readonly IndexedThresholdRule[];
+  title: string;
+  widgetKeys: readonly NotificationWidgetKey[];
+}) {
+  const showAggregate = mode === "aggregate" || mode === "all";
+  const showIndividual = mode === "individual" || mode === "all";
+
+  return (
+    <div className="notification-threshold-category">
+      <div className="notification-threshold-category-header">
+        <div>
+          <strong>{title}</strong>
+          <span className="metric-meta">{messages.settings.thresholdMode}: {thresholdModeLabel(mode, messages)}</span>
+        </div>
+        <label className="notification-field notification-threshold-mode-field">
+          <span className="metric-label">{messages.settings.thresholdMode}</span>
+          <select
+            className="notification-select"
+            onChange={(event) => onModeChange(event.currentTarget.value as NotificationThresholdMode)}
+            value={mode}
+          >
+            {NOTIFICATION_THRESHOLD_MODES.map((modeOption) => (
+              <option key={modeOption} value={modeOption}>
+                {thresholdModeLabel(modeOption, messages)}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      {showAggregate && (
+        <div className="notification-threshold-subsection">
+          <span className="metric-label">{messages.settings.thresholdAggregateOptions}</span>
+          <div className="notification-threshold-row">
+            <div className="notification-field">
+              <span className="metric-label">{messages.settings.thresholdWidget}</span>
+              <strong>{messages.settings.thresholdAggregateOptions}</strong>
+            </div>
+            <label className="notification-field">
+              <span className="metric-label">{messages.settings.thresholdOperator}</span>
+              <select
+                className="notification-select"
+                onChange={(event) => onAggregateRuleChange({ operator: event.currentTarget.value as ThresholdOperator })}
+                value={aggregateRule.operator}
+              >
+                <option value="gte">&gt;=</option>
+                <option value="lte">&lt;=</option>
+                <option value="eq">=</option>
+              </select>
+            </label>
+            <label className="notification-field">
+              <span className="metric-label">{messages.settings.thresholdValue}</span>
+              <input
+                className="notification-input"
+                min="0"
+                onChange={(event) => onAggregateRuleChange({ value: positiveNumber(event.currentTarget.value) })}
+                type="number"
+                value={aggregateRule.value}
+              />
+            </label>
+            <label className="notification-field">
+              <span className="metric-label">{messages.settings.thresholdCooldown}</span>
+              <input
+                className="notification-input"
+                min="0"
+                onChange={(event) => onAggregateRuleChange({ cooldownMinutes: positiveInteger(event.currentTarget.value) })}
+                step="15"
+                type="number"
+                value={aggregateRule.cooldownMinutes}
+              />
+            </label>
+          </div>
+        </div>
+      )}
+
+      {showIndividual && (
+        <ThresholdRulesPanel
+          messages={messages}
+          onRuleChange={onRuleChange}
+          rules={rules}
+          title={messages.settings.thresholdIndividualOptions}
+          widgetKeys={widgetKeys}
+        />
+      )}
+    </div>
+  );
+}
+
+function ThresholdRulesPanel({
+  messages,
+  onRuleChange,
+  rules,
+  title,
+  widgetKeys,
+}: {
+  messages: Messages;
+  onRuleChange: (
+    index: number | null,
+    fallbackRule: NotificationThresholdDraft,
+    update: Partial<NotificationThresholdDraft>,
+  ) => void;
+  rules: readonly IndexedThresholdRule[];
+  title: string;
+  widgetKeys: readonly NotificationWidgetKey[];
+}) {
+  return (
+    <div className="notification-threshold-subsection">
+      <span className="metric-label">{title}</span>
+      <div className="notification-threshold-list">
+        {rules.map(({ index, rule }) => (
+          <div className="notification-threshold-row" key={`${rule.widgetKey}-${index ?? "draft"}`}>
+            <label className="notification-field">
+              <span className="metric-label">{messages.settings.thresholdWidget}</span>
+              <select
+                className="notification-select"
+                onChange={(event) =>
+                  onRuleChange(index, rule, { widgetKey: event.currentTarget.value as NotificationWidgetKey })}
+                value={rule.widgetKey}
+              >
+                {widgetKeys.map((widgetKey) => (
+                  <option key={widgetKey} value={widgetKey}>
+                    {messages.notificationWidgets[widgetKey]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="notification-field">
+              <span className="metric-label">{messages.settings.thresholdOperator}</span>
+              <select
+                className="notification-select"
+                onChange={(event) => onRuleChange(index, rule, { operator: event.currentTarget.value as ThresholdOperator })}
+                value={rule.operator}
+              >
+                <option value="gte">&gt;=</option>
+                <option value="lte">&lt;=</option>
+                <option value="eq">=</option>
+              </select>
+            </label>
+            <label className="notification-field">
+              <span className="metric-label">{messages.settings.thresholdValue}</span>
+              <input
+                className="notification-input"
+                min="0"
+                onChange={(event) => onRuleChange(index, rule, { value: positiveNumber(event.currentTarget.value) })}
+                type="number"
+                value={rule.value}
+              />
+            </label>
+            <label className="notification-field">
+              <span className="metric-label">{messages.settings.thresholdCooldown}</span>
+              <input
+                className="notification-input"
+                min="0"
+                onChange={(event) => onRuleChange(index, rule, { cooldownMinutes: positiveInteger(event.currentTarget.value) })}
+                step="15"
+                type="number"
+                value={rule.cooldownMinutes}
+              />
+            </label>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function thresholdModeLabel(mode: NotificationThresholdMode, messages: Messages): string {
+  if (mode === "aggregate") {
+    return messages.settings.thresholdModeAggregate;
+  }
+
+  if (mode === "all") {
+    return messages.settings.thresholdModeAll;
+  }
+
+  return messages.settings.thresholdModeIndividual;
+}
+
+function thresholdRulesForCategory(
+  rules: readonly NotificationThresholdDraft[],
+  category: ThresholdCategory,
+): IndexedThresholdRule[] {
+  const widgetKeys = category === "cost" ? COST_NOTIFICATION_WIDGET_KEYS : USAGE_NOTIFICATION_WIDGET_KEYS;
+  const existingByWidget = indexedRulesByWidget(rules, (widgetKey) =>
+    thresholdCategoryForWidget(widgetKey) === category
+  );
+
+  return widgetKeys.map((widgetKey) =>
+    existingByWidget.get(widgetKey) ?? {
+      index: null,
+      rule: defaultThresholdRuleForWidget(widgetKey),
+    }
+  );
+}
+
+function thresholdRulesForOther(rules: readonly NotificationThresholdDraft[]): IndexedThresholdRule[] {
+  const existingByWidget = indexedRulesByWidget(rules, (widgetKey) =>
+    thresholdCategoryForWidget(widgetKey) === null
+  );
+  const defaultWidgetKeys = DEFAULT_NOTIFICATION_THRESHOLD_RULES
+    .map((rule) => rule.widgetKey)
+    .filter((widgetKey) => thresholdCategoryForWidget(widgetKey) === null);
+  const widgetKeys = [...new Set([
+    ...defaultWidgetKeys,
+    ...rules.filter((rule) => thresholdCategoryForWidget(rule.widgetKey) === null).map((rule) => rule.widgetKey),
+  ])];
+
+  return widgetKeys.map((widgetKey) =>
+    existingByWidget.get(widgetKey) ?? {
+      index: null,
+      rule: defaultThresholdRuleForWidget(widgetKey),
+    }
+  );
+}
+
+function indexedRulesByWidget(
+  rules: readonly NotificationThresholdDraft[],
+  predicate: (widgetKey: NotificationWidgetKey) => boolean,
+): Map<NotificationWidgetKey, IndexedThresholdRule> {
+  const indexedRules = new Map<NotificationWidgetKey, IndexedThresholdRule>();
+
+  rules.forEach((rule, index) => {
+    if (!predicate(rule.widgetKey) || indexedRules.has(rule.widgetKey)) {
+      return;
+    }
+
+    indexedRules.set(rule.widgetKey, {
+      index,
+      rule,
+    });
+  });
+
+  return indexedRules;
+}
+
+function defaultThresholdRuleForWidget(widgetKey: NotificationWidgetKey): NotificationThresholdDraft {
+  const defaultRule = DEFAULT_NOTIFICATION_THRESHOLD_RULES.find((rule) => rule.widgetKey === widgetKey);
+
+  if (defaultRule !== undefined) {
+    return { ...defaultRule };
+  }
+
+  const category = thresholdCategoryForWidget(widgetKey);
+  const aggregateRule = category === "usage"
+    ? defaultUsageThresholdRule(widgetKey)
+    : DEFAULT_NOTIFICATION_THRESHOLD_SETTINGS.cost.aggregateRule;
+
+  return {
+    widgetKey,
+    operator: aggregateRule.operator,
+    value: aggregateRule.value,
+    cooldownMinutes: aggregateRule.cooldownMinutes,
+  };
+}
+
+function defaultUsageThresholdRule(widgetKey: NotificationWidgetKey): NotificationAggregateThresholdRule {
+  if (widgetKey === "openai_today_tokens") {
+    return {
+      operator: "gte",
+      value: 100000,
+      cooldownMinutes: DEFAULT_NOTIFICATION_THRESHOLD_SETTINGS.usage.aggregateRule.cooldownMinutes,
+    };
+  }
+
+  if (widgetKey === "codex_reset_credit_count") {
+    return {
+      operator: "lte",
+      value: 1,
+      cooldownMinutes: DEFAULT_NOTIFICATION_THRESHOLD_SETTINGS.usage.aggregateRule.cooldownMinutes,
+    };
+  }
+
+  if (widgetKey === "codex_reset_credit_expiry") {
+    return {
+      operator: "lte",
+      value: 7,
+      cooldownMinutes: DEFAULT_NOTIFICATION_THRESHOLD_SETTINGS.usage.aggregateRule.cooldownMinutes,
+    };
+  }
+
+  return DEFAULT_NOTIFICATION_THRESHOLD_SETTINGS.usage.aggregateRule;
+}
+
+function thresholdCategoryForWidget(widgetKey: NotificationWidgetKey): ThresholdCategory | null {
+  if (COST_NOTIFICATION_WIDGET_KEY_SET.has(widgetKey)) {
+    return "cost";
+  }
+
+  if (USAGE_NOTIFICATION_WIDGET_KEY_SET.has(widgetKey)) {
+    return "usage";
+  }
+
+  return null;
+}
+
+function cloneThresholdSettings(settings: NotificationThresholdSettings): NotificationThresholdSettings {
+  return {
+    cost: {
+      mode: settings.cost.mode,
+      aggregateRule: {
+        ...settings.cost.aggregateRule,
+      },
+    },
+    usage: {
+      mode: settings.usage.mode,
+      aggregateRule: {
+        ...settings.usage.aggregateRule,
+      },
+    },
+  };
 }
 
 function hudDisplayControlCopy(locale: Locale): {

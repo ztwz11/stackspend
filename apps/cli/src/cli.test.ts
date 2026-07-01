@@ -759,12 +759,30 @@ describe("MoneySiren CLI", () => {
       ["notify", "prefs", "threshold", "claude_five_hour_percent", "--gte", "80", "--cooldown", "60"],
       testContext(cwd, env),
     );
+    const thresholdMode = await runCli(
+      ["notify", "prefs", "threshold-mode", "usage", "all"],
+      testContext(cwd, env),
+    );
+    const thresholdAggregate = await runCli(
+      ["notify", "prefs", "threshold-aggregate", "usage", "--gte", "95", "--cooldown", "120"],
+      testContext(cwd, env),
+    );
     const quietHours = await runCli(["notify", "prefs", "quiet-hours", "21:30", "07:15"], testContext(cwd, env));
     const list = await runCli(["notify", "prefs", "list"], testContext(cwd, env));
     const preferences = JSON.parse(await readFile(join(cwd, "prefs", "notifications.json"), "utf8")) as {
       hud: { selectedWidgets: string[] };
       quietHours: { start: string; end: string };
       selectedWidgets: string[];
+      thresholdSettings: {
+        usage: {
+          mode: string;
+          aggregateRule: {
+            operator: string;
+            value: number;
+            cooldownMinutes: number;
+          };
+        };
+      };
       thresholdRules: Array<{
         widgetKey: string;
         operator: string;
@@ -778,6 +796,8 @@ describe("MoneySiren CLI", () => {
       ...hudEnable.stdout,
       ...hudDisable.stdout,
       ...threshold.stdout,
+      ...thresholdMode.stdout,
+      ...thresholdAggregate.stdout,
       ...quietHours.stdout,
       ...list.stdout,
       ...enable.stderr,
@@ -785,6 +805,8 @@ describe("MoneySiren CLI", () => {
       ...hudEnable.stderr,
       ...hudDisable.stderr,
       ...threshold.stderr,
+      ...thresholdMode.stderr,
+      ...thresholdAggregate.stderr,
       ...quietHours.stderr,
       ...list.stderr,
     ].join("\n");
@@ -794,6 +816,8 @@ describe("MoneySiren CLI", () => {
     expect(hudEnable.exitCode).toBe(0);
     expect(hudDisable.exitCode).toBe(0);
     expect(threshold.exitCode).toBe(0);
+    expect(thresholdMode.exitCode).toBe(0);
+    expect(thresholdAggregate.exitCode).toBe(0);
     expect(quietHours.exitCode).toBe(0);
     expect(list.exitCode).toBe(0);
     expect(preferences.selectedWidgets).toContain("claude_five_hour_percent");
@@ -810,12 +834,22 @@ describe("MoneySiren CLI", () => {
       value: 80,
       cooldownMinutes: 60,
     });
+    expect(preferences.thresholdSettings.usage).toEqual({
+      mode: "all",
+      aggregateRule: {
+        operator: "gte",
+        value: 95,
+        cooldownMinutes: 120,
+      },
+    });
     expect(list.stdout.join("\n")).toContain("Source: local preference file");
     expect(list.stdout.join("\n")).toContain("- claude_five_hour_percent: enabled");
     expect(list.stdout.join("\n")).toContain("- openai_today_tokens: disabled");
     expect(list.stdout.join("\n")).toContain("HUD widgets:");
     expect(list.stdout.join("\n")).toContain("- codex_weekly_percent: enabled");
     expect(list.stdout.join("\n")).toContain("- month_forecast: disabled");
+    expect(list.stdout.join("\n")).toContain("- usage mode: all");
+    expect(list.stdout.join("\n")).toContain("- usage aggregate: gte 95 cooldown 120m");
     expect(list.stdout.join("\n")).toContain("- claude_five_hour_percent: gte 80 cooldown 60m");
     expect(allOutput).not.toContain(TEST_SLACK_WEBHOOK_URL);
   });

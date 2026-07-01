@@ -2142,6 +2142,40 @@ select {
   gap: 8px;
 }
 
+.notification-threshold-groups {
+  display: grid;
+  gap: 10px;
+}
+
+.notification-threshold-category {
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  border-radius: 7px;
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+}
+
+.notification-threshold-category-header {
+  align-items: end;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 240px);
+}
+
+.notification-threshold-category-header strong {
+  display: block;
+}
+
+.notification-threshold-mode-field {
+  min-width: 0;
+}
+
+.notification-threshold-subsection {
+  display: grid;
+  gap: 6px;
+}
+
 .notification-threshold-row {
   background: var(--surface-raised);
   border: 1px solid var(--border-soft);
@@ -3301,6 +3335,10 @@ body:has(.hud-page)::-webkit-scrollbar {
 
   .dashboard-widget-layout-controls {
     justify-content: flex-start;
+  }
+
+  .notification-threshold-category-header {
+    grid-template-columns: 1fr;
   }
 
   .notification-threshold-row {

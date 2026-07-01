@@ -1,6 +1,10 @@
 import {
+  COST_NOTIFICATION_WIDGET_KEYS,
   DEFAULT_NOTIFICATION_PREFERENCES,
+  USAGE_NOTIFICATION_WIDGET_KEYS,
+  type NotificationAggregateThresholdRule,
   type NotificationPreferences,
+  type NotificationThresholdRule,
   type NotificationWidgetKey,
 } from "./notification-preferences.js";
 
@@ -180,6 +184,8 @@ export interface NotificationDigestItem {
   unit?: string;
   usedPercent?: number;
   remainingPercent?: number;
+  thresholdTriggered?: boolean;
+  thresholdCooldownMinutes?: number;
   resetAt?: string;
   resetAtLatest?: string;
   providerKey?: string;
@@ -236,6 +242,9 @@ const CODEX_APP_PROVIDER_KEY = "codex-app";
 const CODEX_CLI_PROVIDER_KEY = "codex-cli";
 const CLAUDE_CLI_PROVIDER_KEY = "claude-cli";
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
+type NotificationThresholdCategory = "cost" | "usage";
+const COST_NOTIFICATION_WIDGET_KEY_SET = new Set<NotificationWidgetKey>(COST_NOTIFICATION_WIDGET_KEYS);
+const USAGE_NOTIFICATION_WIDGET_KEY_SET = new Set<NotificationWidgetKey>(USAGE_NOTIFICATION_WIDGET_KEYS);
 const SENSITIVE_TEXT_PATTERN =
   /(https:\/\/hooks\.slack\.com\/services\/[A-Za-z0-9/_-]+|\b(?:sk|sbp|xox[baprs])[-_][A-Za-z0-9_-]+\b|\bacct[_-][A-Za-z0-9_-]+\b|\b(?:proj|project)[_-][A-Za-z0-9_-]+\b|\b(?:in|invoice)[_-][A-Za-z0-9_-]+\b|[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})/gi;
 
@@ -444,21 +453,23 @@ export function buildNotificationDigest(
     criticalAlerts,
     warningAlerts,
   });
+  const visibleItems = preferences.enabled && preferences.digestEnabled
+    ? filterDigestItems(items, preferences.selectedWidgets)
+    : [];
+  const thresholdItems = applyNotificationThresholds(visibleItems, preferences);
 
   return {
     generatedAt: overview.generatedAt,
     localOnly: true,
     secretsReturned: false,
     title: "MoneySiren",
-    status,
+    status: digestStatusWithThresholds(status, thresholdItems),
     suppressedReason: preferences.enabled
       ? preferences.digestEnabled
         ? null
         : "digest_disabled"
       : "notifications_disabled",
-    items: preferences.enabled && preferences.digestEnabled
-      ? filterDigestItems(items, preferences.selectedWidgets)
-      : [],
+    items: thresholdItems,
   };
 }
 
@@ -481,6 +492,294 @@ function filterDigestItems(
 
     return item === undefined ? [] : [item];
   });
+}
+
+function applyNotificationThresholds(
+  items: readonly NotificationDigestItem[],
+  preferences: NotificationPreferences,
+): NotificationDigestItem[] {
+  if (items.length === 0) {
+    return [];
+  }
+
+  const triggeredWidgetKeys = new Set<NotificationWidgetKey>();
+  const triggeredCooldownMinutes = new Map<NotificationWidgetKey, number>();
+  const itemsByWidgetKey = new Map(items.map((item) => [item.widgetKey, item]));
+
+  for (const rule of preferences.thresholdRules) {
+    if (!shouldEvaluateIndividualRule(rule, preferences)) {
+      continue;
+    }
+
+    const item = itemsByWidgetKey.get(rule.widgetKey);
+    const value = item === undefined ? null : thresholdComparableValue(item, thresholdCategoryForWidget(rule.widgetKey));
+
+    if (value !== null && thresholdMatches(value, rule)) {
+      recordTriggeredWidget(triggeredWidgetKeys, triggeredCooldownMinutes, rule.widgetKey, rule.cooldownMinutes);
+    }
+  }
+
+  for (const category of ["cost", "usage"] as const) {
+    const categoryPreferences = preferences.thresholdSettings[category];
+
+    if (categoryPreferences.mode !== "aggregate" && categoryPreferences.mode !== "all") {
+      continue;
+    }
+
+    for (const widgetKey of aggregateTriggeredWidgetKeys(items, category, categoryPreferences.aggregateRule)) {
+      recordTriggeredWidget(
+        triggeredWidgetKeys,
+        triggeredCooldownMinutes,
+        widgetKey,
+        categoryPreferences.aggregateRule.cooldownMinutes,
+      );
+    }
+  }
+
+  if (triggeredWidgetKeys.size === 0) {
+    return [...items];
+  }
+
+  return items.map((item) => {
+    if (!triggeredWidgetKeys.has(item.widgetKey)) {
+      return item;
+    }
+
+    const cooldownMinutes = triggeredCooldownMinutes.get(item.widgetKey);
+
+    return {
+      ...item,
+      severity: elevateSeverity(item.severity, "warning"),
+      thresholdTriggered: true,
+      ...(cooldownMinutes === undefined ? {} : { thresholdCooldownMinutes: cooldownMinutes }),
+    };
+  });
+}
+
+function recordTriggeredWidget(
+  triggeredWidgetKeys: Set<NotificationWidgetKey>,
+  triggeredCooldownMinutes: Map<NotificationWidgetKey, number>,
+  widgetKey: NotificationWidgetKey,
+  cooldownMinutes: number,
+): void {
+  triggeredWidgetKeys.add(widgetKey);
+  triggeredCooldownMinutes.set(
+    widgetKey,
+    Math.max(cooldownMinutes, triggeredCooldownMinutes.get(widgetKey) ?? 0),
+  );
+}
+
+function shouldEvaluateIndividualRule(
+  rule: NotificationThresholdRule,
+  preferences: NotificationPreferences,
+): boolean {
+  const category = thresholdCategoryForWidget(rule.widgetKey);
+
+  if (category === null) {
+    return true;
+  }
+
+  const mode = preferences.thresholdSettings[category].mode;
+
+  return mode === "individual" || mode === "all";
+}
+
+function aggregateTriggeredWidgetKeys(
+  items: readonly NotificationDigestItem[],
+  category: NotificationThresholdCategory,
+  rule: NotificationAggregateThresholdRule,
+): NotificationWidgetKey[] {
+  const groupedItems = new Map<string, {
+    operation: "sum" | "max";
+    values: { value: number; widgetKey: NotificationWidgetKey }[];
+  }>();
+  const comparableEntries = aggregateComparableEntries(items, category);
+
+  for (const entry of comparableEntries) {
+    const existing = groupedItems.get(entry.unitKey) ?? {
+      operation: entry.operation,
+      values: [],
+    };
+    existing.values.push({
+      value: entry.value,
+      widgetKey: entry.widgetKey,
+    });
+    groupedItems.set(entry.unitKey, existing);
+  }
+
+  return [...groupedItems.values()].flatMap((group) => {
+    if (group.operation === "max") {
+      const maxValue = Math.max(...group.values.map((entry) => entry.value));
+
+      return thresholdMatches(maxValue, rule)
+        ? group.values.filter((entry) => thresholdMatches(entry.value, rule)).map((entry) => entry.widgetKey)
+        : [];
+    }
+
+    const total = sum(group.values.map((entry) => entry.value));
+
+    return thresholdMatches(total, rule) ? group.values.map((entry) => entry.widgetKey) : [];
+  });
+}
+
+function aggregateComparableEntries(
+  items: readonly NotificationDigestItem[],
+  category: NotificationThresholdCategory,
+): {
+  costScope?: "month" | "today" | "mtd";
+  operation: "sum" | "max";
+  rollup?: boolean;
+  unitKey: string;
+  value: number;
+  widgetKey: NotificationWidgetKey;
+}[] {
+  const entries = items.flatMap((item) => {
+    if (thresholdCategoryForWidget(item.widgetKey) !== category) {
+      return [];
+    }
+
+    const comparable = thresholdComparableEntry(item, category);
+
+    if (comparable === null) {
+      return [];
+    }
+
+    return [{
+      ...comparable,
+      widgetKey: item.widgetKey,
+    }];
+  });
+
+  if (category !== "cost") {
+    return entries;
+  }
+
+  const rollupScopes = new Set(
+    entries
+      .filter((entry) => entry.costScope !== undefined && entry.rollup)
+      .map((entry) => entry.costScope),
+  );
+
+  return entries.filter((entry) =>
+    entry.costScope === undefined ||
+    entry.rollup ||
+    !rollupScopes.has(entry.costScope)
+  );
+}
+
+function thresholdComparableValue(
+  item: NotificationDigestItem,
+  category: NotificationThresholdCategory | null,
+): number | null {
+  return thresholdComparableEntry(item, category)?.value ?? null;
+}
+
+function thresholdComparableEntry(
+  item: NotificationDigestItem,
+  category: NotificationThresholdCategory | null,
+): {
+  operation: "sum" | "max";
+  unitKey: string;
+  value: number;
+  costScope?: "month" | "today" | "mtd";
+  rollup?: boolean;
+} | null {
+  if (category === "cost") {
+    if (item.numericValue === undefined || !Number.isFinite(item.numericValue)) {
+      return null;
+    }
+
+    const scope = costThresholdScope(item.widgetKey);
+    const unit = item.unit ?? "cost";
+
+    return {
+      costScope: scope,
+      operation: "sum",
+      rollup: item.widgetKey === "month_forecast" || item.widgetKey === "today_live_cost",
+      value: item.numericValue / 100,
+      unitKey: `cost:${scope}:${unit}`,
+    };
+  }
+
+  if (category === "usage" && item.usedPercent !== undefined && Number.isFinite(item.usedPercent)) {
+    return {
+      operation: "max",
+      value: item.usedPercent,
+      unitKey: "usage:percent",
+    };
+  }
+
+  if (item.numericValue === undefined || !Number.isFinite(item.numericValue)) {
+    return null;
+  }
+
+  return {
+    operation: "sum",
+    value: item.numericValue,
+    unitKey: `${category ?? "other"}:${item.unit ?? "value"}`,
+  };
+}
+
+function costThresholdScope(widgetKey: NotificationWidgetKey): "month" | "today" | "mtd" {
+  if (widgetKey === "today_live_cost" || widgetKey === "openai_today_cost") {
+    return "today";
+  }
+
+  if (widgetKey === "cloudflare_month_to_date") {
+    return "mtd";
+  }
+
+  return "month";
+}
+
+function thresholdCategoryForWidget(widgetKey: NotificationWidgetKey): NotificationThresholdCategory | null {
+  if (COST_NOTIFICATION_WIDGET_KEY_SET.has(widgetKey)) {
+    return "cost";
+  }
+
+  if (USAGE_NOTIFICATION_WIDGET_KEY_SET.has(widgetKey)) {
+    return "usage";
+  }
+
+  return null;
+}
+
+function thresholdMatches(value: number, rule: NotificationAggregateThresholdRule | NotificationThresholdRule): boolean {
+  if (rule.operator === "lte") {
+    return value <= rule.value;
+  }
+
+  if (rule.operator === "eq") {
+    return value === rule.value;
+  }
+
+  return value >= rule.value;
+}
+
+function digestStatusWithThresholds(
+  status: NotificationDigest["status"],
+  items: readonly NotificationDigestItem[],
+): NotificationDigest["status"] {
+  if (status === "critical") {
+    return "critical";
+  }
+
+  return items.some((item) => item.thresholdTriggered) ? "attention" : status;
+}
+
+function elevateSeverity(
+  current: ViewModelRiskSeverity,
+  target: ViewModelRiskSeverity,
+): ViewModelRiskSeverity {
+  return severityRank(target) > severityRank(current) ? target : current;
+}
+
+function severityRank(severity: ViewModelRiskSeverity): number {
+  if (severity === "critical") {
+    return 2;
+  }
+
+  return severity === "warning" ? 1 : 0;
 }
 
 export function buildTrayMenuModel(digest: NotificationDigest): TrayMenuModel {
@@ -624,6 +923,8 @@ function buildDigestItems(
       severity: alerts.criticalAlerts > 0 ? "critical" : alerts.warningAlerts > 0 ? "warning" : "info",
       label: "High risks",
       value: String(riskCount),
+      numericValue: riskCount,
+      unit: "count",
       clickPath: "/ko/dashboard/risks",
     },
     {
@@ -632,6 +933,8 @@ function buildDigestItems(
       severity: staleConnectionCount > 0 ? "warning" : "info",
       label: "Stale connections",
       value: String(staleConnectionCount),
+      numericValue: staleConnectionCount,
+      unit: "count",
       clickPath: "/ko/settings/connections",
     },
     {
@@ -848,6 +1151,10 @@ function codexResetCreditExpiryItem(todayLive: TodayLiveView): NotificationDiges
     severity: resetCreditExpirySeverity(daysUntil),
     label: "Codex reset credit expiry",
     value: resetCreditExpiryValue(daysUntil),
+    ...(daysUntil === null ? {} : {
+      numericValue: daysUntil,
+      unit: "days",
+    }),
     ...(earliestExpiry === null ? {} : { resetAt: earliestExpiry }),
     ...(metric?.resetAtLatest === undefined ? {} : { resetAtLatest: metric.resetAtLatest }),
     ...(metric?.accuracy === undefined ? {} : { accuracy: metric.accuracy }),

@@ -52,6 +52,8 @@ export interface LocalNotificationDigestItem {
   severity?: NotificationSeverity;
   freshness?: string;
   confidence?: string;
+  thresholdTriggered?: boolean;
+  thresholdCooldownMinutes?: number;
   clickPath?: string;
 }
 
