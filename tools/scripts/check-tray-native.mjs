@@ -26,6 +26,7 @@ const actionIds = [
 ];
 const allowedEndpoints = [
   "/api/local/health",
+  "/api/local/open-external",
   "/api/local/tray-menu",
   "/api/local/notification-digest",
 ];

@@ -37,8 +37,9 @@ const TRAY_ACTIONS: [TrayAction; 6] = [
     TrayAction::new("quit", TrayRoute::None, true),
 ];
 
-const LOCAL_API_ENDPOINTS: [&str; 3] = [
+const LOCAL_API_ENDPOINTS: [&str; 4] = [
     "/api/local/health",
+    "/api/local/open-external",
     "/api/local/tray-menu",
     "/api/local/notification-digest",
 ];

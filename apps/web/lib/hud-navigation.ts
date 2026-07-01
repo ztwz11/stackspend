@@ -12,6 +12,11 @@ export async function openHudDashboardRoute(href: string, options: OpenHudDashbo
   const targetUrl = new URL(routePath, window.location.origin);
   const preopenedFallback = options.preopenFallback === true ? openFallbackWindow() : null;
 
+  if (await openViaLocalRuntime(routePath)) {
+    preopenedFallback?.close();
+    return true;
+  }
+
   try {
     const { invoke } = await import("@tauri-apps/api/core");
     await invoke("open_dashboard_url_external", { url: targetUrl.toString() });
@@ -49,6 +54,24 @@ export async function openHudDashboardRoute(href: string, options: OpenHudDashbo
   }
 
   return false;
+}
+
+async function openViaLocalRuntime(routePath: string): Promise<boolean> {
+  try {
+    const response = await fetch("/api/local/open-external", {
+      body: JSON.stringify({ path: routePath }),
+      cache: "no-store",
+      credentials: "same-origin",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      method: "POST",
+    });
+
+    return response.ok;
+  } catch {
+    return false;
+  }
 }
 
 function openFallbackWindow(url = "about:blank"): Window | null {
