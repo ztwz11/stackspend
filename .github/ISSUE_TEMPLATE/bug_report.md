@@ -1,40 +1,47 @@
 ---
 name: Bug report
-about: Report a bug using sanitized data
-title: "[Bug]: "
+about: Report a MoneySiren bug using fake or redacted data only
+title: "bug: "
 labels: bug
 ---
 
-## Summary
+## Safety reminder
+
+Do not include API keys, OAuth tokens, webhook URLs, account IDs, organization IDs, project refs, invoice IDs, emails, billing profile data, raw provider responses, screenshots with real billing data, local prompt text, shell history, or local AI auth files.
+
+Use fake or redacted examples only.
 
 ## Environment
 
 - OS:
-- Node:
-- pnpm:
-- MoneySiren version or commit:
-- Provider:
+- Node.js version:
+- pnpm version:
+- MoneySiren version:
+- Install method:
 
-## Steps to Reproduce
+## What happened?
+
+Describe the bug.
+
+## Expected behavior
+
+Describe what you expected.
+
+## Reproduction steps
+
+Use fake fixture data if possible.
 
 ```bash
-# use fake/synthetic values only
+# paste commands here
 ```
 
-## Expected Behavior
+## Logs or screenshots
 
-## Actual Behavior
+Paste only sanitized logs or screenshots generated from fake data.
 
-## Sanitized Logs
+## Validation already run
 
-Do not paste API keys, tokens, webhook URLs, account IDs, project IDs, invoice IDs, billing profile data, or local AI CLI prompt text.
-
-```text
-paste sanitized logs here
-```
-
-## Security Check
-
-- [ ] I removed secrets and provider identifiers.
-- [ ] I removed local prompt text/tool input.
-- [ ] I used fake/synthetic values.
+- [ ] `pnpm test`
+- [ ] `pnpm typecheck`
+- [ ] `npm run secret:scan`
+- [ ] Not applicable

@@ -2,7 +2,7 @@
 
 Role: this repository is the product codebase for MoneySiren.
 
-Goal: build a local-first, open-source cloud/SaaS usage, status, and expected billing dashboard for individual developers and small teams.
+Goal: build a local-first, open-source AI/cloud/SaaS usage, status, and expected billing dashboard for open-source maintainers, individual developers, and small teams.
 
 ## Repository Boundary
 
@@ -19,6 +19,7 @@ Goal: build a local-first, open-source cloud/SaaS usage, status, and expected bi
 - v0.1 must use env-only secrets.
 - Provider connectors must be read-only.
 - Raw provider payloads must be redacted before persistence.
+- Local AI prompt text, shell command bodies, auth files, and raw JSONL logs must not be exposed in logs, fixtures, dashboard JSON, reports, screenshots, or tests.
 - No telemetry by default.
 - Telemetry, if added later, must be opt-in only.
 - Prefer small, reviewable slices.
@@ -66,8 +67,48 @@ Never commit:
 - card data
 - emails from provider payloads
 - raw billing profiles
+- raw provider responses
+- local AI prompt text
+- shell history
+- Codex or Claude auth files
 
 All examples must be fake and clearly marked.
+
+## Codex-Friendly Work Areas
+
+Good Codex tasks:
+
+- add fixture-backed provider parser tests;
+- improve README, install docs, and release notes;
+- refactor dashboard view models;
+- add redaction tests;
+- update issue templates;
+- review CI workflow safety;
+- improve fake fixture coverage;
+- improve local dashboard empty states.
+
+High-risk areas requiring careful review:
+
+- provider auth;
+- local AI CLI auth file access;
+- billing payload normalization;
+- notification payloads;
+- Slack webhook handling;
+- GitHub release signing;
+- any code touching secrets, tokens, account IDs, local auth files, raw provider payloads, or local AI logs.
+
+## Provider Connector Expectations
+
+New or changed provider connectors must document:
+
+- provider name;
+- auth mechanism;
+- minimum required scope;
+- read-only guarantee;
+- fixture source and redaction rules;
+- normalized output schema;
+- persistence boundaries;
+- dashboard/report exposure boundaries.
 
 ## Review Requirements
 

@@ -1,8 +1,37 @@
 # MoneySiren
 
-Local-first cloud, SaaS, and AI usage dashboard for individual developers and small teams.
+MoneySiren is an MIT-licensed local-first observability dashboard for AI coding agent, cloud, and SaaS usage. It helps open-source maintainers, indie developers, and small teams monitor OpenAI/Codex, Claude CLI, AWS, Supabase, and Cloudflare usage/cost risk without sending credentials, raw billing payloads, or local AI logs to a hosted service.
 
-MoneySiren reads provider usage into local SQLite, shows expected billing and usage risk in a local dashboard, and can surface compact desktop notifications/HUD widgets. It is not a hosted SaaS: provider connectors are read-only, secrets stay local, and telemetry is off by default.
+MoneySiren is not a hosted SaaS. Provider connectors are read-only, normalized snapshots stay in local SQLite, and telemetry is off by default.
+
+## Why MoneySiren Exists
+
+AI coding agents make open-source maintenance faster, but they also create new operational risks:
+
+- usage limits are easy to burn through;
+- API and cloud costs are fragmented across providers;
+- local AI CLI logs can contain sensitive prompts, shell commands, and project context;
+- maintainers need visibility without uploading secrets to another SaaS.
+
+MoneySiren provides a local-first dashboard for those risks.
+
+## What It Supports Today
+
+| Area | Providers / surfaces |
+|---|---|
+| AI usage/cost | OpenAI Usage/Costs, Codex CLI, Claude CLI |
+| Cloud/SaaS cost | AWS Cost Explorer, Cloudflare |
+| Usage/health | Supabase |
+| Local surfaces | CLI, Next.js dashboard, Tauri tray/HUD |
+| Notifications | Desktop HUD, Korean daily report, optional Slack webhook |
+
+## Codex for Open Source
+
+MoneySiren is designed to help open-source maintainers and indie developers adopt AI coding agents safely by making OpenAI/Codex, local AI CLI, cloud, and SaaS usage visible without uploading secrets or raw provider data to a hosted service.
+
+The project includes a Codex-oriented maintainer plan covering provider connector tests, PR review, release workflow hardening, documentation, and secret-safety checks.
+
+See [docs/codex-for-open-source.md](docs/codex-for-open-source.md).
 
 ## Current Status
 
@@ -45,24 +74,25 @@ Notification and HUD settings:
 
 ![MoneySiren notification and HUD settings](docs/assets/install/moneysiren-english-mock-hud-settings.png)
 
-### ?�국??
-?�래 ?�크린샷?� ?�일??fixture 기반 목업 SQLite ?�이?�베?�스?�서 ?�국??UI�??�시 캡처???�면?�니?? FAKE ?�경 값�? 로컬 UI?�서 provider가 ?�결??것처???�시?�기 ?�한 ?�벨?�며, ?�제 credential, provider 계정 ?�별?? webhook URL, 로컬 Codex/Claude ?�션 ?�이?�는 ?�함?��? ?�습?�다.
+### Korean
 
-?�?�보??개요:
+아래 스크린샷은 동일한 fixture 기반 목업 SQLite 데이터베이스에서 캡처한 한국어 UI 예시입니다. `FAKE` 환경 값은 로컬 UI에서 provider가 연결된 것처럼 표시하기 위한 라벨이며, 실제 credential, provider 계정 식별자, webhook URL, 로컬 Codex/Claude 세션 데이터는 포함하지 않습니다.
 
-![MoneySiren ?�국??목업 ?�?�보??(docs/assets/install/moneysiren-korean-mock-dashboard.png)
+대시보드 개요:
 
-CLI ?�?�보????�� ?�정:
+![MoneySiren Korean mock dashboard](docs/assets/install/moneysiren-korean-mock-dashboard.png)
 
-![MoneySiren ?�국??CLI ?�?�보????�� ?�정](docs/assets/install/moneysiren-korean-mock-dashboard-settings.png)
+CLI 대시보드 필드 설정:
 
-?�스?�톱 HUD:
+![MoneySiren Korean CLI dashboard settings](docs/assets/install/moneysiren-korean-mock-dashboard-settings.png)
 
-![MoneySiren ?�국??목업 HUD](docs/assets/install/moneysiren-korean-mock-hud.png)
+데스크톱 HUD:
 
-?�림 �?HUD ?�정:
+![MoneySiren Korean mock HUD](docs/assets/install/moneysiren-korean-mock-hud.png)
 
-![MoneySiren ?�국???�림 �?HUD ?�정](docs/assets/install/moneysiren-korean-mock-hud-settings.png)
+알림 및 HUD 설정:
+
+![MoneySiren Korean notification and HUD settings](docs/assets/install/moneysiren-korean-mock-hud-settings.png)
 
 ## Provider Model
 
@@ -310,7 +340,7 @@ Useful URLs:
 
 - `http://127.0.0.1:3000/en/dashboard/overview`
 - `http://127.0.0.1:3000/ko/dashboard/overview`
-- `http://127.0.0.1:3000/codex-reset-credits`
+- `http://127.0.0.1:3000/codex-reset-credits` (experimental, local-only)
 - `http://127.0.0.1:3000/hud?locale=en`
 - `http://127.0.0.1:3000/en/settings/preferences`
 - `http://127.0.0.1:3000/en/settings/notifications`
@@ -324,84 +354,13 @@ pnpm --filter moneysiren dev -- dashboard check --url http://localhost:3000
 
 The check command sanitizes the printed dashboard URL and ignores path, query, and hash values. It rejects URL credentials and does not start, package, or serve the Next.js app.
 
-## Codex Reset Credit Expiry
+## Experimental Local Integrations
 
-MoneySiren can show Codex reset-credit expiry times on a local dashboard:
+MoneySiren includes optional local-only experiments for AI CLI usage visibility. Experimental integrations are isolated and documented separately because upstream behavior may change.
 
-```text
-http://127.0.0.1:3000/codex-reset-credits
-```
+These integrations are not required for the core MoneySiren workflow. The core workflow remains read-only provider sync, normalized local SQLite snapshots, local dashboard/HUD views, fake fixtures for review, and telemetry off by default.
 
-This feature uses an undocumented ChatGPT internal API:
-
-```text
-GET https://chatgpt.com/backend-api/wham/rate-limit-reset-credits
-```
-
-The endpoint may change without notice. MoneySiren keeps this integration isolated, returns only normalized fields, and marks API responses as `unofficial: true`.
-
-Requirements:
-
-- Codex CLI or Codex App must be installed and logged in on the same computer running the local Node.js server.
-- Run `codex login` again if the API returns `UPSTREAM_UNAUTHORIZED`.
-- Do not upload `~/.codex/auth.json` to Vercel, GitHub, or any remote server.
-- Vercel and other remote hosts cannot read your local Codex auth file. This feature is for local Node.js or self-hosted machines that already have Codex installed.
-
-Environment variables:
-
-```bash
-CODEX_AUTH_FILE=
-CODEX_HOME=
-CODEX_RESET_CREDIT_ENDPOINT=https://chatgpt.com/backend-api/wham/rate-limit-reset-credits
-CODEX_API_TIMEOUT_MS=15000
-APP_TIME_ZONE=Asia/Seoul
-RESET_CREDIT_API_KEY=
-CRON_SECRET=
-TELEGRAM_BOT_TOKEN=
-TELEGRAM_CHAT_ID=
-```
-
-Auth file lookup order:
-
-1. `CODEX_AUTH_FILE`
-2. `CODEX_HOME/auth.json`
-3. `~/.codex/auth.json`
-
-API example without exposing real secrets:
-
-```bash
-curl http://127.0.0.1:3000/api/codex/reset-credits
-```
-
-If `RESET_CREDIT_API_KEY` is set, direct API calls must include a bearer token:
-
-```bash
-curl -H "Authorization: Bearer <RESET_CREDIT_API_KEY>" http://127.0.0.1:3000/api/codex/reset-credits
-```
-
-The browser dashboard intentionally does not receive `RESET_CREDIT_API_KEY`. For normal local dashboard use, leave `RESET_CREDIT_API_KEY` unset and keep the server bound to `127.0.0.1`. Set `RESET_CREDIT_API_KEY` only when you are calling the API route from a trusted local script or scheduler.
-
-Do not expose the API route to an external network without `RESET_CREDIT_API_KEY`. Never pass Codex access tokens, refresh tokens, account IDs, or auth JSON through browser inputs, URLs, logs, screenshots, or issue reports.
-
-Cron notification route:
-
-```bash
-curl -X POST -H "Authorization: Bearer <CRON_SECRET>" http://127.0.0.1:3000/api/cron/codex-reset-credits
-```
-
-Windows Task Scheduler example:
-
-```powershell
-schtasks /Create /SC HOURLY /TN MoneySirenCodexResetCredits /TR "powershell -NoProfile -ExecutionPolicy Bypass -Command ""Invoke-RestMethod -Method POST -Uri http://127.0.0.1:3000/api/cron/codex-reset-credits -Headers @{Authorization='Bearer <CRON_SECRET>'}"""
-```
-
-Linux/macOS cron example:
-
-```cron
-*/30 * * * * curl -fsS -X POST -H "Authorization: Bearer <CRON_SECRET>" http://127.0.0.1:3000/api/cron/codex-reset-credits >/dev/null
-```
-
-Telegram notifications are optional. Set both `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` to send reset-credit expiry alerts. If either value is missing, MoneySiren uses the console notifier.
+See [docs/experimental-integrations.md](docs/experimental-integrations.md) and [docs/codex-reset-credits.md](docs/codex-reset-credits.md).
 
 ## Desktop Tray, Notifications, and HUD
 

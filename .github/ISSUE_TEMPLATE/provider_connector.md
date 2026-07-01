@@ -1,44 +1,59 @@
 ---
-name: Provider connector request
-about: Request or improve a read-only provider connector
-title: "[Provider]: "
+name: Provider connector issue
+about: Report a provider sync, fixture, or normalization issue without sharing secrets
+title: "provider: "
 labels: provider
 ---
 
+## Safety reminder
+
+Do not include API keys, OAuth tokens, webhook URLs, AWS account IDs, OpenAI organization IDs, Supabase project refs, Cloudflare account IDs, invoice IDs, emails, raw provider responses, screenshots containing real billing data, local prompt text, or local AI auth files.
+
+Use fake, synthetic, or heavily redacted data only.
+
 ## Provider
 
-## Desired Data
+Choose one:
 
-- [ ] Cost
-- [ ] Usage
-- [ ] Health/status
-- [ ] Forecast
-- [ ] Quota/limits
-- [ ] Local CLI usage
+- [ ] OpenAI Usage/Costs
+- [ ] AWS Cost Explorer
+- [ ] Supabase
+- [ ] Cloudflare
+- [ ] Codex CLI
+- [ ] Claude CLI
+- [ ] Other:
 
-## Auth Method
+## Area
 
-Describe the read-only auth method. Do not paste real credentials.
+- [ ] Auth/setup
+- [ ] Fixture sync
+- [ ] Live sync
+- [ ] Normalization
+- [ ] SQLite snapshot
+- [ ] Dashboard display
+- [ ] Report/notification
+- [ ] Docs
 
-## API Surfaces
+## Problem
 
-Link to public provider docs if available.
+Describe the issue using fake or redacted data.
 
-## Data Freshness
+## Expected behavior
 
-- [ ] Daily canonical
-- [ ] Today live provisional
-- [ ] Month-to-date
-- [ ] Usage only
-- [ ] Unknown
+Describe what should happen.
 
-## Security Considerations
+## Sanitized example
 
-- Does the API expose secrets?
-- Does it require write permissions?
-- Can the connector work read-only?
-- Are rate limits documented?
+```json
+{
+  "fake": true,
+  "provider": "example",
+  "note": "Replace this with synthetic data only."
+}
+```
 
-## Notes
+## Validation already run
 
-Use fake/synthetic identifiers only.
+- [ ] `npm run secret:scan`
+- [ ] Provider fixture test
+- [ ] Not applicable
