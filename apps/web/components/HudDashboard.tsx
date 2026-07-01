@@ -21,6 +21,7 @@ import type { NotificationPreferences } from "./NotificationSettingsModel";
 import { refreshLocalLive } from "../lib/local-client";
 import { openHudDashboardRoute } from "../lib/hud-navigation";
 import { HudWindowControls } from "./HudWindowControls";
+import { ProviderIcon } from "./ProviderIcon";
 
 const HUD_POLL_INTERVAL_MS = 5 * 60_000;
 const HUD_TIME_ZONE = "Asia/Seoul";
@@ -115,6 +116,7 @@ export function HudDashboard({
   const [polling, setPolling] = useState(initialModel === undefined);
   const [manualRefreshBusy, setManualRefreshBusy] = useState(false);
   const [miniMode, setMiniMode] = useState(false);
+  const [preferences, setPreferences] = useState(initialPreferences);
   const [transportError, setTransportError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const restoreStateRef = useRef<HudWindowRestoreState | null>(null);
@@ -230,7 +232,11 @@ export function HudDashboard({
 
     await enterMiniMode();
   }, [enterMiniMode, exitMiniMode, miniMode]);
-  const displayMode = miniMode ? "singleLine" : initialPreferences.hud.displayMode;
+  useEffect(() => {
+    setPreferences(initialPreferences);
+  }, [initialPreferences]);
+
+  const displayMode = miniMode ? "singleLine" : preferences.hud.displayMode;
   const itemListClassName = `hud-item-list hud-item-list-${displayMode === "singleLine" ? "single-line" : displayMode}`;
 
   return (
@@ -238,10 +244,14 @@ export function HudDashboard({
       <HudWindowControls
         compactMode={miniMode}
         initialSetupOpen={initialSetupOpen}
-        initialPreferences={initialPreferences}
+        initialPreferences={preferences}
         labels={controlLabels}
         locale={locale}
         onMinimizeRequest={toggleMiniMode}
+        onPreferencesChange={(savedPreferences) => {
+          setPreferences(savedPreferences);
+          void loadHud();
+        }}
         onRefresh={() => {
           void handleManualRefresh();
         }}
@@ -274,7 +284,7 @@ export function HudDashboard({
             )
           ) : displayMode === "singleLine" ? (
             <HudSummaryCard
-              hudPreferences={initialPreferences.hud}
+              hudPreferences={preferences.hud}
               items={model.items}
               labels={labels}
               locale={locale}
@@ -287,7 +297,7 @@ export function HudDashboard({
             />
           ) : model.items.map((item) => (
             <HudItemCard
-              hudPreferences={initialPreferences.hud}
+              hudPreferences={preferences.hud}
               item={item}
               key={item.id}
               labels={labels}
@@ -425,10 +435,6 @@ function HudItemCard({
     const windowLabel = quotaWindowLabel(item.window, labels);
     const used = item.progress.usedPercent === null ? labels.unknown : formatPercent(item.progress.usedPercent, locale);
     const remaining = item.progress.remainingPercent === null ? labels.unknown : formatPercent(item.progress.remainingPercent, locale);
-    const summaryParts = [
-      hudPreferences.showUsagePercent ? `${labels.used} ${used}` : null,
-      hudPreferences.showRemainingPercent ? `${labels.remaining} ${remaining}` : null,
-    ].filter((part): part is string => part !== null);
     const visibleValue = hudPreferences.showUsagePercent
       ? used
       : hudPreferences.showRemainingPercent
@@ -453,11 +459,9 @@ function HudItemCard({
                 icon="quota"
                 label={`${providerLabel(item.providerKey)}${HUD_DETAIL_SEPARATOR}${windowLabel}`}
                 labelMode={hudPreferences.labelMode}
+                providerKey={item.providerKey}
               />
             </strong>
-            {summaryParts.length === 0 ? null : (
-              <span className="hud-item-detail">{summaryParts.join(HUD_DETAIL_SEPARATOR)}</span>
-            )}
           </span>
           {visibleValue === null ? null : (
             <span className={`hud-value hud-value-${item.riskSeverity}`}>{visibleValue}</span>
@@ -498,9 +502,9 @@ function HudItemCard({
                 icon={widgetIconKind(item.widgetKey)}
                 label={item.label}
                 labelMode={hudPreferences.labelMode}
+                providerKey={item.providerKey}
               />
             </strong>
-            <span className="hud-item-detail">{item.value}</span>
           </span>
           <span className={`hud-value hud-value-${item.riskSeverity}`}>{visibleValue}</span>
         </button>
@@ -520,13 +524,7 @@ function HudItemCard({
   const expiryValue = item.nearestExpiryAt === null
     ? labels.noExpiry
     : formatRelative(item.nearestExpiryAt, modelGeneratedAt, locale);
-  const expiryDetail = item.nearestExpiryAt === null
-    ? labels.noExpiry
-    : `${expiryValue} · ${formatDateTime(item.nearestExpiryAt, locale)}`;
   const title = item.variant === "count" ? labels.resetCredits : labels.resetCreditExpiry;
-  const detail = item.variant === "count"
-    ? expiryDetail
-    : `${labels.resetCredits}: ${count}`;
   const value = item.variant === "count" ? count : expiryValue;
 
   return (
@@ -547,9 +545,9 @@ function HudItemCard({
               icon="reset"
               label={`${providerLabel(item.providerKey)} ${HUD_DETAIL_SEPARATOR} ${title}`}
               labelMode={hudPreferences.labelMode}
+              providerKey={item.providerKey}
             />
           </strong>
-          <span className="hud-item-detail">{detail}</span>
         </span>
         <span className={`hud-value hud-value-${item.riskSeverity}`}>{value}</span>
       </button>
@@ -582,15 +580,24 @@ function HudItemTitle({
   icon,
   label,
   labelMode,
+  providerKey,
 }: {
   icon: HudIconKind;
   label: string;
   labelMode: HudLabelMode;
+  providerKey?: string | null;
 }) {
   if (labelMode === "icon") {
     return (
       <span aria-label={label} className="hud-icon-title" title={label}>
-        <HudItemIcon kind={icon} />
+        {providerKey === null || providerKey === undefined ? (
+          <HudItemIcon kind={icon} />
+        ) : (
+          <ProviderIcon
+            className={`hud-provider-icon provider-mark provider-mark-${providerKey}`}
+            providerKey={providerKey}
+          />
+        )}
         <span className="hud-sr-only">{label}</span>
       </span>
     );

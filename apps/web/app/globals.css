@@ -2482,9 +2482,9 @@ body:has(.hud-page)::-webkit-scrollbar {
 .hud-settings-popover {
   background: rgba(255, 255, 255, 0.96);
   backdrop-filter: blur(12px);
-  border: 0;
+  border: 1px solid rgba(15, 23, 42, 0.14);
   border-radius: 7px;
-  box-shadow: none;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.16);
   display: grid;
   gap: 6px;
   max-height: calc(100vh - 42px);
@@ -2852,6 +2852,11 @@ body:has(.hud-page)::-webkit-scrollbar {
   display: inline-flex;
   min-width: 0;
   vertical-align: middle;
+}
+
+.hud-provider-icon {
+  height: 16px;
+  width: 16px;
 }
 
 .hud-item-icon {

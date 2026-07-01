@@ -52,6 +52,7 @@ interface HudWindowControlsProps {
   };
   locale: Locale;
   onMinimizeRequest?: () => Promise<void> | void;
+  onPreferencesChange?: (preferences: NotificationPreferences) => void;
   onRefresh?: () => void;
   refreshBusy?: boolean;
 }
@@ -70,6 +71,7 @@ export function HudWindowControls({
   labels,
   locale,
   onMinimizeRequest,
+  onPreferencesChange,
   onRefresh,
   refreshBusy = false,
 }: HudWindowControlsProps) {
@@ -491,6 +493,7 @@ export function HudWindowControls({
           showUsagePercent: !draftPercentModeIsRemaining,
         });
         void applyAlwaysOnTop(savedPreferences.hud.alwaysOnTop);
+        onPreferencesChange?.(savedPreferences);
         router.refresh();
         setSaveState("saved");
       } catch (error) {
